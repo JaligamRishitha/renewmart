@@ -10,11 +10,33 @@ import VerificationStep from './components/VerificationStep';
 import TrustSignals from './components/TrustSignals';
 import NavigationButtons from './components/NavigationButtons';
 
+// Toast notification styles
+const Toast = ({ message, type = 'success', onClose }) => (
+  <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg animate-slide-in-right ${
+    type === 'success' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+  }`}>
+    <div className="flex items-center space-x-3">
+      {type === 'success' && (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+      {type === 'info' && (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )}
+      <span className="font-medium">{message}</span>
+    </div>
+  </div>
+);
+
 const Registration = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showToast, setShowToast] = useState(null);
   
   const [formData, setFormData] = useState({
     // Step 1: Account Details
@@ -143,20 +165,22 @@ const Registration = () => {
       // Register user
       const user = await authAPI.register(registrationData);
       
-      // Registration returns user data (no token). Redirect to login to obtain token.
-      setNotifications([
-        {
-          id: 'registration-success',
-          type: 'success',
-          title: 'Registration Successful',
-          message: 'Account created. Please log in to continue.',
-          timestamp: new Date()
-        }
-      ]);
+      // Show success toast
+      setShowToast({ type: 'success', message: 'Account created successfully!' });
       
-      // Optionally prefill login with registered email
-      localStorage.setItem('pendingRegisteredEmail', formData.email);
-      navigate('/login');
+      // Wait 1.5 seconds, then show redirecting message
+      setTimeout(() => {
+        setShowToast({ type: 'info', message: 'Redirecting to login page...' });
+        
+        // Optionally prefill login with registered email
+        localStorage.setItem('pendingRegisteredEmail', formData.email);
+        
+        // Navigate to login after another 1.5 seconds
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500);
+      }, 1500);
+      
     } catch (error) {
       console.error('Registration failed:', error);
       
@@ -232,6 +256,15 @@ const Registration = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Toast Notifications */}
+      {showToast && (
+        <Toast
+          message={showToast.message}
+          type={showToast.type}
+          onClose={() => setShowToast(null)}
+        />
+      )}
+      
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

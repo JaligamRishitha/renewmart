@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../AppIcon';
 import Button from './Button';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Header = ({ userRole = 'landowner', notifications = {} }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const navigationItems = [
     {
@@ -42,12 +44,6 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
   const moreMenuItems = [
     {
-      label: 'Settings',
-      path: '/settings',
-      icon: 'Settings',
-      roles: ['landowner', 'admin', 'investor', 'reviewer']
-    },
-    {
       label: 'Help',
       path: '/help',
       icon: 'HelpCircle',
@@ -58,6 +54,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       path: '/admin',
       icon: 'Shield',
       roles: ['admin']
+    },
+    {
+      label: 'Logout',
+      path: null,
+      icon: 'LogOut',
+      roles: ['landowner', 'admin', 'investor', 'reviewer'],
+      isLogout: true
     }
   ];
 
@@ -69,10 +72,25 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
     item?.roles?.includes(userRole)
   );
 
-  const handleNavigation = (path) => {
+  const handleNavigation = (path, isLogout = false) => {
+    if (isLogout) {
+      handleLogout();
+      return;
+    }
     navigate(path);
     setIsMobileMenuOpen(false);
     setIsMoreMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsMobileMenuOpen(false);
+      setIsMoreMenuOpen(false);
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const isActivePath = (path) => {
@@ -164,11 +182,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
                 {isMoreMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-48 bg-popover border border-border rounded-lg shadow-elevation-2 py-2 animate-fade-in">
-                    {filteredMoreItems?.map((item) => (
+                    {filteredMoreItems?.map((item, index) => (
                       <button
-                        key={item?.path}
-                        onClick={() => handleNavigation(item?.path)}
-                        className="w-full flex items-center space-x-3 px-4 py-2 text-sm font-body text-popover-foreground hover:bg-muted transition-smooth"
+                        key={item?.path || index}
+                        onClick={() => handleNavigation(item?.path, item?.isLogout)}
+                        className={`w-full flex items-center space-x-3 px-4 py-2 text-sm font-body hover:bg-muted transition-smooth ${
+                          item?.isLogout ? 'text-red-600 hover:text-red-700' : 'text-popover-foreground'
+                        }`}
                       >
                         <Icon name={item?.icon} size={16} />
                         <span>{item?.label}</span>
@@ -221,11 +241,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
               {filteredMoreItems?.length > 0 && (
                 <>
                   <div className="border-t border-border my-4" />
-                  {filteredMoreItems?.map((item) => (
+                  {filteredMoreItems?.map((item, index) => (
                     <button
-                      key={item?.path}
-                      onClick={() => handleNavigation(item?.path)}
-                      className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-body font-medium text-base text-foreground hover:bg-muted hover:text-primary transition-smooth focus:outline-none focus:ring-2 focus:ring-ring"
+                      key={item?.path || index}
+                      onClick={() => handleNavigation(item?.path, item?.isLogout)}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-body font-medium text-base hover:bg-muted transition-smooth focus:outline-none focus:ring-2 focus:ring-ring ${
+                        item?.isLogout ? 'text-red-600 hover:text-red-700' : 'text-foreground hover:text-primary'
+                      }`}
                     >
                       <Icon name={item?.icon} size={20} />
                       <span className="flex-1 text-left">{item?.label}</span>

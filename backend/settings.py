@@ -118,7 +118,8 @@ class CORSSettings(BaseSettings):
             "http://localhost:4028",
             "http://localhost:3000",
             "http://127.0.0.1:4028",
-            "http://127.0.0.1:3000"
+            "http://127.0.0.1:3000",
+            "http://localhost:5173"
         ],
         description="List of allowed origins for CORS"
     )

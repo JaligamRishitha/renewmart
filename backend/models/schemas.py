@@ -8,11 +8,13 @@ from enum import Enum
 
 # Enums for better validation
 class UserRoleEnum(str, Enum):
-    ADMIN = "admin"
+    ADMIN = "administrator"
     LANDOWNER = "landowner"
     INVESTOR = "investor"
-    REVIEWER = "reviewer"
-    DEVELOPER = "developer"
+    REVIEWER = "re_analyst"
+    DEVELOPER = "project_manager"
+    RE_SALES_ADVISOR = "re_sales_advisor"
+    RE_GOVERNANCE_LEAD = "re_governance_lead"
 
 class TaskPriorityEnum(str, Enum):
     LOW = "low"
@@ -166,8 +168,8 @@ class UserCreate(UserBase):
         description="Password confirmation (must match password)",
         example="SecurePass123!"
     )
-    roles: List[UserRoleEnum] = Field(
-        default=[UserRoleEnum.LANDOWNER], 
+    roles: List[str] = Field(
+        default=["landowner"], 
         description="User roles (can have multiple roles)",
         example=["landowner"]
     )

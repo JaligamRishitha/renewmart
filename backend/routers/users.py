@@ -64,7 +64,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    """Authenticate user and return access token."""
+    """Authenticate user and return access token with user data."""
     user = authenticate_user(db, user_credentials.email, user_credentials.password)
     
     if not user:
@@ -80,7 +80,18 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         expires_delta=access_token_expires
     )
     
-    return Token(access_token=access_token, token_type="bearer")
+    # Convert UUID to string for JSON serialization
+    user_data = {
+        **user,
+        "user_id": str(user["user_id"])  # Convert UUID to string
+    }
+    
+    # Return token with user data for frontend
+    return Token(
+        access_token=access_token, 
+        token_type="bearer",
+        user=user_data  # Include user data in response
+    )
 
 @router.get("/me", response_model=User)
 async def get_current_user_profile(current_user: dict = Depends(get_current_active_user)):

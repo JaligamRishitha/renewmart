@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -43,7 +43,12 @@ api.interceptors.response.use(
 // Authentication API
 export const authAPI = {
   login: async (credentials) => {
-    const response = await api.post('/api/users/login', credentials);
+    // Backend expects only email and password (role is in user data)
+    const loginData = {
+      email: credentials.email,
+      password: credentials.password
+    };
+    const response = await api.post('/users/login', loginData);
     return response.data;
   },
   
@@ -52,9 +57,9 @@ export const authAPI = {
     const registrationData = {
       email: userData.email,
       password: userData.password,
-      confirm_password: userData.confirmPassword || userData.password,
-      first_name: userData.firstName,
-      last_name: userData.lastName,
+      confirm_password: userData.confirm_password || userData.confirmPassword || userData.password,
+      first_name: userData.first_name || userData.firstName,
+      last_name: userData.last_name || userData.lastName,
       phone: userData.phone || null
     };
 
@@ -63,7 +68,7 @@ export const authAPI = {
       registrationData.roles = [userData.role];
     }
     
-    const response = await api.post('/api/auth/register', registrationData);
+    const response = await api.post('/auth/register', registrationData);
     return response.data;
   },
   
@@ -86,12 +91,12 @@ export const authAPI = {
 // Users API
 export const usersAPI = {
   getProfile: async () => {
-    const response = await api.get('/users/profile');
+    const response = await api.get('/users/me');
     return response.data;
   },
   
   updateProfile: async (profileData) => {
-    const response = await api.put('/users/profile', profileData);
+    const response = await api.put('/users/me', profileData);
     return response.data;
   },
   

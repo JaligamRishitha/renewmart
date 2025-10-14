@@ -3,9 +3,10 @@ from pathlib import Path
 import os
 
 # Initialize Dynaconf
+BASE_DIR = Path(__file__).parent
 settings = Dynaconf(
     envvar_prefix="RENEWMART",
-    settings_files=['settings.toml', '.secrets.toml'],
+    settings_files=[str(BASE_DIR / 'settings.toml'), str(BASE_DIR / '.secrets.toml')],
     environments=True,
     load_dotenv=True,
     env_switcher="RENEWMART_ENV",

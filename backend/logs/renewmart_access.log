@@ -176,3 +176,85 @@
 2025-10-14 02:05:49 - renewmart.access - INFO - logs.py:127 - GET /docs - 200 - 14.18ms
 2025-10-14 02:05:50 - renewmart.access - INFO - logs.py:127 - GET /openapi.json - 200 - 859.96ms
 2025-10-14 02:05:50 - renewmart.access - INFO - logs.py:127 - GET /openapi.json - 200 - 859.96ms
+2025-10-14 17:08:32 - renewmart.access - INFO - logs.py:127 - POST /api/auth/verify/request - 404 - 35.67ms
+2025-10-14 17:09:28 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 500 - 71.72ms
+2025-10-14 17:10:48 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 500 - 12.12ms
+2025-10-14 19:24:01 - renewmart.access - INFO - logs.py:127 - GET / - 200 - 1.01ms
+2025-10-14 19:24:03 - renewmart.access - INFO - logs.py:127 - GET /health - 200 - 1.00ms
+2025-10-14 19:24:05 - renewmart.access - INFO - logs.py:127 - GET /api/info - 200 - 1.00ms
+2025-10-14 19:24:06 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/register - 200 - 1.00ms
+2025-10-14 19:24:06 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 500 - 64.05ms
+2025-10-14 19:41:11 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/register - 200
+2025-10-14 19:41:11 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 400 - 44.77ms
+2025-10-14 19:41:45 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200 - 1.00ms
+2025-10-14 19:41:45 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 401 - 44.93ms
+2025-10-14 19:49:11 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 401 - 63.67ms
+2025-10-14 19:53:12 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-14 22:45:19 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register-with-verification - 201 - 89.63ms
+2025-10-14 22:45:23 - renewmart.access - INFO - logs.py:127 - POST /api/auth/verify/confirm - 200 - 33.04ms
+2025-10-14 22:45:30 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register-with-verification - 201 - 34.40ms
+2025-10-14 22:50:19 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/register - 200
+2025-10-14 22:50:19 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 201 - 85.18ms
+2025-10-14 22:52:13 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-14 22:52:13 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 18.54ms
+2025-10-14 22:52:13 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/me - 200
+2025-10-14 22:52:13 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/ - 200 - 1.01ms
+2025-10-14 22:52:13 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 5.92ms
+2025-10-14 22:52:58 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 19.68ms
+2025-10-14 22:53:00 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 19.53ms
+2025-10-14 22:53:05 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 20.51ms
+2025-10-14 22:53:08 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 18.54ms
+2025-10-14 22:53:16 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 15.71ms
+2025-10-14 22:53:18 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 8.01ms
+2025-10-14 22:53:19 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 23.23ms
+2025-10-14 22:53:21 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 11.73ms
+2025-10-14 22:53:24 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 19.58ms
+2025-10-14 22:53:36 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 18.39ms
+2025-10-15 00:33:40 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 201 - 77.17ms
+2025-10-15 00:33:43 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register-with-verification - 400
+2025-10-15 00:33:48 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register-with-verification - 201 - 59.40ms
+2025-10-15 00:34:36 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 00:34:36 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 401
+2025-10-15 00:36:48 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/register - 200
+2025-10-15 00:36:48 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 201 - 65.70ms
+2025-10-15 00:38:48 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 00:38:48 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 29.61ms
+2025-10-15 00:38:48 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/me - 200
+2025-10-15 00:38:48 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/ - 200
+2025-10-15 00:38:48 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 12.91ms
+2025-10-15 00:39:01 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 11.58ms
+2025-10-15 00:39:03 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 8.91ms
+2025-10-15 00:39:05 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 9.02ms
+2025-10-15 00:40:13 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 22.57ms
+2025-10-15 00:40:17 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 16.21ms
+2025-10-15 00:40:17 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 32.33ms
+2025-10-15 00:40:49 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 4.69ms
+2025-10-15 00:40:49 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 11.21ms
+2025-10-15 00:40:54 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 25.54ms
+2025-10-15 00:41:04 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 25.84ms
+2025-10-15 00:41:06 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 20.90ms
+2025-10-15 00:41:09 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 24.87ms
+2025-10-15 00:41:12 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 8.01ms
+2025-10-15 00:41:13 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 22.20ms
+2025-10-15 00:41:39 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 00:41:39 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200
+2025-10-15 00:41:40 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/me - 200 - 1.00ms
+2025-10-15 00:41:40 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/ - 200
+2025-10-15 00:41:40 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 11.01ms
+2025-10-15 00:42:20 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200 - 1.03ms
+2025-10-15 00:42:20 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 401 - 4.48ms
+2025-10-15 00:47:55 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 9.27ms
+2025-10-15 00:47:55 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 6.00ms
+2025-10-15 00:49:24 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 6.01ms
+2025-10-15 00:49:24 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 8.33ms
+2025-10-15 00:49:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/logout - 200
+2025-10-15 00:49:42 - renewmart.access - INFO - logs.py:127 - POST /api/auth/logout - 404
+2025-10-15 00:57:35 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/register - 200
+2025-10-15 00:57:35 - renewmart.access - INFO - logs.py:127 - POST /api/auth/register - 201 - 59.43ms
+2025-10-15 00:58:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 00:58:42 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 42.40ms
+2025-10-15 00:58:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/me - 200
+2025-10-15 00:58:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/ - 200 - 1.01ms
+2025-10-15 00:58:42 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 38.15ms
+2025-10-15 00:58:47 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 30.53ms
+2025-10-15 00:58:49 - renewmart.access - INFO - logs.py:127 - GET /api/users/me - 200 - 28.19ms

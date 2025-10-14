@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
 from jose import JWTError, jwt
+import os
+os.environ.setdefault("PASSLIB_BCRYPT_DETECT_WRAPAROUND", "0")
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import get_db
+from database import get_db, DATABASE_URL
 from models.schemas import TokenData, User
 import os
 from uuid import UUID
@@ -17,7 +19,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # JWT Bearer token
 security = HTTPBearer()
@@ -59,18 +61,35 @@ def verify_token(token: str) -> Optional[TokenData]:
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[dict]:
     """Authenticate a user with email and password."""
-    # Get user with roles (SQLite compatible)
-    query = text("""
-        SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-               u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
-               GROUP_CONCAT(ur.role_key) as roles
-        FROM "user" u
-        LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-        WHERE u.email = :email AND u.is_active = true
-        GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                 u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
-    """)
-    
+    # Choose aggregation based on database backend
+    is_sqlite = DATABASE_URL.lower().startswith("sqlite")
+    if is_sqlite:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   GROUP_CONCAT(ur.role_key) as roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = :email AND u.is_active = true
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = :email AND u.is_active = true
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
+
     result = db.execute(query, {"email": email}).fetchone()
     
     if not result:
@@ -79,10 +98,13 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[dict]:
     if not verify_password(password, result.password_hash):
         return None
         
-    # Process roles (GROUP_CONCAT returns comma-separated string)
+    # Normalize roles to a list for both SQLite and Postgres
     roles = []
     if result.roles:
-        roles = [role.strip() for role in result.roles.split(',') if role.strip()]
+        if isinstance(result.roles, str):
+            roles = [role.strip() for role in result.roles.split(',') if role.strip()]
+        else:
+            roles = list(result.roles)
         
     return {
         "user_id": result.user_id,

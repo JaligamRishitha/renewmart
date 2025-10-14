@@ -40,22 +40,40 @@ def get_db():
 # Helper function to get user by email (for auth compatibility)
 def get_user_by_email(db: Session, email: str) -> Optional[dict]:
     """Get user by email address."""
-    query = text("""
-        SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-               u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
-               COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
-        FROM "user" u
-        LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-        WHERE u.email = :email
-        GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                 u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
-    """)
+    # Use SQLite-compatible aggregation when running against SQLite
+    is_sqlite = DATABASE_URL.lower().startswith("sqlite")
+    if is_sqlite:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   GROUP_CONCAT(ur.role_key) AS roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = :email
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = :email
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
     
     result = db.execute(query, {"email": email}).fetchone()
     
     if not result:
         return None
-        
+    
     return {
         "user_id": result.user_id,
         "email": result.email,

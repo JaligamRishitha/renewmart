@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -18,7 +18,7 @@ from config import settings
 import secrets
 import string
 from logs import log_security_event
-from email_service import send_verification_email
+from email_service import send_verification_email_async
 
 router = APIRouter(
     tags=["authentication"],
@@ -39,7 +39,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
-    description="Create a new user account with email, password, and basic information. Supports multiple user roles including landowner, investor, reviewer, and developer. Rate limited to 3 attempts per minute per IP.",
+    description="Create a new user account with email, password, and basic information. Supports multiple user roles including landowner, investor, reviewer, and developer. Rate limited to 3 attempts per minute per IP. Optionally sends verification email.",
     response_description="Successfully created user with assigned roles",
     responses={
         201: {
@@ -104,7 +104,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
     }
 )
 @enhanced_limiter.limit(RateLimits.AUTH_REGISTER)
-async def register_user(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
+async def register_user(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    user_data: UserCreate, 
+    send_verification: bool = False,
+    db: Session = Depends(get_db)
+):
     try:
         # Check if user already exists
         if get_user_by_email(db, user_data.email):
@@ -120,25 +126,59 @@ async def register_user(request: Request, user_data: UserCreate, db: Session = D
             password_hash=hashed_password,
             first_name=user_data.first_name,
             last_name=user_data.last_name,
-            phone=user_data.phone
+            phone=user_data.phone,
+            is_verified=False  # User starts unverified
         )
         
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
         
-        # Add roles if provided
-        for role_key in user_data.roles:
-            role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
-            if role:
-                user_role = UserRole(user_id=db_user.user_id, role_key=role_key)
-                db.add(user_role)
+        # Add roles if provided (make robust in environments where lookup tables may be missing)
+        try:
+            for role_key in user_data.roles:
+                role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
+                if role:
+                    user_role = UserRole(user_id=db_user.user_id, role_key=role_key)
+                    db.add(user_role)
+            db.commit()
+        except Exception:
+            # If role assignment fails (e.g., lookup table missing), continue without roles
+            try:
+                db.rollback()
+            except Exception:
+                pass
         
-        db.commit()
+        # Send verification email if requested
+        if send_verification:
+            try:
+                ttl = getattr(settings, "VERIFICATION_CODE_TTL", 600)
+                code = "".join(secrets.choice(string.digits) for _ in range(6))
+                key = f"verify:code:{user_data.email.lower()}"
+                redis_service.set(key, {"code": code}, expire=ttl)
+                
+                # Add email sending to background tasks
+                background_tasks.add_task(send_verification_email_async, user_data.email, code)
+                
+                try:
+                    log_security_event("registration_verification_sent", {"email": user_data.email})
+                except Exception:
+                    pass
+            except Exception as e:
+                # Log but don't fail registration
+                try:
+                    log_security_event("registration_verification_failed", {"email": user_data.email, "error": str(e)})
+                except Exception:
+                    pass
         
         # Get user roles for response
         user_roles = db.query(UserRole).filter(UserRole.user_id == db_user.user_id).all()
         roles = [ur.role_key for ur in user_roles]
+        
+        try:
+            log_security_event("user_registered", {"email": user_data.email, "roles": roles})
+        except Exception:
+            pass
         
         return UserResponse(
             user_id=str(db_user.user_id),
@@ -147,7 +187,7 @@ async def register_user(request: Request, user_data: UserCreate, db: Session = D
             last_name=db_user.last_name,
             phone=db_user.phone,
             is_active=db_user.is_active,
-            is_verified=getattr(db_user, "is_verified", False),
+            is_verified=False,
             roles=roles
         )
     except ValidationError as e:
@@ -155,10 +195,19 @@ async def register_user(request: Request, user_data: UserCreate, db: Session = D
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Validation error: {str(e)}"
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        error_msg = f"Internal server error during user registration: {str(e)}"
+        traceback.print_exc()
+        try:
+            log_security_event("registration_error", {"email": user_data.email, "error": str(e)})
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during user registration"
+            detail=error_msg
         )
 
 @router.post("/token", 
@@ -321,13 +370,110 @@ async def read_users_me(request: Request, current_user: dict = Depends(get_curre
             detail="Failed to retrieve user profile"
         )
 
+@router.post("/register-with-verification", 
+    response_model=SuccessResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register and send verification email",
+    description="Register a new user and automatically send a verification email. User must verify email before they can login.",
+)
+@enhanced_limiter.limit(RateLimits.AUTH_REGISTER)
+async def register_with_verification(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_data: UserCreate, 
+    db: Session = Depends(get_db)
+):
+    """Register user and automatically send verification code"""
+    try:
+        # Check if user already exists
+        if get_user_by_email(db, user_data.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create new user
+        hashed_password = get_password_hash(user_data.password)
+        db_user = User(
+            email=user_data.email,
+            password_hash=hashed_password,
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            phone=user_data.phone,
+            is_verified=False
+        )
+        
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        
+        # Add roles
+        try:
+            for role_key in user_data.roles:
+                role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
+                if role:
+                    user_role = UserRole(user_id=db_user.user_id, role_key=role_key)
+                    db.add(user_role)
+            db.commit()
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        
+        # Generate and send verification code
+        ttl = getattr(settings, "VERIFICATION_CODE_TTL", 600)
+        code = "".join(secrets.choice(string.digits) for _ in range(6))
+        key = f"verify:code:{user_data.email.lower()}"
+        redis_service.set(key, {"code": code}, expire=ttl)
+        
+        # Send email in background using FastAPI BackgroundTasks
+        try:
+            background_tasks.add_task(send_verification_email_async, user_data.email, code)
+            log_security_event("user_registered_with_verification", {"email": user_data.email})
+        except Exception as e:
+            log_security_event("verification_email_failed", {"email": user_data.email, "error": str(e)})
+        
+        data = {
+            "user_id": str(db_user.user_id),
+            "email": db_user.email,
+            "ttl_seconds": ttl,
+            "message": "Please check your email for the verification code"
+        }
+        
+        if getattr(settings, "DEBUG", False):
+            data["debug_code"] = code
+        
+        return SuccessResponse(
+            message="Registration successful. Verification code sent to your email.",
+            data=data
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            log_security_event("registration_error", {"email": user_data.email, "error": str(e)})
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
 @router.post("/verify/request",
     response_model=SuccessResponse,
     summary="Request email verification code",
     description="Generate and send a verification code to the user's email. In development, the code is returned in the response.",
 )
 @enhanced_limiter.limit(RateLimits.AUTH_REGISTER)
-async def request_verification_code(request: Request, payload: VerificationRequest, db: Session = Depends(get_db)):
+async def request_verification_code(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    payload: VerificationRequest,
+    db: Session = Depends(get_db)
+):
     user = get_user_by_email(db, payload.email)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -339,10 +485,12 @@ async def request_verification_code(request: Request, payload: VerificationReque
     key = f"verify:code:{payload.email.lower()}"
     stored = redis_service.set(key, {"code": code}, expire=ttl)
 
+    # Send email in background using FastAPI BackgroundTasks
+    email_error = None
     try:
-        # Attempt to send the verification code via email
-        send_verification_email(payload.email, code)
+        background_tasks.add_task(send_verification_email_async, payload.email, code)
     except Exception as e:
+        email_error = str(e)
         # Log but do not fail the request; users can still see code in dev
         try:
             log_security_event("verification_email_send_failed", {"email": payload.email, "error": str(e)})
@@ -357,8 +505,10 @@ async def request_verification_code(request: Request, payload: VerificationReque
     data = {"ttl_seconds": ttl}
     if getattr(settings, "DEBUG", False):
         data["debug_code"] = code
+        if email_error:
+            data["email_warning"] = "Email sending queued (may fail in background)"
 
-    return SuccessResponse(message="Verification code sent", data=data)
+    return SuccessResponse(message="Verification code sent (check email)", data=data)
 
 @router.post("/verify/confirm",
     response_model=UserResponse,

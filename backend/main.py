@@ -127,12 +127,21 @@ async def add_process_time_header(request: Request, call_next):
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):
     logger.error(f"Validation error: {str(exc)}")
+    
+    # Convert UUID objects to strings in error details
+    errors = exc.errors()
+    for error in errors:
+        if 'ctx' in error and isinstance(error['ctx'], dict):
+            for key, value in error['ctx'].items():
+                if hasattr(value, '__class__') and value.__class__.__name__ == 'UUID':
+                    error['ctx'][key] = str(value)
+    
     return JSONResponse(
         status_code=422,
         content={
             "detail": "Validation error",
             "type": "validation_error",
-            "errors": exc.errors()
+            "errors": errors
         }
     )
 

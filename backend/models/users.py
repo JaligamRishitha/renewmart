@@ -24,8 +24,16 @@ class User(Base):
     # Relationships
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     lands = relationship("Land", back_populates="landowner")
-    assigned_tasks = relationship("Task", back_populates="assigned_user")
-    created_tasks = relationship("Task", foreign_keys="Task.created_by", back_populates="creator")
+    assigned_tasks = relationship(
+        "Task",
+        foreign_keys="Task.assigned_to",
+        back_populates="assigned_user"
+    )
+    created_tasks = relationship(
+        "Task",
+        foreign_keys="Task.created_by",
+        back_populates="creator"
+    )
     uploaded_documents = relationship("Document", back_populates="uploader")
     investor_interests = relationship("InvestorInterest", back_populates="investor")
 

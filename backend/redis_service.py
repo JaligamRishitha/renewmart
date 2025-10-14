@@ -17,6 +17,9 @@ class RedisService:
     def __init__(self):
         self.redis_client: Optional[redis.Redis] = None
         self.is_connected = False
+        # In-memory fallback store when Redis is unavailable
+        # Structure: { key: {"value": Any, "expire_at": Optional[datetime]} }
+        self._memory_store: Dict[str, Dict[str, Any]] = {}
         self._initialize_connection()
     
     def _initialize_connection(self):
@@ -62,7 +65,12 @@ class RedisService:
             True if successful, False otherwise
         """
         if not self.is_connected or not self.redis_client:
-            return False
+            # Fallback: store in memory
+            expire_at = None
+            if isinstance(expire, int) and expire > 0:
+                expire_at = datetime.utcnow() + timedelta(seconds=expire)
+            self._memory_store[key] = {"value": value, "expire_at": expire_at}
+            return True
             
         try:
             # Serialize complex objects to JSON
@@ -89,7 +97,16 @@ class RedisService:
             Stored value or default
         """
         if not self.is_connected or not self.redis_client:
-            return default
+            # Fallback: read from memory
+            entry = self._memory_store.get(key)
+            if not entry:
+                return default
+            expire_at = entry.get("expire_at")
+            if expire_at and datetime.utcnow() > expire_at:
+                # Expired - remove and return default
+                self._memory_store.pop(key, None)
+                return default
+            return entry.get("value", default)
             
         try:
             value = self.redis_client.get(key)
@@ -115,8 +132,15 @@ class RedisService:
         Returns:
             Number of keys deleted
         """
-        if not self.is_connected or not self.redis_client or not keys:
-            return 0
+        if not self.is_connected or not self.redis_client:
+            if not keys:
+                return 0
+            deleted = 0
+            for k in keys:
+                if k in self._memory_store:
+                    self._memory_store.pop(k, None)
+                    deleted += 1
+            return deleted
             
         try:
             return self.redis_client.delete(*keys)
@@ -134,7 +158,15 @@ class RedisService:
             True if key exists, False otherwise
         """
         if not self.is_connected or not self.redis_client:
-            return False
+            entry = self._memory_store.get(key)
+            if not entry:
+                return False
+            expire_at = entry.get("expire_at")
+            if expire_at and datetime.utcnow() > expire_at:
+                # Expired - remove and report not exists
+                self._memory_store.pop(key, None)
+                return False
+            return True
             
         try:
             return bool(self.redis_client.exists(key))
@@ -153,7 +185,15 @@ class RedisService:
             True if successful, False otherwise
         """
         if not self.is_connected or not self.redis_client:
-            return False
+            entry = self._memory_store.get(key)
+            if not entry:
+                return False
+            expire_at = None
+            if isinstance(seconds, int) and seconds > 0:
+                expire_at = datetime.utcnow() + timedelta(seconds=seconds)
+            entry["expire_at"] = expire_at
+            self._memory_store[key] = entry
+            return True
             
         try:
             return bool(self.redis_client.expire(key, seconds))
@@ -171,7 +211,18 @@ class RedisService:
             TTL in seconds, -1 if no expiration, -2 if key doesn't exist
         """
         if not self.is_connected or not self.redis_client:
-            return -2
+            entry = self._memory_store.get(key)
+            if not entry:
+                return -2
+            expire_at = entry.get("expire_at")
+            if not expire_at:
+                return -1
+            remaining = int((expire_at - datetime.utcnow()).total_seconds())
+            if remaining <= 0:
+                # Expired - cleanup and report not exist
+                self._memory_store.pop(key, None)
+                return -2
+            return remaining
             
         try:
             return self.redis_client.ttl(key)
@@ -190,7 +241,19 @@ class RedisService:
             New value after increment, None if failed
         """
         if not self.is_connected or not self.redis_client:
-            return None
+            entry = self._memory_store.get(key)
+            if entry:
+                value = entry.get("value")
+                try:
+                    new_val = int(value) + amount
+                except Exception:
+                    return None
+                entry["value"] = new_val
+                self._memory_store[key] = entry
+                return new_val
+            else:
+                self._memory_store[key] = {"value": amount, "expire_at": None}
+                return amount
             
         try:
             return self.redis_client.incrby(key, amount)
