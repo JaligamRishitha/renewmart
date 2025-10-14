@@ -250,6 +250,11 @@ class UserResponse(BaseSchema):
         description="Whether user account is active",
         example=True
     )
+    is_verified: bool = Field(
+        False,
+        description="Whether user email is verified",
+        example=False
+    )
     roles: List[str] = Field(
         default=[], 
         description="List of user roles",
@@ -297,6 +302,13 @@ class UserLogin(BaseSchema):
             }
         }
     )
+
+class VerificationRequest(BaseSchema):
+    email: EmailStr = Field(..., description="User email to verify")
+
+class VerificationConfirm(BaseSchema):
+    email: EmailStr = Field(..., description="User email to verify")
+    code: str = Field(..., min_length=4, max_length=10, description="Verification code")
 
 class Token(BaseSchema):
     access_token: str = Field(

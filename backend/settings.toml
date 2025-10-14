@@ -19,7 +19,7 @@ DEBUG = true
 RELOAD = true
 
 # CORS Configuration
-ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:4028"]
+ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:4028", "http://localhost:5173", "http://localhost:5174"]
 ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 ALLOWED_HEADERS = ["*"]
 
@@ -42,6 +42,15 @@ REDIS_DB = 0
 REDIS_PASSWORD = ""
 REDIS_URL = "redis://localhost:6379/0"
 
+# Email Configuration (for verification)
+EMAIL_FROM = "jaligamrishitha@gmail.com"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USERNAME = "jaligamrishitha@gmail.com"
+SMTP_PASSWORD = "@env:SMTP_PASSWORD"  # Set via environment or .secrets.toml; do NOT commit real passwords
+EMAIL_USE_TLS = true
+VERIFICATION_CODE_TTL = 600  # seconds
+
 [development]
 # Development specific settings
 DEBUG = true
@@ -62,6 +71,14 @@ REDIS_URL = "@env:REDIS_URL"
 REDIS_HOST = "@env:REDIS_HOST"
 REDIS_PORT = "@env:REDIS_PORT"
 REDIS_PASSWORD = "@env:REDIS_PASSWORD"
+# Email overrides
+EMAIL_FROM = "@env:EMAIL_FROM"
+SMTP_HOST = "@env:SMTP_HOST"
+SMTP_PORT = "@env:SMTP_PORT"
+SMTP_USERNAME = "@env:SMTP_USERNAME"
+SMTP_PASSWORD = "@env:SMTP_PASSWORD"
+EMAIL_USE_TLS = "@env:EMAIL_USE_TLS"
+VERIFICATION_CODE_TTL = "@env:VERIFICATION_CODE_TTL"
 
 [testing]
 # Testing specific settings

@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }) => {
       // Registration successful, but user needs to login
       // For demo purposes, we'll auto-login after registration
       const loginResponse = await authAPI.login({
-        username: userData.email,
+        email: userData.email,
         password: userData.password
       });
       

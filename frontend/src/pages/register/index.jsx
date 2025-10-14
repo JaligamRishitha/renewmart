@@ -13,6 +13,7 @@ import RoleSelector from './components/RoleSelector';
 import PasswordStrengthIndicator from './components/PasswordStrengthIndicator';
 import TrustSignals from './components/TrustSignals';
 import RoleSpecificFields from './components/RoleSpecificFields';
+import { authAPI } from '../../services/api';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -240,53 +241,81 @@ const Register = () => {
 
   const handleSubmit = async () => {
     if (!validateCurrentStep()) {
-      setNotifications([{
-        id: 'submit-error',
-        type: 'error',
-        title: 'Validation Error',
-        message: 'Please complete all required fields.',
-        timestamp: new Date()
-      }]);
+      setNotifications([
+        {
+          id: 'submit-error',
+          type: 'error',
+          title: 'Validation Error',
+          message: 'Please complete all required fields.',
+          timestamp: new Date(),
+        },
+      ]);
       return;
     }
 
     setIsLoading(true);
-    
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setNotifications([{
-        id: 'success',
-        type: 'success',
-        title: 'Account Created Successfully!',
-        message: 'Please check your email for verification instructions.',
-        timestamp: new Date()
-      }]);
 
-      // Navigate to appropriate dashboard based on role
-      setTimeout(() => {
-        switch (formData?.role) {
-          case 'landowner':
-            navigate('/landowner-dashboard');
-            break;
-          case 'investor': navigate('/investor-portal');
-            break;
-          case 'admin': navigate('/admin-dashboard');
-            break;
-          default:
-            navigate('/landowner-dashboard');
-        }
-      }, 2000);
-      
+    try {
+      // Build first and last name from fullName
+      const nameParts = (formData?.fullName || '').trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      if (!firstName || !lastName) {
+        setNotifications([
+          {
+            id: 'name-error',
+            type: 'error',
+            title: 'Name Required',
+            message: 'Please enter your full name (first and last name).',
+            timestamp: new Date(),
+          },
+        ]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Prepare registration payload per backend schema
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        confirm_password: formData.confirmPassword || formData.password,
+        first_name: firstName,
+        last_name: lastName,
+        phone: formData.phone || null,
+      };
+
+      if (formData.role) {
+        registrationData.roles = [formData.role];
+      }
+      // Call backend register API
+      await authAPI.register(registrationData);
+
+      // Registration successful: redirect to login (backend returns user, no token)
+      setNotifications([
+        {
+          id: 'success',
+          type: 'success',
+          title: 'Registration Successful',
+          message: 'Account created. Please log in to continue.',
+          timestamp: new Date(),
+        },
+      ]);
+
+      // Prefill login with registered email
+      localStorage.setItem('pendingRegisteredEmail', formData.email);
+      navigate('/login');
     } catch (error) {
-      setNotifications([{
-        id: 'error',
-        type: 'error',
-        title: 'Registration Failed',
-        message: 'There was an error creating your account. Please try again.',
-        timestamp: new Date()
-      }]);
+      setNotifications([
+        {
+          id: 'error',
+          type: 'error',
+          title: 'Registration Failed',
+          message:
+            error.response?.data?.detail || 'There was an error creating your account. Please try again.',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }

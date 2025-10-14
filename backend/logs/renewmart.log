@@ -106,3 +106,75 @@
 2025-10-08 09:18:17 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\ShibinShanmughamprem\Desktop\Renewmart\renewmart\backend\logs
 2025-10-08 09:18:27 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
 2025-10-08 09:18:27 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\ShibinShanmughamprem\Desktop\Renewmart\renewmart\backend\logs
+2025-10-13 23:04:24 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-13 23:04:24 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:283 - RenewMart API Server Starting...
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:284 - Environment: development
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:285 - Debug mode: True
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:286 - Python version: 3.11.7 (tags/v3.11.7:fa7a6f2, Dec  4 2023, 19:24:49) [MSC v.1937 64 bit (AMD64)]
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:287 - Working directory: C:\Users\jalig\Downloads\RenewMart\renewmart\backend
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:161 - Effective DATABASE_URL: postgresql://renewmart_user:****@localhost:5432/renewmart_db
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:163 - Starting RenewMart API v1.0.0...
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:164 - Environment: development
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:165 - Debug mode: True
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:166 - Server configuration: {'app': 'main:app', 'host': '127.0.0.1', 'port': 8000, 'reload': False, 'log_level': 'debug', 'access_log': True, 'use_colors': True, 'workers': 1}
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:177 - Server starting on http://127.0.0.1:8000
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:178 - API documentation available at http://127.0.0.1:8000/docs
+2025-10-13 23:05:25 - renewmart.server - INFO - server.py:179 - Alternative API docs at http://127.0.0.1:8000/redoc
+2025-10-13 23:05:29 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-13 23:05:29 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-13 23:05:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-13 23:05:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-13 23:17:45 - renewmart.server - INFO - server.py:41 - Received signal 2, shutting down gracefully...
+2025-10-13 23:17:45 - renewmart.server - INFO - server.py:193 - Server shutdown complete
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:283 - RenewMart API Server Starting...
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:284 - Environment: development
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:285 - Debug mode: True
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:286 - Python version: 3.11.7 (tags/v3.11.7:fa7a6f2, Dec  4 2023, 19:24:49) [MSC v.1937 64 bit (AMD64)]
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:287 - Working directory: C:\Users\jalig\Downloads\RenewMart\renewmart\backend
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:161 - Effective DATABASE_URL: postgresql://renewmart_user:****@localhost:5432/renewmart_db
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:163 - Starting RenewMart API v1.0.0...
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:164 - Environment: development
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:165 - Debug mode: True
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:166 - Server configuration: {'app': 'main:app', 'host': '127.0.0.1', 'port': 8000, 'reload': False, 'log_level': 'debug', 'access_log': True, 'use_colors': True, 'workers': 1}
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:177 - Server starting on http://127.0.0.1:8000
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:178 - API documentation available at http://127.0.0.1:8000/docs
+2025-10-13 23:17:47 - renewmart.server - INFO - server.py:179 - Alternative API docs at http://127.0.0.1:8000/redoc
+2025-10-13 23:17:53 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-13 23:17:53 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-13 23:17:57 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-13 23:17:57 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-14 00:14:01 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-14 00:14:01 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:283 - RenewMart API Server Starting...
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:284 - Environment: development
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:285 - Debug mode: True
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:286 - Python version: 3.11.7 (tags/v3.11.7:fa7a6f2, Dec  4 2023, 19:24:49) [MSC v.1937 64 bit (AMD64)]
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:287 - Working directory: C:\Users\jalig\Downloads\RenewMart\renewmart\backend
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:161 - Effective DATABASE_URL: postgresql://renewmart_user:****@localhost:5432/renewmart_db
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:163 - Starting RenewMart API v1.0.0...
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:164 - Environment: development
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:165 - Debug mode: True
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:166 - Server configuration: {'app': 'main:app', 'host': '127.0.0.1', 'port': 8001, 'reload': False, 'log_level': 'debug', 'access_log': True, 'use_colors': True, 'workers': 1}
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:177 - Server starting on http://127.0.0.1:8001
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:178 - API documentation available at http://127.0.0.1:8001/docs
+2025-10-14 00:17:59 - renewmart.server - INFO - server.py:179 - Alternative API docs at http://127.0.0.1:8001/redoc
+2025-10-14 00:18:09 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-14 00:18:09 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:283 - RenewMart API Server Starting...
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:284 - Environment: development
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:285 - Debug mode: True
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:286 - Python version: 3.11.7 (tags/v3.11.7:fa7a6f2, Dec  4 2023, 19:24:49) [MSC v.1937 64 bit (AMD64)]
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:287 - Working directory: C:\Users\jalig\Downloads\RenewMart\renewmart\backend
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:161 - Effective DATABASE_URL: postgresql://renewmart_user:****@localhost:5432/renewmart_db
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:163 - Starting RenewMart API v1.0.0...
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:164 - Environment: development
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:165 - Debug mode: True
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:166 - Server configuration: {'app': 'main:app', 'host': '127.0.0.1', 'port': 8000, 'reload': False, 'log_level': 'debug', 'access_log': True, 'use_colors': True, 'workers': 1}
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:177 - Server starting on http://127.0.0.1:8000
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:178 - API documentation available at http://127.0.0.1:8000/docs
+2025-10-14 00:37:51 - renewmart.server - INFO - server.py:179 - Alternative API docs at http://127.0.0.1:8000/redoc
+2025-10-14 00:38:01 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-14 00:38:01 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RenewMart\renewmart\backend\logs
+2025-10-14 02:06:07 - renewmart.server - INFO - server.py:41 - Received signal 2, shutting down gracefully...
+2025-10-14 02:06:07 - renewmart.server - INFO - server.py:193 - Server shutdown complete

@@ -52,11 +52,16 @@ export const authAPI = {
     const registrationData = {
       email: userData.email,
       password: userData.password,
+      confirm_password: userData.confirmPassword || userData.password,
       first_name: userData.firstName,
       last_name: userData.lastName,
-      phone: userData.phone || null,
-      roles: userData.role ? [userData.role] : []
+      phone: userData.phone || null
     };
+
+    // Only include roles when user selected a role; otherwise rely on backend default
+    if (userData.role) {
+      registrationData.roles = [userData.role];
+    }
     
     const response = await api.post('/api/auth/register', registrationData);
     return response.data;

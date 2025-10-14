@@ -4,9 +4,15 @@ from sqlalchemy.orm import sessionmaker, Session
 from config import settings
 from typing import Optional
 from uuid import UUID
+import os
 
-# Get database URL from Dynaconf settings
-DATABASE_URL = settings.DATABASE_URL
+# Get database URL with environment variable fallback
+# Prefer explicit environment variables to ensure overrides work even without Dynaconf prefix
+DATABASE_URL = (
+    os.getenv("RENEWMART_DATABASE_URL")
+    or os.getenv("DATABASE_URL")
+    or settings.DATABASE_URL
+)
 
 # Create SQLAlchemy engine
 engine = create_engine(
@@ -36,13 +42,13 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
     """Get user by email address."""
     query = text("""
         SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-               u.phone, u.is_active, u.created_at, u.updated_at,
+               u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
                COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
         FROM "user" u
         LEFT JOIN user_roles ur ON u.user_id = ur.user_id
         WHERE u.email = :email
         GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                 u.phone, u.is_active, u.created_at, u.updated_at
+                 u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
     """)
     
     result = db.execute(query, {"email": email}).fetchone()
@@ -57,6 +63,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
         "first_name": result.first_name,
         "last_name": result.last_name,
         "phone": result.phone,
+        "is_verified": result.is_verified,
         "is_active": result.is_active,
         "created_at": result.created_at,
         "updated_at": result.updated_at,

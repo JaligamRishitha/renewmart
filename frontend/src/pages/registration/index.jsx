@@ -129,27 +129,34 @@ const Registration = () => {
     setErrors({});
     
     try {
-      // Prepare registration data
+      // Prepare registration data using frontend keys expected by authAPI.register
       const registrationData = {
         email: formData.email,
         password: formData.password,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
+        confirmPassword: formData.confirmPassword || formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         phone: formData.phone,
         role: formData.role
       };
       
       // Register user
-      const response = await authAPI.register(registrationData);
+      const user = await authAPI.register(registrationData);
       
-      if (response.access_token) {
-        // Store token and user data
-        localStorage.setItem('authToken', response.access_token);
-        localStorage.setItem('user', JSON.stringify(response.user));
-        
-        // Navigate to dashboard after successful registration
-        navigate('/dashboard');
-      }
+      // Registration returns user data (no token). Redirect to login to obtain token.
+      setNotifications([
+        {
+          id: 'registration-success',
+          type: 'success',
+          title: 'Registration Successful',
+          message: 'Account created. Please log in to continue.',
+          timestamp: new Date()
+        }
+      ]);
+      
+      // Optionally prefill login with registered email
+      localStorage.setItem('pendingRegisteredEmail', formData.email);
+      navigate('/login');
     } catch (error) {
       console.error('Registration failed:', error);
       

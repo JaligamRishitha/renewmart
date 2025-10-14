@@ -87,13 +87,19 @@ def validate_environment():
             print(f"ERROR: Main application file not found: {main_file}")
         return False
     
-    # Check if database file exists (for SQLite)
-    db_file = Path(__file__).parent / "renewmart.db"
-    if not db_file.exists():
-        if logger:
-            logger.warning(f"Database file not found: {db_file}. Run create_tables.py first.")
-        else:
-            print(f"WARNING: Database file not found: {db_file}. Run create_tables.py first.")
+    # Warn about missing SQLite file only if using sqlite
+    try:
+        db_url = settings.DATABASE_URL
+        if isinstance(db_url, str) and db_url.lower().startswith("sqlite"):
+            db_file = Path(__file__).parent / "renewmart.db"
+            if not db_file.exists():
+                if logger:
+                    logger.warning(f"SQLite database file not found: {db_file}. Run create_tables.py first or ensure the path is correct.")
+                else:
+                    print(f"WARNING: SQLite database file not found: {db_file}. Run create_tables.py first or ensure the path is correct.")
+    except Exception:
+        # If settings are not available, skip this optional check
+        pass
     
     return True
 
@@ -137,6 +143,23 @@ def start_server(config, settings):
     global server, logger
     
     try:
+        # Log effective database URL for debugging (mask credentials)
+        db_url = settings.DATABASE_URL
+        safe_db_url = db_url
+        if isinstance(db_url, str):
+            try:
+                # basic masking: replace password between ':' and '@'
+                if '://' in db_url and '@' in db_url:
+                    prefix, rest = db_url.split('://', 1)
+                    if ':' in rest and '@' in rest:
+                        user_part, host_part = rest.split('@', 1)
+                        if ':' in user_part:
+                            user_name, _ = user_part.split(':', 1)
+                            safe_db_url = f"{prefix}://{user_name}:****@{host_part}"
+            except Exception:
+                pass
+        logger.info(f"Effective DATABASE_URL: {safe_db_url}")
+
         logger.info(f"Starting RenewMart API v1.0.0...")
         logger.info(f"Environment: {settings.get('ENVIRONMENT', 'development')}")
         logger.info(f"Debug mode: {settings.DEBUG}")
