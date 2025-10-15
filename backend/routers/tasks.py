@@ -31,7 +31,7 @@ def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> boo
         return True
     
     # Land owner can access tasks for their land
-    if str(task_data.get("owner_id")) == user_id:
+    if str(task_data.get("landowner_id")) == user_id:
         return True
     
     return False
@@ -47,7 +47,7 @@ def can_manage_task(user_roles: List[str], user_id: str, task_data: dict) -> boo
         return True
     
     # Land owner can manage tasks for their land
-    if str(task_data.get("owner_id")) == user_id:
+    if str(task_data.get("landowner_id")) == user_id:
         return True
     
     return False
@@ -62,7 +62,7 @@ async def create_task(
     """Create a new task (admin or land owner only)."""
     # Check if land exists and user has permission
     land_check = text("""
-        SELECT owner_id, status_key FROM lands WHERE land_id = :land_id
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
     
     land_result = db.execute(land_check, {"land_id": str(task_data.land_id)}).fetchone()
@@ -75,7 +75,7 @@ async def create_task(
     
     user_roles = current_user.get("roles", [])
     if ("administrator" not in user_roles and 
-        str(land_result.owner_id) != current_user["user_id"]):
+        str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to create tasks for this land"
@@ -146,13 +146,13 @@ async def get_tasks(
         SELECT t.task_id, t.land_id, t.task_type, t.description,
                t.assigned_to, t.assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.owner_id,
+               l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
-        LEFT JOIN users u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN users u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
         WHERE 1=1
     """
     
@@ -180,7 +180,7 @@ async def get_tasks(
         base_query += """
             AND (t.assigned_to = :user_id 
                  OR t.assigned_by = :user_id 
-                 OR l.owner_id = :user_id)
+                 OR l.landowner_id = :user_id)
         """
         params["user_id"] = current_user["user_id"]
     
@@ -220,13 +220,13 @@ async def get_task(
         SELECT t.task_id, t.land_id, t.task_type, t.description,
                t.assigned_to, t.assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.owner_id,
+               l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
-        LEFT JOIN users u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN users u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
         WHERE t.task_id = :task_id
     """)
     
@@ -243,7 +243,7 @@ async def get_task(
     task_data = {
         "assigned_by": result.assigned_by,
         "assigned_to": result.assigned_to,
-        "owner_id": result.owner_id
+        "landowner_id": result.landowner_id
     }
     
     if not can_access_task(user_roles, current_user["user_id"], task_data):
@@ -280,7 +280,7 @@ async def update_task(
     """Update task (assigned user, creator, or admin only)."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.assigned_by, t.status as current_status, l.owner_id
+        SELECT t.assigned_to, t.assigned_by, t.status as current_status, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -298,7 +298,7 @@ async def update_task(
     task_data = {
         "assigned_by": task_result.assigned_by,
         "assigned_to": task_result.assigned_to,
-        "owner_id": task_result.owner_id
+        "landowner_id": task_result.landowner_id
     }
     
     # Check if user can update task (assigned user can only update status and completion_notes)
@@ -313,7 +313,7 @@ async def update_task(
     
     # Validate assigned_to user if provided
     if task_update.assigned_to:
-        user_check = text("SELECT user_id FROM users WHERE user_id = :user_id")
+        user_check = text("SELECT user_id FROM \"user\" WHERE user_id = :user_id")
         user_result = db.execute(user_check, {"user_id": str(task_update.assigned_to)}).fetchone()
         
         if not user_result:
@@ -383,7 +383,7 @@ async def delete_task(
     """Delete task (creator or admin only)."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_by, l.owner_id
+        SELECT t.assigned_by, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -400,7 +400,7 @@ async def delete_task(
     user_roles = current_user.get("roles", [])
     task_data = {
         "assigned_by": task_result.assigned_by,
-        "owner_id": task_result.owner_id
+        "landowner_id": task_result.landowner_id
     }
     
     if not can_manage_task(user_roles, current_user["user_id"], task_data):
@@ -438,7 +438,7 @@ async def get_task_history(
     """Get task history."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.assigned_by, l.owner_id
+        SELECT t.assigned_to, t.assigned_by, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -456,7 +456,7 @@ async def get_task_history(
     task_data = {
         "assigned_by": task_result.assigned_by,
         "assigned_to": task_result.assigned_to,
-        "owner_id": task_result.owner_id
+        "landowner_id": task_result.landowner_id
     }
     
     if not can_access_task(user_roles, current_user["user_id"], task_data):
@@ -471,7 +471,7 @@ async def get_task_history(
                th.new_status, th.notes, th.changed_at,
                u.first_name || ' ' || u.last_name as changed_by_name
         FROM task_history th
-        JOIN users u ON th.changed_by = u.user_id
+        JOIN "user" u ON th.changed_by = u.user_id
         WHERE th.task_id = :task_id
         ORDER BY th.changed_at DESC
     """)
@@ -503,13 +503,13 @@ async def get_my_tasks(
         SELECT t.task_id, t.land_id, t.task_type, t.description,
                t.assigned_to, t.assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.owner_id,
+               l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
-        LEFT JOIN users u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN users u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
         WHERE t.assigned_to = :user_id
     """
     
@@ -555,13 +555,13 @@ async def get_tasks_created_by_me(
         SELECT t.task_id, t.land_id, t.task_type, t.description,
                t.assigned_to, t.assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.owner_id,
+               l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
-        LEFT JOIN users u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN users u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
         WHERE t.assigned_by = :user_id
     """
     
@@ -611,13 +611,13 @@ async def get_all_tasks(
         SELECT t.task_id, t.land_id, t.task_type, t.description,
                t.assigned_to, t.assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.owner_id,
+               l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
-        LEFT JOIN users u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN users u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
         WHERE 1=1
     """
     
@@ -722,7 +722,7 @@ async def get_task_stats(
         base_query += """
             AND (t.assigned_to = :user_id 
                  OR t.assigned_by = :user_id 
-                 OR l.owner_id = :user_id)
+                 OR l.landowner_id = :user_id)
         """
         params["user_id"] = current_user["user_id"]
     

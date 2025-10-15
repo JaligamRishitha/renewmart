@@ -6,38 +6,10 @@ const TaskDetails = ({
   reviewerInfo = {},
   projectInfo = {}
 }) => {
-  const mockTaskInfo = {
-    id: 'TASK-2025-001',
-    title: 'Land Ownership Documentation Review',
-    assignedDate: '2025-01-10T09:00:00Z',
-    dueDate: '2025-01-15T17:00:00Z',
-    priority: 'high',
-    status: 'in_progress',
-    estimatedHours: 8,
-    completedHours: 3.5,
-    category: 'ownership_documents',
-    ...taskInfo
-  };
-
-  const mockReviewerInfo = {
-    name: 'Sarah Johnson',
-    role: 'RE Analyst',
-    department: 'Technical Review',
-    email: 'sarah.johnson@landinvest.com',
-    avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-    ...reviewerInfo
-  };
-
-  const mockProjectInfo = {
-    name: 'Riverside Solar Farm Development',
-    location: 'Madison County, Texas',
-    capacity: '50 MW',
-    projectType: 'Solar',
-    landowner: 'Robert Martinez',
-    totalDocuments: 12,
-    reviewedDocuments: 7,
-    ...projectInfo
-  };
+  // Use props directly - parent should provide real data
+  const mockTaskInfo = taskInfo;
+  const mockReviewerInfo = reviewerInfo;
+  const mockProjectInfo = projectInfo;
 
   const getPriorityColor = (priority) => {
     switch (priority) {

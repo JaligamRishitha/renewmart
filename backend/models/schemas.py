@@ -482,7 +482,7 @@ class LandSection(LandSectionBase):
 # ============================================================================
 
 class DocumentBase(BaseSchema):
-    document_type: Optional[DocumentTypeEnum] = Field(None, description="Type of document")
+    document_type: Optional[str] = Field(None, max_length=100, description="Type of document")
     file_name: str = Field(..., max_length=255, description="Original file name")
     file_path: str = Field(..., max_length=500, description="Storage file path")
     file_size: Optional[int] = Field(None, ge=0, le=104857600, description="File size in bytes (max 100MB)")

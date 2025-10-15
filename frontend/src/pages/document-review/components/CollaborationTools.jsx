@@ -14,71 +14,9 @@ const CollaborationTools = ({
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [selectedReviewer, setSelectedReviewer] = useState('');
 
-  const mockComments = [
-    {
-      id: 'comment-1',
-      author: 'Sarah Johnson',
-      role: 'RE Analyst',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-      content: `The land valuation report shows promising potential for solar development. However, I need clarification on the grid connectivity timeline mentioned in section 3.2.`,
-      timestamp: '2025-01-13T10:30:00Z',
-      type: 'question',
-      replies: [
-        {
-          id: 'reply-1',
-          author: 'Michael Chen',
-          role: 'RE Governance Lead',
-          content: `I've reviewed the grid connectivity documentation. The timeline is accurate based on the utility company's current expansion plans.`,
-          timestamp: '2025-01-13T11:15:00Z'
-        }
-      ]
-    },
-    {
-      id: 'comment-2',
-      author: 'David Rodriguez',
-      role: 'RE Sales Advisor',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-      content: `Market analysis looks solid. The pricing structure aligns well with current market rates in this region. Approved from market perspective.`,
-      timestamp: '2025-01-13T09:45:00Z',
-      type: 'approval'
-    },
-    {
-      id: 'comment-3',
-      author: 'Lisa Wang',
-      role: 'Environmental Specialist',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-      content: `Environmental impact assessment requires additional soil contamination testing. Please request updated reports from the landowner.`,
-      timestamp: '2025-01-13T08:20:00Z',
-      type: 'request'
-    }
-  ];
-
-  const mockReviewers = [
-    {
-      id: 'reviewer-1',
-      name: 'Alex Thompson',
-      role: 'Senior RE Analyst',
-      department: 'Technical Review',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-      status: 'available'
-    },
-    {
-      id: 'reviewer-2',
-      name: 'Emma Davis',
-      role: 'RE Governance Lead',
-      department: 'Compliance',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face',
-      status: 'busy'
-    },
-    {
-      id: 'reviewer-3',
-      name: 'James Wilson',
-      role: 'Financial Analyst',
-      department: 'Finance',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
-      status: 'available'
-    }
-  ];
+  // Use props provided by parent (should come from API)
+  const mockComments = comments || [];
+  const mockReviewers = reviewers || [];
 
   const getCommentTypeIcon = (type) => {
     switch (type) {

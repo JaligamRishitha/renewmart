@@ -37,22 +37,6 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [touchedFields, setTouchedFields] = useState({});
 
-  // Mock credentials for different roles
-  const mockCredentials = {
-    landowner: {
-      email: "landowner@example.com",
-      password: "LandOwner123!"
-    },
-    investor: {
-      email: "investor@example.com", 
-      password: "Investor123!"
-    },
-    admin: {
-      email: "admin@example.com",
-      password: "Admin123!"
-    }
-  };
-
   const steps = [
     { id: 1, title: 'Basic Information', icon: 'User' },
     { id: 2, title: 'Role Selection', icon: 'UserCheck' },
@@ -503,25 +487,6 @@ const Register = () => {
                 </div>
               </div>
             </div>
-            {/* Mock Credentials Display */}
-            {formData?.role && mockCredentials?.[formData?.role] && (
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-                <h4 className="font-heading font-semibold text-sm text-primary mb-2 flex items-center">
-                  <Icon name="Key" size={16} className="mr-2" />
-                  Demo Credentials for {formData?.role?.charAt(0)?.toUpperCase() + formData?.role?.slice(1)}
-                </h4>
-                <div className="space-y-1 text-sm">
-                  <div>
-                    <span className="font-body font-medium text-muted-foreground">Email:</span>
-                    <span className="font-mono text-foreground ml-2">{mockCredentials?.[formData?.role]?.email}</span>
-                  </div>
-                  <div>
-                    <span className="font-body font-medium text-muted-foreground">Password:</span>
-                    <span className="font-mono text-foreground ml-2">{mockCredentials?.[formData?.role]?.password}</span>
-                  </div>
-                </div>
-              </div>
-            )}
             {/* Terms and Privacy */}
             <div className="space-y-4">
               <Checkbox

@@ -4,7 +4,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 
-const ProjectTable = ({ projects, onEdit, onView, onContinueDraft }) => {
+const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForReview, onDelete }) => {
   const navigate = useNavigate();
 
   const formatDate = (dateString) => {
@@ -26,7 +26,14 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft }) => {
       case 'continue':
         onContinueDraft(project);
         break;
-      case 'upload': navigate('/document-upload', { state: { projectId: project?.id } });
+      case 'submit':
+        onSubmitForReview(project);
+        break;
+      case 'delete':
+        onDelete(project);
+        break;
+      case 'upload': 
+        navigate('/document-upload', { state: { projectId: project?.id } });
         break;
       default:
         break;
@@ -104,25 +111,42 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft }) => {
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end space-x-2">
                     {project?.status === 'draft' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAction('continue', project)}
+                          iconName="Edit"
+                          iconPosition="left"
+                        >
+                          Continue
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleAction('submit', project)}
+                          iconName="Send"
+                          iconPosition="left"
+                        >
+                          Submit
+                        </Button>
+                      </>
+                    )}
+                    {project?.status === 'under-review' && (
+                      <div className="text-sm text-muted-foreground flex items-center space-x-1">
+                        <Icon name="Clock" size={14} />
+                        <span>Awaiting Review</span>
+                      </div>
+                    )}
+                    {(project?.status === 'published' || project?.status === 'rtb') && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleAction('continue', project)}
-                        iconName="Edit"
+                        onClick={() => handleAction('view', project)}
+                        iconName="Users"
                         iconPosition="left"
                       >
-                        Continue
-                      </Button>
-                    )}
-                    {project?.status === 'approved' && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleAction('upload', project)}
-                        iconName="Upload"
-                        iconPosition="left"
-                      >
-                        Upload Docs
+                        View Interest
                       </Button>
                     )}
                     <Button
@@ -130,13 +154,27 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft }) => {
                       size="sm"
                       onClick={() => handleAction('view', project)}
                       iconName="Eye"
+                      title="View Details"
                     />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAction('edit', project)}
-                      iconName="Edit"
-                    />
+                    {(project?.status === 'draft' || project?.status === 'approved') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAction('edit', project)}
+                        iconName="Edit"
+                        title="Edit Project"
+                      />
+                    )}
+                    {project?.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAction('delete', project)}
+                        iconName="Trash2"
+                        title="Delete Draft"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      />
+                    )}
                   </div>
                 </td>
               </tr>
@@ -184,43 +222,83 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft }) => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="space-y-2">
               {project?.status === 'draft' && (
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAction('continue', project)}
+                    iconName="Edit"
+                    iconPosition="left"
+                    className="flex-1"
+                  >
+                    Continue Draft
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleAction('submit', project)}
+                    iconName="Send"
+                    iconPosition="left"
+                    className="flex-1"
+                  >
+                    Submit
+                  </Button>
+                </div>
+              )}
+              {project?.status === 'under-review' && (
+                <div className="text-sm text-center py-2 text-muted-foreground flex items-center justify-center space-x-1">
+                  <Icon name="Clock" size={14} />
+                  <span>Awaiting Admin Review</span>
+                </div>
+              )}
+              {(project?.status === 'published' || project?.status === 'rtb') && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleAction('continue', project)}
-                  iconName="Edit"
+                  onClick={() => handleAction('view', project)}
+                  iconName="Users"
                   iconPosition="left"
-                  className="flex-1"
+                  fullWidth
                 >
-                  Continue Draft
+                  View Investor Interest
                 </Button>
               )}
-              {project?.status === 'approved' && (
+              <div className="flex items-center space-x-2">
                 <Button
-                  variant="default"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => handleAction('upload', project)}
-                  iconName="Upload"
-                  iconPosition="left"
-                  className="flex-1"
+                  onClick={() => handleAction('view', project)}
+                  iconName="Eye"
+                  fullWidth
                 >
-                  Upload Documents
+                  View Details
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleAction('view', project)}
-                iconName="Eye"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleAction('edit', project)}
-                iconName="Edit"
-              />
+                {(project?.status === 'draft' || project?.status === 'approved') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAction('edit', project)}
+                    iconName="Edit"
+                    fullWidth
+                  >
+                    Edit
+                  </Button>
+                )}
+                {project?.status === 'draft' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAction('delete', project)}
+                    iconName="Trash2"
+                    fullWidth
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         ))}

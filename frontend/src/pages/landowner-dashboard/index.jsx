@@ -5,15 +5,26 @@ import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import Button from '../../components/ui/Button';
+import Icon from '../../components/AppIcon';
 import ProjectSummaryCards from './components/ProjectSummaryCards';
 import ProjectFilters from './components/ProjectFilters';
 import ProjectTable from './components/ProjectTable';
 import EmptyState from './components/EmptyState';
+import ProjectDetailModal from './components/ProjectDetailModal';
+import { landsAPI } from '../../services/api';
 
 const LandownerDashboard = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [filteredProjects, setFilteredProjects] = useState([]);
+  const [summaryData, setSummaryData] = useState({
+    totalLandArea: 0,
+    activeProjects: 0,
+    completedSubmissions: 0,
+    estimatedRevenue: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     search: '',
     projectType: 'all',
@@ -22,102 +33,44 @@ const LandownerDashboard = () => {
     sortBy: 'updated'
   });
   const [notifications, setNotifications] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
 
-  // Mock data for projects
-  const mockProjects = [
-    {
-      id: "PRJ-001",
-      name: "Sunrise Solar Farm",
-      location: "Austin, Texas",
-      type: "solar",
-      capacity: 25.5,
-      status: "published",
-      lastUpdated: "2025-01-10T14:30:00Z",
-      timeline: "12-months",
-      estimatedRevenue: 85.50
-    },
-    {
-      id: "PRJ-002",
-      name: "Prairie Wind Project",
-      location: "Oklahoma City, Oklahoma",
-      type: "wind",
-      capacity: 45.0,
-      status: "approved",
-      lastUpdated: "2025-01-08T09:15:00Z",
-      timeline: "18-months",
-      estimatedRevenue: 92.75
-    },
-    {
-      id: "PRJ-003",
-      name: "Green Valley Hydro",
-      location: "Denver, Colorado",
-      type: "hydroelectric",
-      capacity: 12.8,
-      status: "under-review",
-      lastUpdated: "2025-01-05T16:45:00Z",
-      timeline: "24-months",
-      estimatedRevenue: 78.25
-    },
-    {
-      id: "PRJ-004",
-      name: "Mountain View Solar",
-      location: "Phoenix, Arizona",
-      type: "solar",
-      capacity: 18.2,
-      status: "draft",
-      lastUpdated: "2025-01-03T11:20:00Z",
-      timeline: "6-months",
-      estimatedRevenue: 88.00
-    },
-    {
-      id: "PRJ-005",
-      name: "Coastal Wind Farm",
-      location: "San Diego, California",
-      type: "wind",
-      capacity: 67.5,
-      status: "published",
-      lastUpdated: "2024-12-28T13:10:00Z",
-      timeline: "18-months",
-      estimatedRevenue: 95.50
-    }
-  ];
-
-  // Mock summary data
-  const summaryData = {
-    totalLandArea: 1247,
-    activeProjects: 5,
-    completedSubmissions: 3,
-    estimatedRevenue: 439.00
-  };
-
-  // Mock notifications
-  const mockNotifications = [
-    {
-      id: 1,
-      type: 'success',
-      title: 'Project Approved',
-      message: 'Prairie Wind Project has been approved and is ready for document upload.',
-      timestamp: new Date(Date.now() - 300000),
-      actions: [
-        {
-          label: 'Upload Documents',
-          onClick: () => navigate('/document-upload')
-        }
-      ]
-    },
-    {
-      id: 2,
-      type: 'info',
-      title: 'Investor Interest',
-      message: 'New investor has expressed interest in Sunrise Solar Farm.',
-      timestamp: new Date(Date.now() - 600000)
-    }
-  ];
-
+  // Fetch dashboard data from API
   useEffect(() => {
-    // Simulate API call
-    setProjects(mockProjects);
-    setNotifications(mockNotifications);
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch summary and projects in parallel
+        const [summaryResponse, projectsResponse] = await Promise.all([
+          landsAPI.getDashboardSummary(),
+          landsAPI.getDashboardProjects()
+        ]);
+        
+        setSummaryData(summaryResponse);
+        setProjects(projectsResponse);
+        
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Failed to load dashboard data. Please try again.');
+        setNotifications([
+          {
+            id: Date.now(),
+            type: 'error',
+            title: 'Error Loading Data',
+            message: err.message || 'Failed to load dashboard data. Please try refreshing the page.',
+            timestamp: new Date()
+          }
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDashboardData();
   }, []);
 
   useEffect(() => {
@@ -194,12 +147,106 @@ const LandownerDashboard = () => {
   };
 
   const handleViewProject = (project) => {
-    // In a real app, this would navigate to a project detail page
-    console.log('Viewing project:', project);
+    setSelectedProject(project);
   };
 
   const handleContinueDraft = (project) => {
     navigate('/document-upload', { state: { projectId: project?.id, mode: 'continue' } });
+  };
+
+  const handleSubmitForReview = async (project) => {
+    try {
+      // Call API to submit for admin review
+      await landsAPI.submitForReview(project.id);
+      
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'success',
+          title: 'Submitted for Review',
+          message: `${project?.name} has been submitted for admin review. You'll be notified once reviewed.`,
+          timestamp: new Date(),
+        }
+      ]);
+      
+      // Update project status locally
+      setProjects(prev => prev.map(p => 
+        p.id === project.id 
+          ? { ...p, status: 'submitted', lastUpdated: new Date().toISOString(), description: 'Submitted - Awaiting admin review' }
+          : p
+      ));
+      
+    } catch (err) {
+      console.error('Error submitting project for review:', err);
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'error',
+          title: 'Submission Failed',
+          message: err.response?.data?.detail || 'Failed to submit project for review. Please try again.',
+          timestamp: new Date(),
+        }
+      ]);
+    }
+  };
+
+  const handleDeleteProject = (project) => {
+    setProjectToDelete(project);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!projectToDelete) return;
+
+    try {
+      // Call API to delete land
+      await landsAPI.deleteLand(projectToDelete.id);
+      
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'success',
+          title: 'Draft Deleted',
+          message: `${projectToDelete?.name} has been deleted from server successfully.`,
+          timestamp: new Date(),
+        }
+      ]);
+      
+      // Remove project from local state
+      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      
+      // Close confirmation dialog
+      setShowDeleteConfirm(false);
+      setProjectToDelete(null);
+      
+    } catch (err) {
+      console.error('Error deleting project from server:', err);
+      
+      // Remove from local state anyway (local deletion)
+      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'warning',
+          title: 'Deleted Locally',
+          message: `${projectToDelete?.name} was removed from your view. Server deletion failed: ${err.response?.data?.detail || 'Connection error'}. The draft may still exist on the server.`,
+          timestamp: new Date(),
+        }
+      ]);
+      
+      setShowDeleteConfirm(false);
+      setProjectToDelete(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setProjectToDelete(null);
   };
 
   const handleActionComplete = (action) => {
@@ -218,6 +265,32 @@ const LandownerDashboard = () => {
     filters?.status !== 'all' || 
     filters?.timeline !== 'all';
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header 
+          userRole="landowner" 
+          notifications={{
+            dashboard: 0,
+            projects: 0
+          }} 
+        />
+        <WorkflowBreadcrumbs />
+        <main className="pt-4 pb-20">
+          <div className="max-w-9xl mx-auto px-4 lg:px-6">
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading dashboard...</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header 
@@ -230,6 +303,19 @@ const LandownerDashboard = () => {
       <WorkflowBreadcrumbs />
       <main className="pt-4 pb-20">
         <div className="max-w-9xl mx-auto px-4 lg:px-6">
+          {/* Error State */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          
           {/* Page Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
@@ -237,8 +323,12 @@ const LandownerDashboard = () => {
                 Landowner Dashboard
               </h1>
               <p className="text-muted-foreground font-body">
-                Manage your renewable energy projects and track investment opportunities
+                Upload land details, save as drafts, and submit for admin review
               </p>
+              <div className="mt-2 flex items-center space-x-2 text-sm text-muted-foreground">
+                <Icon name="Info" size={14} />
+                <span>Drafts are visible to admins in view-only mode until submitted</span>
+              </div>
             </div>
             
             <div className="mt-4 lg:mt-0">
@@ -249,7 +339,7 @@ const LandownerDashboard = () => {
                 iconName="Plus"
                 iconPosition="left"
               >
-                Add New Project
+                Upload Land Details
               </Button>
             </div>
           </div>
@@ -271,6 +361,8 @@ const LandownerDashboard = () => {
               onEdit={handleEditProject}
               onView={handleViewProject}
               onContinueDraft={handleContinueDraft}
+              onSubmitForReview={handleSubmitForReview}
+              onDelete={handleDeleteProject}
             />
           ) : (
             <EmptyState
@@ -295,6 +387,67 @@ const LandownerDashboard = () => {
         onActionComplete={handleActionComplete}
         position="bottom-right"
       />
+
+      {/* Project Detail Modal */}
+      {selectedProject && (
+        <ProjectDetailModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Icon name="AlertTriangle" size={24} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-lg text-foreground">
+                    Delete Draft Project
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Remove from your dashboard
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-red-800 mb-2">
+                  Are you sure you want to delete <strong>"{projectToDelete?.name}"</strong>?
+                </p>
+                <p className="text-xs text-red-700">
+                  This will attempt to remove the project from the server. If the server deletion fails, 
+                  it will be removed from your view only.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <Button
+                  variant="outline"
+                  fullWidth
+                  onClick={cancelDelete}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  fullWidth
+                  onClick={confirmDelete}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  iconName="Trash2"
+                  iconPosition="left"
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -100,14 +100,35 @@ export const ReviewerRoute = ({ children, ...props }) => (
 );
 
 export const OwnerRoute = ({ children, ...props }) => (
-  <ProtectedRoute requiredRoles={['owner', 'administrator']} {...props}>
+  <ProtectedRoute requiredRoles={['landowner', 'administrator']} {...props}>
     {children}
   </ProtectedRoute>
 );
 
+// Helper function to get role-based dashboard route
+const getRoleDashboard = (user) => {
+  const userRoles = user?.roles || [];
+  
+  if (userRoles.includes('administrator')) {
+    return '/admin-dashboard';
+  } else if (userRoles.includes('landowner')) {
+    return '/landowner-dashboard';
+  } else if (userRoles.includes('investor')) {
+    return '/investor-portal';
+  } else if (userRoles.includes('reviewer') || 
+             userRoles.includes('re_sales_advisor') || 
+             userRoles.includes('re_analyst') || 
+             userRoles.includes('project_manager') || 
+             userRoles.includes('re_governance_lead')) {
+    return '/admin-dashboard';
+  } else {
+    return '/dashboard';
+  }
+};
+
 // Public route component (redirects to dashboard if already authenticated)
-export const PublicRoute = ({ children, redirectTo = '/dashboard' }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+export const PublicRoute = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -115,8 +136,9 @@ export const PublicRoute = ({ children, redirectTo = '/dashboard' }) => {
   }
 
   if (isAuthenticated) {
-    // Redirect to intended destination or dashboard
-    const from = location.state?.from || redirectTo;
+    // Redirect to role-specific dashboard or intended destination
+    const roleDashboard = getRoleDashboard(user);
+    const from = location.state?.from || roleDashboard;
     return <Navigate to={from} replace />;
   }
 

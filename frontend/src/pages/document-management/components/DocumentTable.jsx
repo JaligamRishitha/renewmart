@@ -7,7 +7,8 @@ const DocumentTable = ({ selectedFolder, onDocumentSelect, selectedDocuments, on
   const [sortOrder, setSortOrder] = useState('desc');
   const [viewMode, setViewMode] = useState('table'); // table, grid
 
-  const mockDocuments = {
+  // TODO: Integrate with real document API - mockDocuments removed
+  /*const mockDocuments = {
     'contracts-alpha': [
       {
         id: 'doc-1',
@@ -105,9 +106,10 @@ const DocumentTable = ({ selectedFolder, onDocumentSelect, selectedDocuments, on
         icon: 'FolderOpen'
       }
     ]
-  };
+  };*/
 
-  const documents = mockDocuments?.[selectedFolder] || mockDocuments?.['projects'];
+  // Use empty array for now until API integration
+  const documents = [];
 
   const formatDate = (dateString) => {
     return new Date(dateString)?.toLocaleDateString('en-US', {

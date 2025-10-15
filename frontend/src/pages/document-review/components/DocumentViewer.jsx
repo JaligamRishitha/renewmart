@@ -28,38 +28,8 @@ const DocumentViewer = ({
     { id: 'government', label: 'Government NOCs', icon: 'Shield', count: 3 }
   ];
 
-  const mockDocuments = [
-    {
-      id: 'doc-1',
-      name: 'Land_Ownership_Certificate.pdf',
-      category: 'ownership',
-      size: '2.4 MB',
-      uploadDate: '2025-01-10',
-      status: 'pending',
-      type: 'pdf',
-      url: 'https://images.unsplash.com/photo-1568667256549-094345857637?w=800&h=600&fit=crop'
-    },
-    {
-      id: 'doc-2',
-      name: 'Property_Valuation_Report.pdf',
-      category: 'valuation',
-      size: '5.1 MB',
-      uploadDate: '2025-01-09',
-      status: 'reviewed',
-      type: 'pdf',
-      url: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&h=600&fit=crop'
-    },
-    {
-      id: 'doc-3',
-      name: 'Topographical_Survey_Map.jpg',
-      category: 'survey',
-      size: '8.7 MB',
-      uploadDate: '2025-01-08',
-      status: 'pending',
-      type: 'image',
-      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop'
-    }
-  ];
+  // TODO: Get documents from API
+  const mockDocuments = [];
 
   const handleZoomIn = () => {
     setZoomLevel(prev => Math.min(prev + 25, 200));

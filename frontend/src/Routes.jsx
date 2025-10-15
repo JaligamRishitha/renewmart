@@ -10,6 +10,7 @@ import Marketplace from './pages/Marketplace';
 import Dashboard from './pages/dashboard';
 import DocumentManagement from './pages/document-management';
 import ProtectedRoute, { PublicRoute, OwnerRoute, ReviewerRoute } from './components/ProtectedRoute';
+import RoleBasedRedirect from './components/RoleBasedRedirect';
 
 // Import new pages from landinvest_pro
 import AdminDashboard from './pages/admin-dashboard';
@@ -45,7 +46,7 @@ const Routes = () => {
         {/* Protected routes - Role-based routing */}
         <Route path="/" element={
           <ProtectedRoute>
-            <Dashboard />
+            <RoleBasedRedirect />
           </ProtectedRoute>
         } />
         <Route path="/dashboard" element={

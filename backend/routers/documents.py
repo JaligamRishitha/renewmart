@@ -13,7 +13,7 @@ from datetime import datetime
 from database import get_db
 from auth import get_current_user, require_admin
 from models.schemas import (
-    DocumentCreate, DocumentUpdate, DocumentResponse,
+    DocumentCreate, DocumentUpdate, Document,
     MessageResponse
 )
 
@@ -66,7 +66,7 @@ def save_uploaded_file(file: UploadFile, land_id: str) -> tuple[str, int]:
     return str(file_path), file_size
 
 # Document endpoints
-@router.post("/upload/{land_id}", response_model=DocumentResponse)
+@router.post("/upload/{land_id}", response_model=Document)
 async def upload_document(
     land_id: UUID,
     document_type: str = Form(...),
@@ -77,7 +77,7 @@ async def upload_document(
     """Upload a document for a land (owner or admin only)."""
     # Check if land exists and user has permission
     land_check = text("""
-        SELECT owner_id, status_key FROM lands WHERE land_id = :land_id
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
     
     land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
@@ -88,9 +88,15 @@ async def upload_document(
             detail="Land not found"
         )
     
+    # Check permissions - convert both to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(land_result.owner_id) != current_user["user_id"]):
+    user_id_str = str(current_user["user_id"])
+    landowner_id_str = str(land_result.landowner_id)
+    
+    is_admin = "administrator" in user_roles
+    is_owner = user_id_str == landowner_id_str
+    
+    if not (is_admin or is_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to upload documents for this land"
@@ -108,15 +114,18 @@ async def upload_document(
         # Save file
         file_path, file_size = save_uploaded_file(file, str(land_id))
         
+        # Determine MIME type
+        mime_type = file.content_type or 'application/octet-stream'
+        
         # Create document record
         document_id = str(uuid.uuid4())
         insert_query = text("""
             INSERT INTO documents (
                 document_id, land_id, document_type, file_name, 
-                file_path, file_size, uploaded_by
+                file_path, file_size, uploaded_by, mime_type, is_draft
             ) VALUES (
                 :document_id, :land_id, :document_type, :file_name,
-                :file_path, :file_size, :uploaded_by
+                :file_path, :file_size, :uploaded_by, :mime_type, :is_draft
             )
         """)
         
@@ -127,7 +136,9 @@ async def upload_document(
             "file_name": file.filename,
             "file_path": file_path,
             "file_size": file_size,
-            "uploaded_by": current_user["user_id"]
+            "uploaded_by": current_user["user_id"],
+            "mime_type": mime_type,
+            "is_draft": True
         })
         
         db.commit()
@@ -145,7 +156,7 @@ async def upload_document(
             detail=f"Failed to upload document: {str(e)}"
         )
 
-@router.get("/land/{land_id}", response_model=List[DocumentResponse])
+@router.get("/land/{land_id}", response_model=List[Document])
 async def get_land_documents(
     land_id: UUID,
     document_type: Optional[str] = None,
@@ -155,7 +166,7 @@ async def get_land_documents(
     """Get all documents for a land."""
     # Check if land exists and user has permission
     land_check = text("""
-        SELECT owner_id, status_key FROM lands WHERE land_id = :land_id
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
     
     land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
@@ -166,11 +177,16 @@ async def get_land_documents(
             detail="Land not found"
         )
     
-    # Check permissions
+    # Check permissions - convert to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(land_result.owner_id) != current_user["user_id"] and
-        land_result.status_key != "published"):
+    user_id_str = str(current_user["user_id"])
+    landowner_id_str = str(land_result.landowner_id)
+    
+    is_admin = "administrator" in user_roles
+    is_owner = landowner_id_str == user_id_str
+    is_published = land_result.status == "published"
+    
+    if not (is_admin or is_owner or is_published):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view documents for this land"
@@ -179,12 +195,13 @@ async def get_land_documents(
     # Build query with optional document type filter
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-               d.file_path, d.file_size, d.uploaded_by, d.uploaded_at,
+               d.file_path, d.file_size, d.uploaded_by, d.created_at,
+               d.mime_type, d.is_draft,
                u.first_name || ' ' || u.last_name as uploader_name,
                l.title as land_title
         FROM documents d
-        JOIN users u ON d.uploaded_by = u.user_id
-        JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.land_id = :land_id
     """
     
@@ -194,12 +211,12 @@ async def get_land_documents(
         base_query += " AND d.document_type = :document_type"
         params["document_type"] = document_type
     
-    base_query += " ORDER BY d.uploaded_at DESC"
+    base_query += " ORDER BY d.created_at DESC"
     
     results = db.execute(text(base_query), params).fetchall()
     
     return [
-        DocumentResponse(
+        Document(
             document_id=row.document_id,
             land_id=row.land_id,
             document_type=row.document_type,
@@ -207,14 +224,14 @@ async def get_land_documents(
             file_path=row.file_path,
             file_size=row.file_size,
             uploaded_by=row.uploaded_by,
-            uploaded_at=row.uploaded_at,
-            uploader_name=row.uploader_name,
-            land_title=row.land_title
+            created_at=row.created_at,
+            mime_type=row.mime_type,
+            is_draft=row.is_draft
         )
         for row in results
     ]
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get("/{document_id}", response_model=Document)
 async def get_document(
     document_id: UUID,
     current_user: dict = Depends(get_current_user),
@@ -223,12 +240,11 @@ async def get_document(
     """Get document by ID."""
     query = text("""
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-               d.file_path, d.file_size, d.uploaded_by, d.uploaded_at,
-               u.first_name || ' ' || u.last_name as uploader_name,
-               l.title as land_title, l.owner_id, l.status_key
+               d.file_path, d.file_size, d.uploaded_by, d.created_at,
+               d.mime_type, d.is_draft,
+               l.landowner_id, l.status
         FROM documents d
-        JOIN users u ON d.uploaded_by = u.user_id
-        JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
     """)
     
@@ -240,17 +256,21 @@ async def get_document(
             detail="Document not found"
         )
     
-    # Check permissions
+    # Check permissions - convert to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(result.owner_id) != current_user["user_id"] and
-        result.status_key != "published"):
+    user_id_str = str(current_user["user_id"])
+    
+    is_admin = "administrator" in user_roles
+    is_owner = result.landowner_id and str(result.landowner_id) == user_id_str
+    is_published = result.status == "published"
+    
+    if result.landowner_id and not (is_admin or is_owner or is_published):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this document"
         )
     
-    return DocumentResponse(
+    return Document(
         document_id=result.document_id,
         land_id=result.land_id,
         document_type=result.document_type,
@@ -258,12 +278,12 @@ async def get_document(
         file_path=result.file_path,
         file_size=result.file_size,
         uploaded_by=result.uploaded_by,
-        uploaded_at=result.uploaded_at,
-        uploader_name=result.uploader_name,
-        land_title=result.land_title
+        created_at=result.created_at,
+        mime_type=result.mime_type,
+        is_draft=result.is_draft
     )
 
-@router.put("/{document_id}", response_model=DocumentResponse)
+@router.put("/{document_id}", response_model=Document)
 async def update_document(
     document_id: UUID,
     document_update: DocumentUpdate,
@@ -273,9 +293,9 @@ async def update_document(
     """Update document metadata (uploader or admin only)."""
     # Check if document exists and user has permission
     doc_check = text("""
-        SELECT d.uploaded_by, l.owner_id
+        SELECT d.uploaded_by, l.landowner_id
         FROM documents d
-        JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
     """)
     
@@ -287,10 +307,15 @@ async def update_document(
             detail="Document not found"
         )
     
+    # Check permissions - convert to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(doc_result.uploaded_by) != current_user["user_id"] and
-        str(doc_result.owner_id) != current_user["user_id"]):
+    user_id_str = str(current_user["user_id"])
+    
+    is_admin = "administrator" in user_roles
+    is_uploader = str(doc_result.uploaded_by) == user_id_str
+    is_landowner = doc_result.landowner_id and str(doc_result.landowner_id) == user_id_str
+    
+    if not (is_admin or is_uploader or is_landowner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to update this document"
@@ -327,9 +352,9 @@ async def delete_document(
     """Delete document (uploader or admin only)."""
     # Check if document exists and user has permission
     doc_check = text("""
-        SELECT d.uploaded_by, d.file_path, l.owner_id
+        SELECT d.uploaded_by, d.file_path, l.landowner_id
         FROM documents d
-        JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
     """)
     
@@ -341,10 +366,15 @@ async def delete_document(
             detail="Document not found"
         )
     
+    # Check permissions - convert to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(doc_result.uploaded_by) != current_user["user_id"] and
-        str(doc_result.owner_id) != current_user["user_id"]):
+    user_id_str = str(current_user["user_id"])
+    
+    is_admin = "administrator" in user_roles
+    is_uploader = str(doc_result.uploaded_by) == user_id_str
+    is_landowner = doc_result.landowner_id and str(doc_result.landowner_id) == user_id_str
+    
+    if not (is_admin or is_uploader or is_landowner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to delete this document"
@@ -378,9 +408,9 @@ async def download_document(
     """Download document file."""
     # Check if document exists and user has permission
     doc_check = text("""
-        SELECT d.file_path, d.file_name, l.owner_id, l.status_key
+        SELECT d.file_path, d.file_name, d.mime_type, l.landowner_id, l.status
         FROM documents d
-        JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
     """)
     
@@ -392,11 +422,15 @@ async def download_document(
             detail="Document not found"
         )
     
-    # Check permissions
+    # Check permissions - convert to strings for comparison
     user_roles = current_user.get("roles", [])
-    if ("administrator" not in user_roles and 
-        str(doc_result.owner_id) != current_user["user_id"] and
-        doc_result.status_key != "published"):
+    user_id_str = str(current_user["user_id"])
+    
+    is_admin = "administrator" in user_roles
+    is_owner = doc_result.landowner_id and str(doc_result.landowner_id) == user_id_str
+    is_published = doc_result.status == "published"
+    
+    if doc_result.landowner_id and not (is_admin or is_owner or is_published):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to download this document"
@@ -412,7 +446,7 @@ async def download_document(
     return FileResponse(
         path=doc_result.file_path,
         filename=doc_result.file_name,
-        media_type='application/octet-stream'
+        media_type=doc_result.mime_type or 'application/octet-stream'
     )
 
 @router.get("/types/list", response_model=List[str])
@@ -431,7 +465,7 @@ async def get_document_types(
     
     return [row.document_type for row in results]
 
-@router.get("/my/uploads", response_model=List[DocumentResponse])
+@router.get("/my/uploads", response_model=List[Document])
 async def get_my_uploads(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -439,20 +473,17 @@ async def get_my_uploads(
     """Get all documents uploaded by the current user."""
     query = text("""
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-               d.file_path, d.file_size, d.uploaded_by, d.uploaded_at,
-               u.first_name || ' ' || u.last_name as uploader_name,
-               l.title as land_title
+               d.file_path, d.file_size, d.uploaded_by, d.created_at,
+               d.mime_type, d.is_draft
         FROM documents d
-        JOIN users u ON d.uploaded_by = u.user_id
-        JOIN lands l ON d.land_id = l.land_id
         WHERE d.uploaded_by = :user_id
-        ORDER BY d.uploaded_at DESC
+        ORDER BY d.created_at DESC
     """)
     
     results = db.execute(query, {"user_id": current_user["user_id"]}).fetchall()
     
     return [
-        DocumentResponse(
+        Document(
             document_id=row.document_id,
             land_id=row.land_id,
             document_type=row.document_type,
@@ -460,15 +491,15 @@ async def get_my_uploads(
             file_path=row.file_path,
             file_size=row.file_size,
             uploaded_by=row.uploaded_by,
-            uploaded_at=row.uploaded_at,
-            uploader_name=row.uploader_name,
-            land_title=row.land_title
+            created_at=row.created_at,
+            mime_type=row.mime_type,
+            is_draft=row.is_draft
         )
         for row in results
     ]
 
 # Admin endpoints
-@router.get("/admin/all", response_model=List[DocumentResponse])
+@router.get("/admin/all", response_model=List[Document])
 async def get_all_documents(
     skip: int = 0,
     limit: int = 100,
@@ -479,12 +510,9 @@ async def get_all_documents(
     """Get all documents (admin only)."""
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-               d.file_path, d.file_size, d.uploaded_by, d.uploaded_at,
-               u.first_name || ' ' || u.last_name as uploader_name,
-               l.title as land_title
+               d.file_path, d.file_size, d.uploaded_by, d.created_at,
+               d.mime_type, d.is_draft
         FROM documents d
-        JOIN users u ON d.uploaded_by = u.user_id
-        JOIN lands l ON d.land_id = l.land_id
         WHERE 1=1
     """
     
@@ -494,12 +522,12 @@ async def get_all_documents(
         base_query += " AND d.document_type = :document_type"
         params["document_type"] = document_type
     
-    base_query += " ORDER BY d.uploaded_at DESC OFFSET :skip LIMIT :limit"
+    base_query += " ORDER BY d.created_at DESC OFFSET :skip LIMIT :limit"
     
     results = db.execute(text(base_query), params).fetchall()
     
     return [
-        DocumentResponse(
+        Document(
             document_id=row.document_id,
             land_id=row.land_id,
             document_type=row.document_type,
@@ -507,9 +535,9 @@ async def get_all_documents(
             file_path=row.file_path,
             file_size=row.file_size,
             uploaded_by=row.uploaded_by,
-            uploaded_at=row.uploaded_at,
-            uploader_name=row.uploader_name,
-            land_title=row.land_title
+            created_at=row.created_at,
+            mime_type=row.mime_type,
+            is_draft=row.is_draft
         )
         for row in results
     ]

@@ -70,14 +70,33 @@ const LoginForm = () => {
     setErrors({});
 
     try {
-      await login({
+      const result = await login({
         email: formData.email,
         password: formData.password,
         role: formData.role
       });
       
-      // Navigation will be handled by AuthContext after successful login
-      navigate('/dashboard');
+      // Role-based navigation after successful login
+      if (result.success && result.user) {
+        const userRoles = result.user.roles || [];
+        
+        // Navigate to appropriate dashboard based on role
+        if (userRoles.includes('administrator')) {
+          navigate('/admin-dashboard');
+        } else if (userRoles.includes('landowner')) {
+          navigate('/landowner-dashboard');
+        } else if (userRoles.includes('investor')) {
+          navigate('/investor-portal');
+        } else if (userRoles.includes('reviewer') || 
+                   userRoles.includes('re_sales_advisor') || 
+                   userRoles.includes('re_analyst') || 
+                   userRoles.includes('project_manager') || 
+                   userRoles.includes('re_governance_lead')) {
+          navigate('/admin-dashboard');
+        } else {
+          navigate('/dashboard');
+        }
+      }
     } catch (error) {
       // Handle specific error types
       if (error.message.includes('Invalid credentials')) {

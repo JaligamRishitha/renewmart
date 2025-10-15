@@ -30,97 +30,17 @@ const UserManagement = () => {
   ];
 
   useEffect(() => {
-    // Simulate loading users data
-    const loadUsers = () => {
-      setTimeout(() => {
-        setUsers([
-          {
-            id: 1,
-            name: 'John Smith',
-            email: 'john.smith@example.com',
-            roles: ['landowner'],
-            status: 'active',
-            joinDate: '2024-01-15',
-            lastLogin: '2024-01-20',
-            properties: 3,
-            investments: 0,
-            avatar: null
-          },
-          {
-            id: 2,
-            name: 'Sarah Johnson',
-            email: 'sarah.johnson@investment.com',
-            roles: ['investor'],
-            status: 'active',
-            joinDate: '2024-01-10',
-            lastLogin: '2024-01-19',
-            properties: 0,
-            investments: 5,
-            avatar: null
-          },
-          {
-            id: 3,
-            name: 'Mike Chen',
-            email: 'mike.chen@renewmart.com',
-            roles: ['re_analyst', 'project_manager'],
-            status: 'active',
-            joinDate: '2023-12-01',
-            lastLogin: '2024-01-20',
-            properties: 0,
-            investments: 0,
-            avatar: null
-          },
-          {
-            id: 4,
-            name: 'Emily Davis',
-            email: 'emily.davis@renewmart.com',
-            roles: ['re_sales_advisor'],
-            status: 'active',
-            joinDate: '2023-11-15',
-            lastLogin: '2024-01-18',
-            properties: 0,
-            investments: 0,
-            avatar: null
-          },
-          {
-            id: 5,
-            name: 'Robert Wilson',
-            email: 'robert.wilson@example.com',
-            roles: ['landowner'],
-            status: 'pending',
-            joinDate: '2024-01-18',
-            lastLogin: null,
-            properties: 1,
-            investments: 0,
-            avatar: null
-          },
-          {
-            id: 6,
-            name: 'Lisa Anderson',
-            email: 'lisa.anderson@renewmart.com',
-            roles: ['re_governance_lead'],
-            status: 'active',
-            joinDate: '2023-10-20',
-            lastLogin: '2024-01-19',
-            properties: 0,
-            investments: 0,
-            avatar: null
-          },
-          {
-            id: 7,
-            name: 'David Brown',
-            email: 'david.brown@investment.com',
-            roles: ['investor'],
-            status: 'inactive',
-            joinDate: '2023-09-10',
-            lastLogin: '2023-12-15',
-            properties: 0,
-            investments: 2,
-            avatar: null
-          }
-        ]);
+    // TODO: Fetch users from API
+    const loadUsers = async () => {
+      try {
+        // Replace with actual API call: const response = await usersAPI.getAllUsers();
+        // setUsers(response);
+        setUsers([]);
         setLoading(false);
-      }, 1000);
+      } catch (error) {
+        console.error('Error loading users:', error);
+        setLoading(false);
+      }
     };
 
     loadUsers();

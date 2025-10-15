@@ -74,129 +74,9 @@ const ProjectManagement = () => {
     }
   }, [user]);
 
-  // Mock project data (fallback)
-  const mockProjects = [
-    {
-      id: 1,
-      name: 'Solar Farm Alpha',
-      location: 'California, USA',
-      capacity: '50MW Solar PV',
-      status: 'Active',
-      progress: 75,
-      timeline: '12 months',
-      budget: { total: 30000000, spent: 16000000 },
-      nextMilestone: { title: 'Grid Connection', date: 'Jan 15, 2025' },
-      lastUpdated: '2 hours ago',
-      team: [
-        { id: 1, name: 'Sarah Chen', role: 'Project Manager', email: 'sarah.chen@renewmart.com' },
-        { id: 2, name: 'Michael Rodriguez', role: 'Lead Engineer', email: 'michael.r@renewmart.com' },
-        { id: 3, name: 'Emily Johnson', role: 'Environmental Specialist', email: 'emily.j@renewmart.com' },
-        { id: 4, name: 'David Kim', role: 'Financial Analyst', email: 'david.kim@renewmart.com' },
-        { id: 5, name: 'Lisa Anderson', role: 'Compliance Officer', email: 'lisa.a@renewmart.com' }
-      ],
-      recentActivities: [
-        { description: 'Environmental permits approved', timestamp: '2 hours ago' },
-        { description: 'Equipment delivery scheduled', timestamp: '1 day ago' },
-        { description: 'Site preparation completed', timestamp: '3 days ago' }
-      ],
-      metrics: {
-        tasksCompleted: 45,
-        totalTasks: 60,
-        daysRemaining: 180,
-        riskLevel: 'Low',
-        roiForecast: 12.5
-      }
-    },
-    {
-      id: 2,
-      name: 'Wind Energy Beta',
-      location: 'Texas, USA',
-      capacity: '100MW Wind',
-      status: 'In Development',
-      progress: 45,
-      timeline: '18 months',
-      budget: { total: 85000000, spent: 25000000 },
-      nextMilestone: { title: 'Turbine Installation', date: 'Feb 28, 2025' },
-      lastUpdated: '4 hours ago',
-      team: [
-        { id: 6, name: 'Robert Wilson', role: 'Project Manager', email: 'robert.w@renewmart.com' },
-        { id: 7, name: 'Jennifer Davis', role: 'Wind Specialist', email: 'jennifer.d@renewmart.com' },
-        { id: 8, name: 'Thomas Brown', role: 'Site Engineer', email: 'thomas.b@renewmart.com' }
-      ],
-      recentActivities: [
-        { description: 'Wind assessment report finalized', timestamp: '4 hours ago' },
-        { description: 'Foundation design approved', timestamp: '2 days ago' },
-        { description: 'Access road construction started', timestamp: '1 week ago' }
-      ],
-      metrics: {
-        tasksCompleted: 28,
-        totalTasks: 65,
-        daysRemaining: 420,
-        riskLevel: 'Medium',
-        roiForecast: 15.2
-      }
-    },
-    {
-      id: 3,
-      name: 'Hydro Project Gamma',
-      location: 'Oregon, USA',
-      capacity: '25MW Hydro',
-      status: 'Planning',
-      progress: 25,
-      timeline: '24 months',
-      budget: { total: 45000000, spent: 5000000 },
-      nextMilestone: { title: 'Environmental Impact Study', date: 'Mar 15, 2025' },
-      lastUpdated: '1 day ago',
-      team: [
-        { id: 9, name: 'Amanda Taylor', role: 'Project Manager', email: 'amanda.t@renewmart.com' },
-        { id: 10, name: 'Christopher Lee', role: 'Hydro Engineer', email: 'chris.lee@renewmart.com' }
-      ],
-      recentActivities: [
-        { description: 'Feasibility study completed', timestamp: '1 day ago' },
-        { description: 'Stakeholder meeting scheduled', timestamp: '3 days ago' },
-        { description: 'Initial site survey conducted', timestamp: '1 week ago' }
-      ],
-      metrics: {
-        tasksCompleted: 15,
-        totalTasks: 55,
-        daysRemaining: 720,
-        riskLevel: 'High',
-        roiForecast: 18.7
-      }
-    },
-    {
-      id: 4,
-      name: 'Solar Farm Delta',
-      location: 'Arizona, USA',
-      capacity: '75MW Solar PV',
-      status: 'Completed',
-      progress: 100,
-      timeline: 'Completed',
-      budget: { total: 42000000, spent: 41500000 },
-      nextMilestone: { title: 'Operations & Maintenance', date: 'Ongoing' },
-      lastUpdated: '1 week ago',
-      team: [
-        { id: 11, name: 'Mark Johnson', role: 'Operations Manager', email: 'mark.j@renewmart.com' },
-        { id: 12, name: 'Rachel Green', role: 'Maintenance Lead', email: 'rachel.g@renewmart.com' }
-      ],
-      recentActivities: [
-        { description: 'Final commissioning completed', timestamp: '1 week ago' },
-        { description: 'Grid synchronization successful', timestamp: '2 weeks ago' },
-        { description: 'Performance testing passed', timestamp: '3 weeks ago' }
-      ],
-      metrics: {
-        tasksCompleted: 80,
-        totalTasks: 80,
-        daysRemaining: 0,
-        riskLevel: 'Low',
-        roiForecast: 14.3
-      }
-    }
-  ];
-
   // Filter projects based on active tab and filters
   const getFilteredProjects = () => {
-    let filtered = projects.length > 0 ? projects : mockProjects;
+    let filtered = projects;
 
     // Filter by tab
     switch (activeTab) {
@@ -241,7 +121,7 @@ const ProjectManagement = () => {
 
   // Calculate tab counts
   const getTabCounts = () => {
-    const dataSource = projects.length > 0 ? projects : mockProjects;
+    const dataSource = projects;
     return {
       active: dataSource?.filter(p => p?.status === 'Active' || p?.status === 'Available')?.length,
       planning: dataSource?.filter(p => p?.status === 'Planning')?.length,

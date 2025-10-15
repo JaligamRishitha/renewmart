@@ -138,6 +138,11 @@ export const landsAPI = {
     return response.data;
   },
   
+  submitForReview: async (landId) => {
+    const response = await api.post(`/lands/${landId}/submit`);
+    return response.data;
+  },
+  
   updateLandStatus: async (landId, status) => {
     const response = await api.put(`/lands/${landId}/status`, { status });
     return response.data;
@@ -155,6 +160,38 @@ export const landsAPI = {
   
   getPublicLands: async (params = {}) => {
     const response = await api.get('/lands/public', { params });
+    return response.data;
+  },
+  
+  // Landowner Dashboard
+  getDashboardSummary: async () => {
+    const response = await api.get('/lands/dashboard/summary');
+    return response.data;
+  },
+  
+  getDashboardProjects: async (params = {}) => {
+    const response = await api.get('/lands/dashboard/projects', { params });
+    return response.data;
+  },
+
+  // Admin endpoints
+  getAdminProjects: async (params = {}) => {
+    const response = await api.get('/lands/admin/projects', { params });
+    return response.data;
+  },
+
+  getAdminSummary: async () => {
+    const response = await api.get('/lands/admin/summary');
+    return response.data;
+  },
+
+  publishLand: async (landId) => {
+    const response = await api.post(`/lands/${landId}/publish`);
+    return response.data;
+  },
+
+  markLandReadyToBuy: async (landId) => {
+    const response = await api.post(`/lands/${landId}/mark-rtb`);
     return response.data;
   }
 };

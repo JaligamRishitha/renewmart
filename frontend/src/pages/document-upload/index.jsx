@@ -10,6 +10,7 @@ import ProjectDetailsForm from './components/ProjectDetailsForm';
 import SubmissionPreview from './components/SubmissionPreview';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+import { landsAPI, documentsAPI } from '../../services/api';
 
 const DocumentUpload = () => {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ const DocumentUpload = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [errors, setErrors] = useState({});
+  const [showToast, setShowToast] = useState(null);
 
   const documentSections = [
     {
@@ -200,19 +202,78 @@ const DocumentUpload = () => {
 
   // Handle save draft
   const handleSaveDraft = async () => {
-    setIsSaving(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setIsSaving(false);
-    addNotification({
-      id: Date.now(),
-      type: 'success',
-      title: 'Draft saved successfully',
-      message: 'Your progress has been saved and can be resumed later',
-      timestamp: new Date()
-    });
+    try {
+      setIsSaving(true);
+      
+      // Check if we have at least project name
+      if (!projectDetails.projectName) {
+        showErrorToast('Please enter a project name before saving');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Create land entry as draft
+      const landData = {
+        title: projectDetails.projectName || 'Untitled Project',
+        location_text: projectDetails.location || '',
+        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
+        area_acres: parseFloat(projectDetails.totalArea) || 0,
+        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
+        capacity_mw: parseFloat(projectDetails.capacity) || 0,
+        price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
+        timeline_text: projectDetails.timeline || '',
+        land_type: projectDetails.landType || '',
+        contract_term_years: parseInt(projectDetails.contractTerm) || null,
+        developer_name: projectDetails.developerName || null
+      };
+      
+      const createdLand = await landsAPI.createLand(landData);
+      const landId = createdLand.land_id;
+      
+      // Upload any documents that are already added
+      if (Object.keys(uploadedFiles).length > 0) {
+        const uploadPromises = [];
+        Object.entries(uploadedFiles).forEach(([sectionId, files]) => {
+          files.forEach(file => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('document_type', sectionId);
+            formData.append('is_draft', 'true');
+            uploadPromises.push(documentsAPI.uploadDocument(landId, formData));
+          });
+        });
+        
+        await Promise.all(uploadPromises);
+      }
+      
+      setIsSaving(false);
+      addNotification({
+        id: Date.now(),
+        type: 'success',
+        title: 'Draft saved successfully',
+        message: 'Your progress has been saved and can be resumed later',
+        timestamp: new Date()
+      });
+      
+      showSuccessToast('Draft saved successfully! You can continue editing later.');
+      
+      // Store land ID for future use
+      sessionStorage.setItem('draftLandId', landId);
+      
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      setIsSaving(false);
+      
+      addNotification({
+        id: Date.now(),
+        type: 'error',
+        title: 'Failed to save draft',
+        message: error.response?.data?.detail || 'Could not save draft. Please try again.',
+        timestamp: new Date()
+      });
+      
+      showErrorToast(error.response?.data?.detail || 'Failed to save draft');
+    }
   };
 
   // Handle submit for review
@@ -237,26 +298,102 @@ const DocumentUpload = () => {
   };
 
   // Handle confirm submission
-  const handleConfirmSubmission = () => {
-    addNotification({
-      id: Date.now(),
-      type: 'success',
-      title: 'Submission successful',
-      message: 'Your documents have been submitted for administrative review',
-      timestamp: new Date()
-    });
-    
-    setShowPreview(false);
-    
-    // Navigate to dashboard after a delay
-    setTimeout(() => {
-      navigate('/landowner-dashboard');
-    }, 2000);
+  const handleConfirmSubmission = async () => {
+    try {
+      setIsSaving(true);
+      
+      // Step 1: Create land entry
+      const landData = {
+        title: projectDetails.projectName || 'Untitled Project',
+        location_text: projectDetails.location || '',
+        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
+        area_acres: parseFloat(projectDetails.totalArea) || 0,
+        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
+        capacity_mw: parseFloat(projectDetails.capacity) || 0,
+        price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
+        timeline_text: projectDetails.timeline || '',
+        land_type: projectDetails.landType || '',
+        contract_term_years: parseInt(projectDetails.contractTerm) || null,
+        developer_name: projectDetails.developerName || null
+      };
+      
+      const createdLand = await landsAPI.createLand(landData);
+      const landId = createdLand.land_id;
+      
+      // Step 2: Upload all documents
+      const uploadPromises = [];
+      Object.entries(uploadedFiles).forEach(([sectionId, files]) => {
+        files.forEach(file => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('document_type', sectionId);
+          formData.append('is_draft', 'false');
+          uploadPromises.push(documentsAPI.uploadDocument(landId, formData));
+        });
+      });
+      
+      await Promise.all(uploadPromises);
+      
+      // Step 3: Submit for review
+      await landsAPI.submitForReview(landId);
+      
+      addNotification({
+        id: Date.now(),
+        type: 'success',
+        title: 'Submission successful',
+        message: `Your project "${projectDetails.projectName}" has been submitted for administrative review`,
+        timestamp: new Date()
+      });
+      
+      setShowPreview(false);
+      setIsSaving(false);
+      
+      // Show success toast
+      showSuccessToast('Project uploaded successfully! Redirecting to dashboard...');
+      
+      // Navigate to dashboard after a delay
+      setTimeout(() => {
+        navigate('/landowner-dashboard');
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error submitting project:', error);
+      setIsSaving(false);
+      
+      addNotification({
+        id: Date.now(),
+        type: 'error',
+        title: 'Submission failed',
+        message: error.response?.data?.detail || 'Failed to submit project. Please try again.',
+        timestamp: new Date()
+      });
+      
+      showErrorToast(error.response?.data?.detail || 'Failed to submit project');
+    }
   };
 
   // Add notification
   const addNotification = (notification) => {
     setNotifications(prev => [notification, ...prev]);
+  };
+
+  // Toast functions
+  const showSuccessToast = (message = 'Operation completed successfully!') => {
+    setShowToast({
+      type: 'success',
+      title: 'Success!',
+      message: message
+    });
+    setTimeout(() => setShowToast(null), 3000);
+  };
+
+  const showErrorToast = (message) => {
+    setShowToast({
+      type: 'error',
+      title: 'Error',
+      message: message
+    });
+    setTimeout(() => setShowToast(null), 5000);
   };
 
   // Handle project details change
@@ -439,6 +576,34 @@ const DocumentUpload = () => {
         }}
         position="bottom-right"
       />
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+          <div className={`
+            flex items-start space-x-3 p-4 rounded-lg shadow-lg max-w-md
+            ${showToast.type === 'success' ? 'bg-green-50 border-l-4 border-green-500' : 'bg-red-50 border-l-4 border-red-500'}
+          `}>
+            <div className={`flex-shrink-0 ${showToast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+              <Icon name={showToast.type === 'success' ? 'CheckCircle' : 'AlertCircle'} size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className={`font-heading font-semibold text-sm ${showToast.type === 'success' ? 'text-green-900' : 'text-red-900'}`}>
+                {showToast.title}
+              </h4>
+              <p className={`font-body text-sm mt-1 ${showToast.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                {showToast.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowToast(null)}
+              className={`flex-shrink-0 ${showToast.type === 'success' ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'}`}
+            >
+              <Icon name="X" size={20} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -13,6 +13,8 @@ import FilterControls from './components/FilterControls';
 import ActivityFeed from './components/ActivityFeed';
 import DeadlineAlerts from './components/DeadlineAlerts';
 import BulkActions from './components/BulkActions';
+import { landsAPI } from '../../services/api';
+import Icon from '../../components/AppIcon';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -27,204 +29,150 @@ const AdminDashboard = () => {
     search: ''
   });
   const [notifications, setNotifications] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [summaryData, setSummaryData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Mock data for metrics
-  const metricsData = [
+  useEffect(() => {
+    fetchAdminData();
+  }, [filters.status]);
+
+  const fetchAdminData = async () => {
+    try {
+      console.log('[Admin Dashboard] Fetching admin data...');
+      setLoading(true);
+      setError(null);
+      
+      const statusFilter = filters.status ? { status_filter: filters.status } : {};
+      console.log('[Admin Dashboard] Status filter:', statusFilter);
+      
+      const [projectsResponse, summaryResponse] = await Promise.all([
+        landsAPI.getAdminProjects(statusFilter),
+        landsAPI.getAdminSummary()
+      ]);
+      
+      console.log('[Admin Dashboard] Projects response:', projectsResponse);
+      console.log('[Admin Dashboard] Summary response:', summaryResponse);
+      console.log('[Admin Dashboard] Number of projects:', projectsResponse?.length || 0);
+      
+      setProjects(projectsResponse || []);
+      setSummaryData(summaryResponse);
+    } catch (err) {
+      console.error('[Admin Dashboard] Error fetching admin data:', err);
+      console.error('[Admin Dashboard] Error response:', err.response?.data);
+      console.error('[Admin Dashboard] Error status:', err.response?.status);
+      
+      let errorMessage = 'Failed to load admin data. ';
+      
+      if (err.response?.status === 401) {
+        errorMessage += 'Please login as administrator.';
+      } else if (err.response?.status === 403) {
+        errorMessage += 'You do not have administrator permissions.';
+      } else if (err.response?.data?.detail) {
+        errorMessage += err.response.data.detail;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper functions (must be defined before use)
+  const getProjectIcon = (projectType) => {
+    const iconMap = {
+      'Solar': 'Sun',
+      'Wind': 'Wind',
+      'Hydroelectric': 'Waves',
+      'Biomass': 'Leaf',
+      'Geothermal': 'Flame'
+    };
+    return iconMap[projectType] || 'MapPin';
+  };
+
+  const getStatusLabel = (status) => {
+    const statusMap = {
+      'submitted': 'Pending',
+      'under_review': 'In Progress',
+      'approved': 'Approved',
+      'published': 'Published',
+      'rtb': 'Ready to Buy',
+      'rejected': 'Rejected'
+    };
+    return statusMap[status] || status;
+  };
+
+  const getPriority = (status) => {
+    if (status === 'submitted') return 'High';
+    if (status === 'under_review') return 'Medium';
+    return 'Low';
+  };
+
+  // Transform projects to task format for the table
+  const tasksData = projects.map(project => ({
+    id: project.id,
+    landownerName: project.landownerName,
+    landownerEmail: project.landownerEmail,
+    landownerPhone: project.landownerPhone,
+    location: project.location,
+    projectType: project.projectType,
+    projectIcon: getProjectIcon(project.projectType),
+    assignedReviewer: "Unassigned", // TODO: Add reviewer assignment
+    reviewerRole: "Pending Assignment",
+    startDate: project.submittedDate,
+    endDate: project.lastUpdated,
+    status: getStatusLabel(project.status),
+    priority: getPriority(project.status),
+    title: project.title,
+    capacity: project.capacity,
+    energyType: project.energyType,
+    rawStatus: project.status
+  }));
+
+  // Calculate metrics from summary data
+  const metricsData = summaryData ? [
     {
       title: "Pending Reviews",
-      value: "24",
-      change: "+3 from yesterday",
-      changeType: "increase",
+      value: summaryData.pendingReviews.toString(),
+      change: `${summaryData.totalProjects} total projects`,
+      changeType: "neutral",
       icon: "FileCheck",
       color: "warning"
     },
     {
-      title: "Overdue Tasks",
-      value: "7",
-      change: "-2 from yesterday",
-      changeType: "decrease",
-      icon: "AlertTriangle",
-      color: "error"
+      title: "Under Review",
+      value: summaryData.underReview.toString(),
+      change: `${summaryData.approved} approved`,
+      changeType: "increase",
+      icon: "Eye",
+      color: "primary"
     },
     {
-      title: "Completed This Week",
-      value: "18",
-      change: "+12 from last week",
+      title: "Published",
+      value: summaryData.published.toString(),
+      change: `${summaryData.readyToBuy} ready to buy`,
       changeType: "increase",
       icon: "CheckCircle",
       color: "success"
     },
     {
-      title: "Avg Processing Time",
-      value: "4.2 days",
-      change: "-0.8 days",
-      changeType: "decrease",
-      icon: "Clock",
-      color: "primary"
+      title: "Total Capacity",
+      value: `${summaryData.totalCapacity.toFixed(1)} MW`,
+      change: `${summaryData.totalLandArea.toFixed(0)} acres`,
+      changeType: "neutral",
+      icon: "Zap",
+      color: "secondary"
     }
-  ];
+  ] : [];
 
-  // Mock data for tasks
-  const tasksData = [
-    {
-      id: "task-001",
-      landownerName: "Sarah Johnson",
-      location: "Austin, TX",
-      projectType: "Solar",
-      projectIcon: "Sun",
-      assignedReviewer: "Michael Chen",
-      reviewerRole: "RE Sales Advisor",
-      startDate: "2025-01-08",
-      endDate: "2025-01-15",
-      status: "In Progress",
-      priority: "High"
-    },
-    {
-      id: "task-002",
-      landownerName: "Robert Martinez",
-      location: "Phoenix, AZ",
-      projectType: "Wind",
-      projectIcon: "Wind",
-      assignedReviewer: "Emily Davis",
-      reviewerRole: "RE Analyst",
-      startDate: "2025-01-10",
-      endDate: "2025-01-17",
-      status: "Pending",
-      priority: "Medium"
-    },
-    {
-      id: "task-003",
-      landownerName: "Jennifer Wilson",
-      location: "Denver, CO",
-      projectType: "Hydroelectric",
-      projectIcon: "Waves",
-      assignedReviewer: "David Thompson",
-      reviewerRole: "RE Governance Lead",
-      startDate: "2025-01-05",
-      endDate: "2025-01-12",
-      status: "Delayed",
-      priority: "High"
-    },
-    {
-      id: "task-004",
-      landownerName: "Thomas Anderson",
-      location: "Portland, OR",
-      projectType: "Biomass",
-      projectIcon: "Leaf",
-      assignedReviewer: "Lisa Rodriguez",
-      reviewerRole: "RE Analyst",
-      startDate: "2025-01-12",
-      endDate: "2025-01-19",
-      status: "Pending",
-      priority: "Low"
-    },
-    {
-      id: "task-005",
-      landownerName: "Maria Garcia",
-      location: "San Diego, CA",
-      projectType: "Geothermal",
-      projectIcon: "Zap",
-      assignedReviewer: "James Wilson",
-      reviewerRole: "RE Sales Advisor",
-      startDate: "2025-01-03",
-      endDate: "2025-01-10",
-      status: "Completed",
-      priority: "Medium"
-    },
-    {
-      id: "task-006",
-      landownerName: "Christopher Lee",
-      location: "Las Vegas, NV",
-      projectType: "Solar",
-      projectIcon: "Sun",
-      assignedReviewer: "Amanda Brown",
-      reviewerRole: "RE Governance Lead",
-      startDate: "2025-01-11",
-      endDate: "2025-01-18",
-      status: "In Progress",
-      priority: "High"
-    }
-  ];
+  // Activities will be fetched from API (TODO: Implement activity feed API)
+  const activitiesData = [];
 
-  // Mock data for recent activities
-  const activitiesData = [
-    {
-      id: "activity-001",
-      type: "document_uploaded",
-      user: "Sarah Johnson",
-      action: "uploaded new documents for",
-      target: "Solar Project - Austin",
-      details: "Land ownership documents and topographical survey",
-      timestamp: new Date(Date.now() - 300000) // 5 minutes ago
-    },
-    {
-      id: "activity-002",
-      type: "review_assigned",
-      user: "Admin",
-      action: "assigned review task to",
-      target: "Michael Chen",
-      details: "RE Sales Advisor - Phoenix Wind Project",
-      timestamp: new Date(Date.now() - 900000) // 15 minutes ago
-    },
-    {
-      id: "activity-003",
-      type: "status_changed",
-      user: "Emily Davis",
-      action: "changed status to \'In Progress\' for",
-      target: "Denver Hydroelectric Project",
-      details: "Started technical analysis phase",
-      timestamp: new Date(Date.now() - 1800000) // 30 minutes ago
-    },
-    {
-      id: "activity-004",
-      type: "task_completed",
-      user: "David Thompson",
-      action: "completed review for",
-      target: "Portland Biomass Project",
-      details: "All governance requirements satisfied",
-      timestamp: new Date(Date.now() - 3600000) // 1 hour ago
-    },
-    {
-      id: "activity-005",
-      type: "deadline_approaching",
-      user: "System",
-      action: "deadline reminder for",
-      target: "San Diego Geothermal Project",
-      details: "Due in 2 days",
-      timestamp: new Date(Date.now() - 7200000) // 2 hours ago
-    }
-  ];
-
-  // Mock data for deadline alerts
-  const alertsData = [
-    {
-      id: "alert-001",
-      taskId: "task-003",
-      taskTitle: "Denver Hydroelectric Project Review",
-      assignedTo: "David Thompson",
-      deadline: new Date(Date.now() + 86400000), // 1 day from now
-      urgency: "critical",
-      description: "Governance review is overdue and blocking project progression"
-    },
-    {
-      id: "alert-002",
-      taskId: "task-001",
-      taskTitle: "Austin Solar Project Analysis",
-      assignedTo: "Michael Chen",
-      deadline: new Date(Date.now() + 172800000), // 2 days from now
-      urgency: "warning",
-      description: "Sales analysis due soon, financial model pending"
-    },
-    {
-      id: "alert-003",
-      taskId: "task-006",
-      taskTitle: "Las Vegas Solar Compliance Check",
-      assignedTo: "Amanda Brown",
-      deadline: new Date(Date.now() + 432000000), // 5 days from now
-      urgency: "info",
-      description: "Environmental impact assessment review scheduled"
-    }
-  ];
+  // Deadline alerts will be fetched from API (TODO: Implement deadline alerts API)
+  const alertsData = [];
 
   // Filter tasks based on current filters
   const filteredTasks = tasksData?.filter(task => {
@@ -259,59 +207,16 @@ const AdminDashboard = () => {
   };
 
   const handleBulkAction = async (action, taskIds) => {
-    // Mock bulk action processing
+    // TODO: Implement bulk action API calls
     console.log(`Executing ${action} on tasks:`, taskIds);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Show success notification
-    const newNotification = {
-      id: Date.now(),
-      type: 'success',
-      title: 'Bulk Action Completed',
-      message: `Successfully executed ${action} on ${taskIds?.length} task${taskIds?.length !== 1 ? 's' : ''}`,
-      timestamp: new Date()
-    };
-    
-    setNotifications(prev => [newNotification, ...prev?.slice(0, 4)]);
     setSelectedTasks([]);
   };
 
   const handleQuickAction = (actionId) => {
-    switch (actionId) {
-      case 'generate-report':
-        // Mock report generation
-        const reportNotification = {
-          id: Date.now(),
-          type: 'info',
-          title: 'Report Generated',
-          message: 'Administrative report has been generated and is ready for download',
-          timestamp: new Date(),
-          actions: [
-            { label: 'Download', onClick: () => console.log('Downloading report...') }
-          ]
-        };
-        setNotifications(prev => [reportNotification, ...prev?.slice(0, 4)]);
-        break;
-      default:
-        console.log('Quick action:', actionId);
-    }
+    // TODO: Implement quick action API calls
+    console.log('Quick action:', actionId);
   };
 
-  // Initialize notifications on component mount
-  useEffect(() => {
-    const initialNotifications = [
-      {
-        id: 1,
-        type: 'warning',
-        title: 'Deadline Alert',
-        message: 'Denver Hydroelectric Project review is overdue',
-        timestamp: new Date(Date.now() - 600000)
-      }
-    ];
-    setNotifications(initialNotifications);
-  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -352,29 +257,57 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Icon name="Loader2" size={32} className="animate-spin text-primary" />
+              <span className="ml-3 text-lg text-muted-foreground">Loading admin data...</span>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="bg-error/10 border border-error/20 rounded-lg p-4 mb-6">
+              <div className="flex items-center">
+                <Icon name="AlertTriangle" size={20} className="text-error mr-2" />
+                <p className="text-error font-medium">{error}</p>
+              </div>
+              <button
+                onClick={fetchAdminData}
+                className="mt-2 text-sm text-error hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
           {/* Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {metricsData?.map((metric, index) => (
-              <MetricsCard
-                key={index}
-                title={metric?.title}
-                value={metric?.value}
-                change={metric?.change}
-                changeType={metric?.changeType}
-                icon={metric?.icon}
-                color={metric?.color}
-              />
-            ))}
-          </div>
+          {!loading && !error && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {metricsData?.map((metric, index) => (
+                <MetricsCard
+                  key={index}
+                  title={metric?.title}
+                  value={metric?.value}
+                  change={metric?.change}
+                  changeType={metric?.changeType}
+                  icon={metric?.icon}
+                  color={metric?.color}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Filter Controls */}
-          <div className="mb-6">
-            <FilterControls
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onClearFilters={handleClearFilters}
-            />
-          </div>
+          {!loading && !error && (
+            <div className="mb-6">
+              <FilterControls
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                onClearFilters={handleClearFilters}
+              />
+            </div>
+          )}
 
           {/* Bulk Actions */}
           {selectedTasks?.length > 0 && (
@@ -388,37 +321,49 @@ const AdminDashboard = () => {
           )}
 
           {/* Main Content Grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-            {/* Task Table - Takes up 3 columns on xl screens */}
-            <div className="xl:col-span-3">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-heading font-semibold text-xl text-foreground">
-                  Active Reviews ({filteredTasks?.length})
-                </h2>
-                <div className="flex items-center space-x-2">
-                  <span className="font-body text-sm text-muted-foreground">
-                    {selectedTasks?.length} selected
-                  </span>
+          {!loading && !error && (
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+              {/* Task Table - Takes up 3 columns on xl screens */}
+              <div className="xl:col-span-3">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-heading font-semibold text-xl text-foreground">
+                    Active Reviews ({filteredTasks?.length})
+                  </h2>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-body text-sm text-muted-foreground">
+                      {selectedTasks?.length} selected
+                    </span>
+                  </div>
                 </div>
+                
+                {filteredTasks.length === 0 ? (
+                  <div className="bg-card border border-border rounded-lg p-12 text-center">
+                    <Icon name="Inbox" size={48} className="mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">No Projects Found</h3>
+                    <p className="text-muted-foreground">
+                      {filters.status ? 'No projects match the selected filters.' : 'No projects have been submitted yet.'}
+                    </p>
+                  </div>
+                ) : (
+                  <TaskTable
+                    tasks={filteredTasks}
+                    selectedTasks={selectedTasks}
+                    onTaskSelect={setSelectedTasks}
+                    onBulkAction={handleBulkAction}
+                  />
+                )}
               </div>
-              
-              <TaskTable
-                tasks={filteredTasks}
-                selectedTasks={selectedTasks}
-                onTaskSelect={setSelectedTasks}
-                onBulkAction={handleBulkAction}
-              />
-            </div>
 
-            {/* Side Panel - Takes up 1 column on xl screens */}
-            <div className="xl:col-span-1 space-y-6">
-              {/* Deadline Alerts */}
-              <DeadlineAlerts alerts={alertsData} />
-              
-              {/* Activity Feed */}
-              <ActivityFeed activities={activitiesData} />
+              {/* Side Panel - Takes up 1 column on xl screens */}
+              <div className="xl:col-span-1 space-y-6">
+                {/* Deadline Alerts */}
+                <DeadlineAlerts alerts={alertsData} />
+                
+                {/* Activity Feed */}
+                <ActivityFeed activities={activitiesData} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
       {/* Notifications */}
