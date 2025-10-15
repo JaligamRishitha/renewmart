@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
@@ -69,7 +70,7 @@ async def create_task(
     
     if not land_result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Land not found"
         )
     
@@ -77,7 +78,7 @@ async def create_task(
     if ("administrator" not in user_roles and 
         str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to create tasks for this land"
         )
     
@@ -88,31 +89,36 @@ async def create_task(
         
         if not user_result:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Assigned user not found"
             )
     
     try:
-        # Use stored procedure to create task
+        # Generate new task ID
         task_id = str(uuid.uuid4())
         
-        # Call sp_task_create stored procedure
-        create_proc = text("""
-            CALL sp_task_create(
-                :task_id, :land_id, :task_type, :description,
-                :assigned_to, :assigned_by, :due_date, :priority
+        # Direct INSERT into tasks table (matching actual schema)
+        insert_query = text("""
+            INSERT INTO tasks (
+                task_id, land_id, title, description,
+                assigned_to, created_by, status, priority,
+                due_date, created_at, updated_at
+            ) VALUES (
+                :task_id, :land_id, :title, :description,
+                :assigned_to, :created_by, 'pending', :priority,
+                :due_date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
         """)
         
-        db.execute(create_proc, {
+        db.execute(insert_query, {
             "task_id": task_id,
             "land_id": str(task_data.land_id),
-            "task_type": task_data.task_type,
+            "title": task_data.task_type.replace('_', ' ').title(),  # Convert task_type to title
             "description": task_data.description,
             "assigned_to": str(task_data.assigned_to) if task_data.assigned_to else None,
-            "assigned_by": current_user["user_id"],
-            "due_date": task_data.due_date,
-            "priority": task_data.priority or "medium"
+            "created_by": str(current_user["user_id"]),
+            "priority": task_data.priority or "medium",
+            "due_date": task_data.due_date
         })
         
         db.commit()
@@ -123,7 +129,7 @@ async def create_task(
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create task: {str(e)}"
         )
 
@@ -141,18 +147,18 @@ async def get_tasks(
     """Get tasks with optional filters."""
     user_roles = current_user.get("roles", [])
     
-    # Build base query
+    # Build base query (matching actual schema)
     base_query = """
-        SELECT t.task_id, t.land_id, t.task_type, t.description,
-               t.assigned_to, t.assigned_by, t.status, t.priority,
+        SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+               t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
                l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
-               u2.first_name || ' ' || u2.last_name as assigned_by_name
+               u2.first_name || ' ' || u2.last_name as created_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u2 ON t.created_by = u2.user_id
         WHERE 1=1
     """
     
@@ -217,16 +223,16 @@ async def get_task(
 ):
     """Get task by ID."""
     query = text("""
-        SELECT t.task_id, t.land_id, t.task_type, t.description,
-               t.assigned_to, t.assigned_by, t.status, t.priority,
+        SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+               t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
                l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
-               u2.first_name || ' ' || u2.last_name as assigned_by_name
+               u2.first_name || ' ' || u2.last_name as created_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
+        LEFT JOIN "user" u2 ON t.created_by = u2.user_id
         WHERE t.task_id = :task_id
     """)
     
@@ -234,7 +240,7 @@ async def get_task(
     
     if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
     
@@ -248,7 +254,7 @@ async def get_task(
     
     if not can_access_task(user_roles, current_user["user_id"], task_data):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this task"
         )
     
@@ -280,7 +286,7 @@ async def update_task(
     """Update task (assigned user, creator, or admin only)."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.assigned_by, t.status as current_status, l.landowner_id
+        SELECT t.assigned_to, t.created_by as assigned_by, t.status as current_status, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -290,7 +296,7 @@ async def update_task(
     
     if not task_result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
     
@@ -307,7 +313,7 @@ async def update_task(
     
     if not (can_full_update or can_status_update):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to update this task"
         )
     
@@ -318,25 +324,44 @@ async def update_task(
         
         if not user_result:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Assigned user not found"
             )
     
     try:
-        # If status is being updated, use stored procedure
+        # If status is being updated, update it and create history entry
         if task_update.status and task_update.status != task_result.current_status:
-            # Use sp_task_update_status stored procedure
-            status_proc = text("""
-                CALL sp_task_update_status(
-                    :task_id, :new_status, :changed_by, :notes
+            # Update task status
+            status_update = text("""
+                UPDATE tasks 
+                SET status = :new_status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE task_id = :task_id
+            """)
+            
+            db.execute(status_update, {
+                "task_id": str(task_id),
+                "new_status": task_update.status
+            })
+            
+            # Create task history entry
+            history_insert = text("""
+                INSERT INTO task_history (
+                    history_id, task_id, from_status, to_status,
+                    changed_by, note, changed_at
+                ) VALUES (
+                    :history_id, :task_id, :from_status, :to_status,
+                    :changed_by, :note, CURRENT_TIMESTAMP
                 )
             """)
             
-            db.execute(status_proc, {
+            db.execute(history_insert, {
+                "history_id": str(uuid.uuid4()),
                 "task_id": str(task_id),
-                "new_status": task_update.status,
-                "changed_by": current_user["user_id"],
-                "notes": task_update.completion_notes or "Status updated"
+                "from_status": task_result.current_status,
+                "to_status": task_update.status,
+                "changed_by": str(current_user["user_id"]),
+                "note": "Status updated"
             })
         
         # Build dynamic update query for other fields
@@ -345,13 +370,20 @@ async def update_task(
         
         update_data = task_update.dict(exclude_unset=True, exclude={"status"})
         
+        # Map frontend field names to database column names
+        field_mapping = {
+            "task_type": "title"
+        }
+        
         for field, value in update_data.items():
-            if can_full_update or (field in ["completion_notes"] and can_status_update):
+            if can_full_update:
+                db_field = field_mapping.get(field, field)  # Use mapping or keep original
+                
                 if field == "assigned_to" and value:
-                    update_fields.append(f"{field} = :{field}")
+                    update_fields.append(f"{db_field} = :{field}")
                     params[field] = str(value)
-                elif field in ["description", "due_date", "priority", "completion_notes"]:
-                    update_fields.append(f"{field} = :{field}")
+                elif field in ["task_type", "description", "due_date", "priority"]:
+                    update_fields.append(f"{db_field} = :{field}")
                     params[field] = value
         
         if update_fields:
@@ -370,7 +402,7 @@ async def update_task(
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update task: {str(e)}"
         )
 
@@ -383,7 +415,7 @@ async def delete_task(
     """Delete task (creator or admin only)."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_by, l.landowner_id
+        SELECT t.created_by as assigned_by, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -393,7 +425,7 @@ async def delete_task(
     
     if not task_result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
     
@@ -405,7 +437,7 @@ async def delete_task(
     
     if not can_manage_task(user_roles, current_user["user_id"], task_data):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to delete this task"
         )
     
@@ -425,7 +457,7 @@ async def delete_task(
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete task: {str(e)}"
         )
 
@@ -438,7 +470,7 @@ async def get_task_history(
     """Get task history."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.assigned_by, l.landowner_id
+        SELECT t.assigned_to, t.created_by as assigned_by, l.landowner_id
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -448,7 +480,7 @@ async def get_task_history(
     
     if not task_result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
     
@@ -461,7 +493,7 @@ async def get_task_history(
     
     if not can_access_task(user_roles, current_user["user_id"], task_data):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view task history"
         )
     
@@ -500,20 +532,20 @@ async def get_my_tasks(
 ):
     """Get tasks assigned to the current user."""
     base_query = """
-        SELECT t.task_id, t.land_id, t.task_type, t.description,
-               t.assigned_to, t.assigned_by, t.status, t.priority,
+        SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+               t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
                l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
-               u2.first_name || ' ' || u2.last_name as assigned_by_name
+               u2.first_name || ' ' || u2.last_name as created_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
-        WHERE t.assigned_to = :user_id
+        LEFT JOIN "user" u2 ON t.created_by = u2.user_id
+        WHERE t.assigned_to = CAST(:user_id AS uuid)
     """
     
-    params = {"user_id": current_user["user_id"]}
+    params = {"user_id": str(current_user["user_id"])}
     
     if status:
         base_query += " AND t.status = :status"
@@ -521,28 +553,34 @@ async def get_my_tasks(
     
     base_query += " ORDER BY t.due_date ASC, t.created_at DESC"
     
-    results = db.execute(text(base_query), params).fetchall()
-    
-    return [
-        TaskResponse(
-            task_id=row.task_id,
-            land_id=row.land_id,
-            task_type=row.task_type,
-            description=row.description,
-            assigned_to=row.assigned_to,
-            assigned_by=row.assigned_by,
-            status=row.status,
-            priority=row.priority,
-            due_date=row.due_date,
-            completion_notes=row.completion_notes,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            land_title=row.land_title,
-            assigned_to_name=row.assigned_to_name,
-            assigned_by_name=row.assigned_by_name
+    try:
+        results = db.execute(text(base_query), params).fetchall()
+        
+        return [
+            TaskResponse(
+                task_id=row.task_id,
+                land_id=row.land_id,
+                task_type=row.task_type,
+                description=row.description,
+                assigned_to=row.assigned_to,
+                assigned_by=row.assigned_by,
+                status=row.status,
+                priority=row.priority,
+                due_date=row.due_date,
+                completion_notes=row.completion_notes,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                land_title=row.land_title,
+                assigned_to_name=row.assigned_to_name,
+                assigned_by_name=row.assigned_by_name
+            )
+            for row in results
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch assigned tasks: {str(e)}"
         )
-        for row in results
-    ]
 
 @router.get("/created/me", response_model=List[TaskResponse])
 async def get_tasks_created_by_me(
@@ -552,20 +590,20 @@ async def get_tasks_created_by_me(
 ):
     """Get tasks created by the current user."""
     base_query = """
-        SELECT t.task_id, t.land_id, t.task_type, t.description,
-               t.assigned_to, t.assigned_by, t.status, t.priority,
+        SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+               t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
                l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
-               u2.first_name || ' ' || u2.last_name as assigned_by_name
+               u2.first_name || ' ' || u2.last_name as created_by_name
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
-        LEFT JOIN "user" u2 ON t.assigned_by = u2.user_id
-        WHERE t.assigned_by = :user_id
+        LEFT JOIN "user" u2 ON t.created_by = u2.user_id
+        WHERE t.created_by = CAST(:user_id AS uuid)
     """
     
-    params = {"user_id": current_user["user_id"]}
+    params = {"user_id": str(current_user["user_id"])}
     
     if status:
         base_query += " AND t.status = :status"
@@ -573,28 +611,34 @@ async def get_tasks_created_by_me(
     
     base_query += " ORDER BY t.created_at DESC"
     
-    results = db.execute(text(base_query), params).fetchall()
-    
-    return [
-        TaskResponse(
-            task_id=row.task_id,
-            land_id=row.land_id,
-            task_type=row.task_type,
-            description=row.description,
-            assigned_to=row.assigned_to,
-            assigned_by=row.assigned_by,
-            status=row.status,
-            priority=row.priority,
-            due_date=row.due_date,
-            completion_notes=row.completion_notes,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            land_title=row.land_title,
-            assigned_to_name=row.assigned_to_name,
-            assigned_by_name=row.assigned_by_name
+    try:
+        results = db.execute(text(base_query), params).fetchall()
+        
+        return [
+            TaskResponse(
+                task_id=row.task_id,
+                land_id=row.land_id,
+                task_type=row.task_type,
+                description=row.description,
+                assigned_to=row.assigned_to,
+                assigned_by=row.assigned_by,
+                status=row.status,
+                priority=row.priority,
+                due_date=row.due_date,
+                completion_notes=row.completion_notes,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                land_title=row.land_title,
+                assigned_to_name=row.assigned_to_name,
+                assigned_by_name=row.assigned_by_name
+            )
+            for row in results
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch created tasks: {str(e)}"
         )
-        for row in results
-    ]
 
 # Admin endpoints
 @router.get("/admin/all", response_model=List[TaskResponse])

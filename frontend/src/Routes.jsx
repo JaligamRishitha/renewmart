@@ -18,6 +18,7 @@ import InvestorPortal from './pages/investor-portal';
 import DocumentReview from './pages/document-review';
 import DocumentUpload from './pages/document-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
+import ReviewerDashboard from './pages/reviewer-dashboard';
 import Register from './pages/register';
 
 const Routes = () => {
@@ -91,6 +92,13 @@ const Routes = () => {
           <OwnerRoute>
             <LandownerDashboard />
           </OwnerRoute>
+        } />
+        
+        {/* Reviewer Dashboard (for RE Sales Advisor, RE Analyst, RE Governance Lead) */}
+        <Route path="/reviewer-dashboard" element={
+          <ReviewerRoute>
+            <ReviewerDashboard />
+          </ReviewerRoute>
         } />
         
         {/* Owner/Admin routes */}

@@ -12,11 +12,12 @@ const getRoleDashboard = (user) => {
     return '/landowner-dashboard';
   } else if (userRoles.includes('investor')) {
     return '/investor-portal';
-  } else if (userRoles.includes('reviewer') || 
-             userRoles.includes('re_sales_advisor') || 
+  } else if (userRoles.includes('re_sales_advisor') || 
              userRoles.includes('re_analyst') || 
-             userRoles.includes('project_manager') || 
              userRoles.includes('re_governance_lead')) {
+    return '/reviewer-dashboard';
+  } else if (userRoles.includes('reviewer') || 
+             userRoles.includes('project_manager')) {
     return '/admin-dashboard';
   } else {
     return '/dashboard';

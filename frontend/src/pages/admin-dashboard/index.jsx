@@ -13,7 +13,8 @@ import FilterControls from './components/FilterControls';
 import ActivityFeed from './components/ActivityFeed';
 import DeadlineAlerts from './components/DeadlineAlerts';
 import BulkActions from './components/BulkActions';
-import { landsAPI } from '../../services/api';
+import AssignReviewerModal from './components/AssignReviewerModal';
+import { landsAPI, taskAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
 
 const AdminDashboard = () => {
@@ -33,6 +34,8 @@ const AdminDashboard = () => {
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   useEffect(() => {
     fetchAdminData();
@@ -217,6 +220,49 @@ const AdminDashboard = () => {
     console.log('Quick action:', actionId);
   };
 
+  const handleAssignReviewer = (project) => {
+    setSelectedProject(project);
+    setShowAssignModal(true);
+  };
+
+  const handleAssignSubmit = async (assignmentData) => {
+    try {
+      console.log('[Admin Dashboard] Assigning reviewer:', assignmentData);
+      
+      // Create task via API
+      await taskAPI.createTask({
+        land_id: assignmentData.landId,
+        task_type: assignmentData.taskType,
+        description: assignmentData.description,
+        assigned_to: assignmentData.assignedTo,
+        due_date: assignmentData.dueDate || null,
+        priority: assignmentData.priority
+      });
+
+      console.log('[Admin Dashboard] Task assigned successfully');
+      
+      // Show success notification
+      const successNotification = {
+        id: Date.now(),
+        type: 'success',
+        title: 'Reviewer Assigned',
+        message: `Successfully assigned ${assignmentData.reviewerRole} to review this project`,
+        timestamp: new Date()
+      };
+      setNotifications(prev => [successNotification, ...prev.slice(0, 4)]);
+
+      // Refresh data
+      await fetchAdminData();
+      
+      // Close modal
+      setShowAssignModal(false);
+      setSelectedProject(null);
+    } catch (err) {
+      console.error('[Admin Dashboard] Error assigning reviewer:', err);
+      throw new Error(err.response?.data?.detail || 'Failed to assign reviewer');
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -350,6 +396,7 @@ const AdminDashboard = () => {
                     selectedTasks={selectedTasks}
                     onTaskSelect={setSelectedTasks}
                     onBulkAction={handleBulkAction}
+                    onAssignReviewer={handleAssignReviewer}
                   />
                 )}
               </div>
@@ -380,6 +427,18 @@ const AdminDashboard = () => {
         onActionComplete={handleQuickAction}
         position="bottom-right"
       />
+      
+      {/* Assign Reviewer Modal */}
+      {showAssignModal && selectedProject && (
+        <AssignReviewerModal
+          project={selectedProject}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedProject(null);
+          }}
+          onAssign={handleAssignSubmit}
+        />
+      )}
     </div>
   );
 };

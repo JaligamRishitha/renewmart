@@ -362,6 +362,16 @@ export const taskAPI = {
   deleteTask: async (taskId) => {
     const response = await api.delete(`/tasks/${taskId}`);
     return response.data;
+  },
+  
+  getTasksAssignedToMe: async (params = {}) => {
+    const response = await api.get('/tasks/assigned/me', { params });
+    return response.data;
+  },
+  
+  getTasksCreatedByMe: async (params = {}) => {
+    const response = await api.get('/tasks/created/me', { params });
+    return response.data;
   }
 };
 

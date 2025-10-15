@@ -23,7 +23,7 @@ class Task(Base):
     created_by = Column(UUID(as_uuid=True), ForeignKey("user.user_id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+    completion_notes = Column(Text)
     # Relationships
     land = relationship("Land", back_populates="tasks")
     land_section = relationship("LandSection", back_populates="tasks")

@@ -4,6 +4,7 @@ from sqlalchemy import text
 from typing import List
 from datetime import timedelta
 from uuid import UUID
+import logging
 
 from database import get_db
 from models.schemas import (
@@ -16,6 +17,7 @@ from auth import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = logging.getLogger(__name__)
 
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -106,6 +108,73 @@ async def get_current_user_profile(current_user: dict = Depends(get_current_acti
         created_at=current_user["created_at"],
         updated_at=current_user["updated_at"]
     )
+
+@router.get("/", response_model=List[User])
+async def list_users(
+    role: str = None,
+    is_active: bool = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """List all users with optional filtering by role (admin only)."""
+    try:
+        # Build query parts
+        joins = ""
+        where_clauses = []
+        params = {"skip": skip, "limit": limit}
+        
+        # Add JOIN if filtering by role
+        if role:
+            joins = """
+                LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            """
+            where_clauses.append("ur.role_key = :role")
+            params["role"] = role
+        
+        # Add is_active filter
+        if is_active is not None:
+            where_clauses.append("u.is_active = :is_active")
+            params["is_active"] = is_active
+        
+        # Build WHERE clause
+        where_sql = ""
+        if where_clauses:
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+        
+        # Complete query
+        query = f"""
+            SELECT DISTINCT u.user_id, u.email, u.first_name, u.last_name, 
+                   u.phone, u.is_active, u.created_at, u.updated_at
+            FROM "user" u
+            {joins}
+            {where_sql}
+            ORDER BY u.created_at DESC 
+            OFFSET :skip LIMIT :limit
+        """
+        
+        results = db.execute(text(query), params).fetchall()
+        
+        return [
+            User(
+                user_id=row.user_id,
+                email=row.email,
+                first_name=row.first_name,
+                last_name=row.last_name,
+                phone=row.phone,
+                is_active=row.is_active,
+                created_at=row.created_at,
+                updated_at=row.updated_at
+            )
+            for row in results
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching users: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch users: {str(e)}"
+        )
 
 @router.put("/me", response_model=User)
 async def update_current_user_profile(

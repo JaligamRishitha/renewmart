@@ -4,7 +4,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 
-const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
+const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignReviewer }) => {
   const [sortField, setSortField] = useState('startDate');
   const [sortDirection, setSortDirection] = useState('desc');
   const navigate = useNavigate();
@@ -186,6 +186,17 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-center space-x-2">
+                    {task?.assignedReviewer === "Unassigned" && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => onAssignReviewer && onAssignReviewer(task)}
+                        iconName="UserPlus"
+                        iconSize={16}
+                      >
+                        Assign
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -260,6 +271,17 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
                 <span className="font-body text-xs text-error font-medium">Overdue</span>
               )}
               <div className="flex items-center space-x-2 ml-auto">
+                {task?.assignedReviewer === "Unassigned" && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => onAssignReviewer && onAssignReviewer(task)}
+                    iconName="UserPlus"
+                    iconSize={14}
+                  >
+                    Assign
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

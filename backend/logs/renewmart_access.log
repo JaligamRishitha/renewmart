@@ -913,3 +913,188 @@
 2025-10-15 15:43:34 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 17.00ms
 2025-10-15 15:43:45 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 17.25ms
 2025-10-15 15:43:45 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 19.24ms
+2025-10-15 15:50:52 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200 - 1.71ms
+2025-10-15 15:50:52 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200 - 5.18ms
+2025-10-15 15:50:52 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 20.69ms
+2025-10-15 15:50:52 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 22.44ms
+2025-10-15 15:50:56 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 11.89ms
+2025-10-15 15:50:56 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 12.89ms
+2025-10-15 15:55:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 15.00ms
+2025-10-15 15:55:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 19.01ms
+2025-10-15 16:03:59 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200 - 0.98ms
+2025-10-15 16:03:59 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 18.36ms
+2025-10-15 16:04:06 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200 - 1.18ms
+2025-10-15 16:04:06 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200 - 3.00ms
+2025-10-15 16:04:06 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 12.52ms
+2025-10-15 16:04:06 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 14.27ms
+2025-10-15 16:04:57 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks - 200 - 1.13ms
+2025-10-15 16:04:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 2.00ms
+2025-10-15 16:04:57 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/ - 200
+2025-10-15 16:04:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 422 - 27.74ms
+2025-10-15 16:08:12 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 14.02ms
+2025-10-15 16:08:12 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 16.01ms
+2025-10-15 16:09:20 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 12.00ms
+2025-10-15 16:09:20 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 13.00ms
+2025-10-15 16:09:53 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 401 - 4.00ms
+2025-10-15 16:09:53 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 401 - 6.00ms
+2025-10-15 16:10:14 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 16:10:14 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 48.40ms
+2025-10-15 16:10:14 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 13.11ms
+2025-10-15 16:10:14 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 13.52ms
+2025-10-15 16:14:03 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 16:14:03 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 48.52ms
+2025-10-15 16:15:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200 - 1.00ms
+2025-10-15 16:15:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200 - 5.00ms
+2025-10-15 16:15:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 12.00ms
+2025-10-15 16:15:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 15.00ms
+2025-10-15 16:15:46 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 13.03ms
+2025-10-15 16:15:46 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 14.03ms
+2025-10-15 16:16:09 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 14.00ms
+2025-10-15 16:16:09 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 13.99ms
+2025-10-15 16:17:53 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 38.42ms
+2025-10-15 16:17:53 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 132.94ms
+2025-10-15 16:17:54 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200
+2025-10-15 16:17:54 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200
+2025-10-15 16:17:54 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 403 - 7.65ms
+2025-10-15 16:17:54 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 403 - 7.64ms
+2025-10-15 16:19:23 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 35.55ms
+2025-10-15 16:19:23 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 403 - 108.90ms
+2025-10-15 16:19:24 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 120.08ms
+2025-10-15 16:19:24 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 403 - 124.49ms
+2025-10-15 16:20:51 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200 - 1.00ms
+2025-10-15 16:20:51 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 29.37ms
+2025-10-15 16:20:51 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 22.66ms
+2025-10-15 16:20:51 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 22.67ms
+2025-10-15 16:20:56 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/ - 200 - 1.00ms
+2025-10-15 16:26:19 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/ - 200 - 0.45ms
+2025-10-15 16:26:19 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 500 - 20.72ms
+2025-10-15 16:26:25 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 500 - 13.83ms
+2025-10-15 16:27:02 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 17.03ms
+2025-10-15 16:27:02 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200 - 1.00ms
+2025-10-15 16:27:02 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200
+2025-10-15 16:27:03 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 19.00ms
+2025-10-15 16:27:03 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 111.08ms
+2025-10-15 16:27:07 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 500 - 13.41ms
+2025-10-15 16:33:24 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 16:33:24 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 79.58ms
+2025-10-15 16:33:24 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 20.00ms
+2025-10-15 16:33:24 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 115.06ms
+2025-10-15 16:33:26 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/logout - 200 - 1.00ms
+2025-10-15 16:33:26 - renewmart.access - INFO - logs.py:127 - POST /api/auth/logout - 404 - 1.00ms
+2025-10-15 16:33:40 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200 - 1.00ms
+2025-10-15 16:33:40 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 48.52ms
+2025-10-15 16:33:40 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 15.02ms
+2025-10-15 16:33:40 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 14.00ms
+2025-10-15 16:33:46 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/ - 200
+2025-10-15 16:33:46 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 200 - 9.95ms
+2025-10-15 16:33:57 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks - 200
+2025-10-15 16:33:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 1.01ms
+2025-10-15 16:33:57 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/ - 200
+2025-10-15 16:33:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 422 - 9.96ms
+2025-10-15 16:34:15 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 1.00ms
+2025-10-15 16:34:15 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 422 - 6.00ms
+2025-10-15 16:34:55 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/logout - 200
+2025-10-15 16:34:55 - renewmart.access - INFO - logs.py:127 - POST /api/auth/logout - 404 - 1.00ms
+2025-10-15 16:35:14 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 16:35:15 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 48.35ms
+2025-10-15 16:35:15 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200
+2025-10-15 16:35:15 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200 - 1.51ms
+2025-10-15 16:35:15 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 403 - 12.00ms
+2025-10-15 16:35:15 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 403 - 54.83ms
+2025-10-15 16:41:14 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 403 - 38.27ms
+2025-10-15 16:41:14 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 403 - 153.40ms
+2025-10-15 16:41:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 1.01ms
+2025-10-15 16:41:57 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 500 - 26.84ms
+2025-10-15 16:51:10 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200 - 1.00ms
+2025-10-15 16:51:11 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 224.72ms
+2025-10-15 16:51:11 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 16:51:11 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 11.44ms
+2025-10-15 16:51:12 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/assigned/me - 200 - 1.00ms
+2025-10-15 16:51:53 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 11.00ms
+2025-10-15 16:52:21 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 6.01ms
+2025-10-15 16:55:38 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 64.15ms
+2025-10-15 16:56:22 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 102.52ms
+2025-10-15 16:56:48 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 8.01ms
+2025-10-15 16:58:57 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 23.99ms
+2025-10-15 16:59:07 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 16.24ms
+2025-10-15 16:59:07 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 10.90ms
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200 - 1.01ms
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 6.02ms
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 28.11ms
+2025-10-15 16:59:39 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 130.56ms
+2025-10-15 16:59:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/logout - 200
+2025-10-15 16:59:44 - renewmart.access - INFO - logs.py:127 - POST /api/auth/logout - 404 - 1.00ms
+2025-10-15 17:00:04 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 17:00:04 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 49.20ms
+2025-10-15 17:00:04 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/assigned/me - 200
+2025-10-15 17:00:04 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.01ms
+2025-10-15 17:00:29 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 13.25ms
+2025-10-15 17:00:29 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.43ms
+2025-10-15 17:02:23 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 16.14ms
+2025-10-15 17:02:42 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 46.29ms
+2025-10-15 17:02:43 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 6.00ms
+2025-10-15 17:02:44 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 6.00ms
+2025-10-15 17:02:55 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 19.87ms
+2025-10-15 17:02:55 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 9.00ms
+2025-10-15 17:03:22 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 25.40ms
+2025-10-15 17:03:23 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 17:03:23 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 401 - 1.94ms
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 67.59ms
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/projects - 200 - 1.00ms
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/admin/summary - 200 - 1.00ms
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 17.16ms
+2025-10-15 17:03:42 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 86.83ms
+2025-10-15 17:03:47 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/ - 200
+2025-10-15 17:03:47 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 200 - 7.41ms
+2025-10-15 17:04:10 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks - 200
+2025-10-15 17:04:10 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 0.72ms
+2025-10-15 17:04:10 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/ - 200 - 1.00ms
+2025-10-15 17:04:10 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 500 - 14.21ms
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 72.39ms
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/dashboard/summary - 200 - 0.89ms
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/lands/dashboard/projects - 200
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/dashboard/summary - 200 - 21.38ms
+2025-10-15 17:11:44 - renewmart.access - INFO - logs.py:127 - GET /api/lands/dashboard/projects - 200 - 198.95ms
+2025-10-15 17:12:21 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/projects - 200 - 5.05ms
+2025-10-15 17:12:21 - renewmart.access - INFO - logs.py:127 - GET /api/lands/admin/summary - 200 - 3.24ms
+2025-10-15 17:12:25 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 200 - 3.05ms
+2025-10-15 17:12:39 - renewmart.access - INFO - logs.py:127 - POST /api/tasks - 307 - 0.70ms
+2025-10-15 17:12:39 - renewmart.access - INFO - logs.py:127 - POST /api/tasks/ - 500 - 32.74ms
+2025-10-15 17:13:34 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/assigned/me - 200
+2025-10-15 17:13:34 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 9.00ms
+2025-10-15 17:13:37 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200 - 1.00ms
+2025-10-15 17:13:37 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 7.00ms
+2025-10-15 17:13:37 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 13.68ms
+2025-10-15 17:16:03 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 11.54ms
+2025-10-15 17:16:05 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 22.51ms
+2025-10-15 17:16:05 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.00ms
+2025-10-15 17:25:09 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/auth/me - 200
+2025-10-15 17:25:09 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 19.87ms
+2025-10-15 17:25:09 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/assigned/me - 200 - 1.00ms
+2025-10-15 17:25:09 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 12.37ms
+2025-10-15 17:25:59 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 9.00ms
+2025-10-15 17:25:59 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 11.00ms
+2025-10-15 17:26:37 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 27.53ms
+2025-10-15 17:26:37 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 13.52ms
+2025-10-15 17:27:47 - renewmart.access - INFO - logs.py:127 - GET /api/auth/me - 200 - 14.50ms
+2025-10-15 17:27:47 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 9.64ms
+2025-10-15 17:42:17 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/tasks/assigned/me - 200 - 1.00ms
+2025-10-15 17:42:17 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 401 - 86.58ms
+2025-10-15 17:42:34 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/login - 200 - 0.99ms
+2025-10-15 17:42:34 - renewmart.access - INFO - logs.py:127 - POST /api/users/login - 200 - 81.64ms
+2025-10-15 17:42:34 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 19.01ms
+2025-10-15 17:42:38 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.01ms
+2025-10-15 17:42:40 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 6.31ms
+2025-10-15 17:42:40 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 5.51ms
+2025-10-15 17:42:41 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 6.01ms
+2025-10-15 17:42:57 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 5.00ms
+2025-10-15 17:49:26 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 36.36ms
+2025-10-15 17:49:28 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.00ms
+2025-10-15 17:50:47 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 6.52ms
+2025-10-15 17:50:49 - renewmart.access - INFO - logs.py:127 - GET /api/tasks/assigned/me - 500 - 7.28ms
+2025-10-15 17:50:57 - renewmart.access - INFO - logs.py:127 - OPTIONS /api/users/ - 200 - 1.00ms
+2025-10-15 17:50:57 - renewmart.access - INFO - logs.py:127 - GET /api/users/ - 401 - 2.00ms

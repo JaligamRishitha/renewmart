@@ -532,40 +532,23 @@ class Document(DocumentBase):
 # ============================================================================
 
 class TaskBase(BaseSchema):
-    title: str = Field(..., min_length=1, max_length=200, description="Task title")
+    task_type: str = Field(..., min_length=1, max_length=100, description="Task type")
     description: Optional[str] = Field(None, max_length=1000, description="Task description")
-    assigned_role: Optional[UserRoleEnum] = Field(None, description="Assigned role")
     assigned_to: Optional[UUID] = Field(None, description="Assigned user")
-    priority: TaskPriorityEnum = Field(TaskPriorityEnum.MEDIUM, description="Task priority")
-    start_date: Optional[date] = Field(None, description="Task start date")
-    end_date: Optional[date] = Field(None, description="Task end date")
-
-    @validator('end_date')
-    def validate_end_date(cls, v, values):
-        if v is not None and 'start_date' in values and values['start_date'] is not None:
-            if v < values['start_date']:
-                raise ValueError('End date must be after start date')
-        return v
-
-    @validator('title')
-    def validate_title(cls, v):
-        if not v.strip():
-            raise ValueError('Title cannot be empty or whitespace only')
-        return v.strip()
+    priority: str = Field("medium", description="Task priority (low, medium, high, urgent)")
+    due_date: Optional[date] = Field(None, description="Task due date")
 
 class TaskCreate(TaskBase):
     land_id: UUID
     land_section_id: Optional[UUID] = None
 
 class TaskUpdate(BaseSchema):
-    title: Optional[str] = None
+    task_type: Optional[str] = None
     description: Optional[str] = None
-    assigned_role: Optional[str] = None
     assigned_to: Optional[UUID] = None
     status: Optional[str] = None
     priority: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    due_date: Optional[date] = None
 
 class Task(TaskBase):
     task_id: UUID
@@ -573,6 +556,7 @@ class Task(TaskBase):
     land_section_id: Optional[UUID] = None
     status: str
     created_by: Optional[UUID] = None
+    completion_notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
