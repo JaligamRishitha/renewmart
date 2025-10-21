@@ -241,16 +241,15 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-center space-x-2">
-                    {task?.assignedReviewer === "Unassigned" && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => onAssignReviewer && onAssignReviewer(task)}
-                        iconName="Plus"
-                        iconSize={16}
-                        title="Assign Reviewer"
-                      />
-                    )}
+                  <Button
+    variant={task?.assignedReviewer === "Unassigned" ? "default" : "outline"}
+    size="sm"
+    onClick={() => onAssignReviewer && onAssignReviewer(task)}
+    iconName="UserPlus"
+    iconSize={16}
+    title="Assign"
+  />
+
                     <Button
                       variant="ghost"
                       size="sm"
