@@ -8,7 +8,7 @@ import time
 import logging
 from pydantic import ValidationError
 from database import engine, Base
-from routers import auth, users, lands, sections, tasks, investors, documents, logs as logs_router, cache, health
+from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health
 import logs
 from logs import log_request_middleware, setup_request_logging
 from config import settings
@@ -170,6 +170,7 @@ app.include_router(sections.router, prefix="/api/sections", tags=["sections"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])  # tasks router already has /tasks prefix
 app.include_router(investors.router, prefix="/api", tags=["investors"])  # investors router already has /investors prefix
 app.include_router(documents.router, prefix="/api", tags=["documents"])  # documents router already has /documents prefix
+app.include_router(reviews.router, prefix="/api", tags=["reviews"])  # reviews router already has /reviews prefix
 app.include_router(logs_router.router, prefix="/api", tags=["logs"])  # logs router already has /logs prefix
 app.include_router(cache.router, prefix="/api", tags=["cache"])  # cache router already has /cache prefix
 app.include_router(health.router, prefix="/api", tags=["health"])  # health router already has /health prefix

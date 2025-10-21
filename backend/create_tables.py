@@ -187,6 +187,23 @@ def create_all_tables():
             )
         """))
         
+        # subtasks table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS subtasks (
+                subtask_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                assigned_to UUID REFERENCES "user"(user_id),
+                created_by UUID NOT NULL REFERENCES "user"(user_id),
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now(),
+                completed_at TIMESTAMPTZ,
+                order_index INTEGER DEFAULT 0
+            )
+        """))
+        
         # 6) Investor Interests
         print("Creating investor interests table...")
         
@@ -393,7 +410,7 @@ def create_all_tables():
         """))
         
         conn.commit()
-        print("\n✅ Successfully created all 13 tables with indexes, triggers, and seed data!")
+        print("\n[SUCCESS] Successfully created all 13 tables with indexes, triggers, and seed data!")
         
         # Verify tables were created
         result = conn.execute(text("""
@@ -404,12 +421,12 @@ def create_all_tables():
         """))
         
         tables = result.fetchall()
-        print(f"\n📊 Created {len(tables)} tables:")
+        print(f"\n[INFO] Created {len(tables)} tables:")
         for table in tables:
-            print(f"  ✓ {table[0]}")
+            print(f"  - {table[0]}")
             
     except Exception as e:
-        print(f"❌ Error creating tables: {e}")
+        print(f"[ERROR] Error creating tables: {e}")
         conn.rollback()
         raise
     finally:

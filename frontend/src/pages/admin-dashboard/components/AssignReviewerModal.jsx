@@ -18,6 +18,9 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
   const [error, setError] = useState('');
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showAddTaskTypeModal, setShowAddTaskTypeModal] = useState(false);
+  const [newTaskType, setNewTaskType] = useState({ label: '', value: '' });
+  const [customTaskTypes, setCustomTaskTypes] = useState([]);
 
   const reviewerRoles = [
     { 
@@ -37,7 +40,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     }
   ];
 
-  const taskTypes = [
+  const defaultTaskTypes = [
     { value: 'market_evaluation', label: 'Market Evaluation' },
     { value: 'technical_analysis', label: 'Technical Analysis' },
     { value: 'financial_analysis', label: 'Financial Analysis' },
@@ -47,6 +50,8 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     { value: 'regulatory_approval', label: 'Regulatory Approval' },
     { value: 'environmental_review', label: 'Environmental Review' }
   ];
+
+  const taskTypes = [...defaultTaskTypes, ...customTaskTypes];
 
   const priorityOptions = [
     { value: 'low', label: 'Low Priority' },
@@ -104,7 +109,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     setLoading(true);
     try {
       await onAssign({
-        landId: project.id,
+        landId: project.landId || project.id,  // Use landId if available, fallback to id
         reviewerRole: formData.reviewerRole,
         assignedTo: formData.assignedTo,
         taskType: formData.taskType,
@@ -120,6 +125,32 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     }
   };
 
+  const handleAddTaskType = () => {
+    if (!newTaskType.label.trim()) {
+      alert('Please enter a task type name');
+      return;
+    }
+
+    // Generate value from label (lowercase, replace spaces with underscores)
+    const value = newTaskType.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    
+    // Check if already exists
+    if (taskTypes.some(t => t.value === value)) {
+      alert('This task type already exists');
+      return;
+    }
+
+    const taskType = {
+      value: value,
+      label: newTaskType.label
+    };
+
+    setCustomTaskTypes([...customTaskTypes, taskType]);
+    setFormData({ ...formData, taskType: value });
+    setNewTaskType({ label: '', value: '' });
+    setShowAddTaskTypeModal(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -128,7 +159,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
           <div>
             <h2 className="text-xl font-semibold text-foreground">Assign Reviewer</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Project: {project.title} - {project.location}
+              Project: {project.projectName || project.title} - {project.location}
             </p>
           </div>
           <button
@@ -157,12 +188,12 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
                 <p className="font-medium text-foreground">{project.landownerName}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Energy Type:</span>
-                <p className="font-medium text-foreground">{project.energyType}</p>
+                <span className="text-muted-foreground">Project Type:</span>
+                <p className="font-medium text-foreground">{project.projectType || project.energyType}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Capacity:</span>
-                <p className="font-medium text-foreground">{project.capacity} MW</p>
+                <p className="font-medium text-foreground">{project.capacity}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Status:</span>
@@ -199,15 +230,29 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
           )}
 
           {/* Task Type */}
-          <Select
-            label="Task Type *"
-            placeholder="Select task type"
-            options={taskTypes}
-            value={formData.taskType}
-            onChange={(value) => handleInputChange('taskType', value)}
-            required
-            disabled={loading}
-          />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-foreground">
+                Task Type *
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAddTaskTypeModal(true)}
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <Icon name="Plus" size={14} />
+                Add New Type
+              </button>
+            </div>
+            <Select
+              placeholder="Select task type"
+              options={taskTypes}
+              value={formData.taskType}
+              onChange={(value) => handleInputChange('taskType', value)}
+              required
+              disabled={loading}
+            />
+          </div>
 
           {/* Description */}
           <div>
@@ -277,6 +322,59 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
           </div>
         </form>
       </div>
+
+      {/* Add Task Type Modal */}
+      {showAddTaskTypeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md">
+            <div className="p-6 border-b border-border">
+              <h3 className="text-lg font-semibold text-foreground">Add New Task Type</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Create a custom task type for this assignment
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Task Type Name *
+                </label>
+                <input
+                  type="text"
+                  value={newTaskType.label}
+                  onChange={(e) => setNewTaskType({ ...newTaskType, label: e.target.value })}
+                  placeholder="e.g., Grid Connection Review"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This will be used as the task type label
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddTaskTypeModal(false);
+                  setNewTaskType({ label: '', value: '' });
+                }}
+                className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddTaskType}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+              >
+                <Icon name="Plus" size={16} />
+                Add Task Type
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

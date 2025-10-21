@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Status Panel - Investor Portal Integration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Review Status Panel - Investor Portal Integration</h1>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">✅ Review Status Panel Features</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                    <h3 class="font-medium text-purple-900 mb-2">🔍 Comprehensive Review Tracking</h3>
+                    <ul class="text-sm text-purple-800 space-y-1">
+                        <li>• <strong>Three Reviewer Roles:</strong> RE Sales Advisor, RE Analyst, RE Governance Lead</li>
+                        <li>• <strong>Review Status:</strong> Approved, Rejected, Pending, In Progress, Clarification Requested</li>
+                        <li>• <strong>Progress Tracking:</strong> Individual and overall completion percentages</li>
+                        <li>• <strong>Assignment Details:</strong> Reviewer names and last update timestamps</li>
+                        <li>• <strong>Visual Indicators:</strong> Color-coded status badges and progress bars</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <h3 class="font-medium text-blue-900 mb-2">👥 Reviewer Roles Overview</h3>
+                    <ul class="text-sm text-blue-800 space-y-1">
+                        <li>• <strong>RE Sales Advisor:</strong> Market evaluation and investor alignment</li>
+                        <li>• <strong>RE Analyst:</strong> Technical and financial feasibility analysis</li>
+                        <li>• <strong>RE Governance Lead:</strong> Compliance, regulatory, and local authority validation</li>
+                        <li>• <strong>Role Icons:</strong> TrendingUp, Calculator, Shield respectively</li>
+                        <li>• <strong>Color Coding:</strong> Blue, Green, Orange for easy identification</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-green-200 rounded-lg p-4 bg-green-50">
+                    <h3 class="font-medium text-green-900 mb-2">📊 Progress Visualization</h3>
+                    <ul class="text-sm text-green-800 space-y-1">
+                        <li>• <strong>Overall Progress Bar:</strong> Shows completion percentage across all roles</li>
+                        <li>• <strong>Individual Progress:</strong> Each role has its own progress indicator</li>
+                        <li>• <strong>Status Summary:</strong> Count of completed, in progress, pending, and unassigned reviews</li>
+                        <li>• <strong>Real-time Updates:</strong> Progress updates automatically as reviews are completed</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">🔧 Technical Implementation</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Component Structure</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">ReviewStatusPanel.jsx</code>
+                            <p class="text-gray-600 mt-1">Main component for displaying review status</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">reviewsAPI.getAllReviewStatuses()</code>
+                            <p class="text-gray-600 mt-1">Fetches all review statuses for a project</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">Status Color Mapping</code>
+                            <p class="text-gray-600 mt-1">Dynamic color coding based on review status</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">Progress Calculation</code>
+                            <p class="text-gray-600 mt-1">Calculates overall and individual progress</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">API Integration</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">GET /reviews/land/{landId}/all</code>
+                            <p class="text-gray-600 mt-1">Fetch all review statuses for a project</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">Review Status Data</code>
+                            <p class="text-gray-600 mt-1">Status, assigned_to, completion_percentage, timestamps</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">Error Handling</code>
+                            <p class="text-gray-600 mt-1">Graceful handling of missing or failed data</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">Loading States</code>
+                            <p class="text-gray-600 mt-1">Professional loading indicators</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">📱 User Interface Features</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Review Status Cards</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Role title and description</li>
+                        <li>• Status badge with icon</li>
+                        <li>• Assigned reviewer name</li>
+                        <li>• Last update timestamp</li>
+                        <li>• Individual progress percentage</li>
+                        <li>• Color-coded progress bar</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Overall Progress</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Overall completion percentage</li>
+                        <li>• Visual progress bar</li>
+                        <li>• Progress description text</li>
+                        <li>• Summary statistics</li>
+                        <li>• Status counts by category</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Status Indicators</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• ✅ Approved (Green)</li>
+                        <li>• ❌ Rejected (Red)</li>
+                        <li>• ⏳ Pending (Yellow)</li>
+                        <li>• ▶️ In Progress (Blue)</li>
+                        <li>• 💬 Clarification (Purple)</li>
+                        <li>• ⭕ Not Assigned (Gray)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">🎯 Integration Points</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">1. Project Details Page Integration</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        The ReviewStatusPanel is integrated into the project details page between the Task Progress and Task Details sections:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">&lt;ReviewStatusPanel landId={landId} projectData={projectData} /&gt;</code>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">2. Data Flow</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        The component automatically fetches and displays review status when the project details page loads:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Component receives landId from URL parameters</li>
+                        <li>• Calls reviewsAPI.getAllReviewStatuses(landId)</li>
+                        <li>• Displays review status for all three reviewer roles</li>
+                        <li>• Updates progress indicators in real-time</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">3. Investor Benefits</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Investors can now see comprehensive review status information:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• <strong>Project Review Progress:</strong> See how far along the review process is</li>
+                        <li>• <strong>Reviewer Assignments:</strong> Know who is reviewing each aspect</li>
+                        <li>• <strong>Status Updates:</strong> Track when reviews are completed or need attention</li>
+                        <li>• <strong>Timeline Awareness:</strong> Understand review completion timelines</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold mb-4">🚀 How to Test</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">1. Access Project Details</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Navigate to any project details page from the investor portal:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">http://localhost:5174/project-details/{projectId}</code>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">2. View Review Status Panel</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        You should now see the Review Status Panel between Task Progress and Task Details:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Overall review progress bar at the top</li>
+                        <li>• Three reviewer role cards with status information</li>
+                        <li>• Individual progress bars for each role</li>
+                        <li>• Summary statistics at the bottom</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">3. Review Status Information</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Each reviewer role card displays:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Role name and description</li>
+                        <li>• Current status with color-coded badge</li>
+                        <li>• Assigned reviewer name (if assigned)</li>
+                        <li>• Last update timestamp</li>
+                        <li>• Completion percentage and progress bar</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 bg-yellow-50 rounded-lg p-4">
+            <h3 class="font-medium text-yellow-900 mb-2">⚠️ Important Notes</h3>
+            <ul class="text-sm text-yellow-800 space-y-1">
+                <li>• <strong>Real-time Updates:</strong> Review status updates automatically when reviewers complete their work</li>
+                <li>• <strong>Error Handling:</strong> Missing review data is handled gracefully without breaking the UI</li>
+                <li>• <strong>Performance:</strong> Data is fetched efficiently using the reviews API</li>
+                <li>• <strong>Responsive Design:</strong> The panel adapts to different screen sizes</li>
+                <li>• <strong>Accessibility:</strong> Color coding is supplemented with icons and text for accessibility</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

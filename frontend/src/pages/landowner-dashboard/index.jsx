@@ -11,6 +11,7 @@ import ProjectFilters from './components/ProjectFilters';
 import ProjectTable from './components/ProjectTable';
 import EmptyState from './components/EmptyState';
 import ProjectDetailModal from './components/ProjectDetailModal';
+import DocumentsModal from './components/DocumentsModal';
 import { landsAPI } from '../../services/api';
 
 const LandownerDashboard = () => {
@@ -34,6 +35,7 @@ const LandownerDashboard = () => {
   });
   const [notifications, setNotifications] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedProjectForDocuments, setSelectedProjectForDocuments] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
 
@@ -148,6 +150,10 @@ const LandownerDashboard = () => {
 
   const handleViewProject = (project) => {
     setSelectedProject(project);
+  };
+
+  const handleViewDocuments = (project) => {
+    setSelectedProjectForDocuments(project);
   };
 
   const handleContinueDraft = (project) => {
@@ -360,6 +366,7 @@ const LandownerDashboard = () => {
               projects={filteredProjects}
               onEdit={handleEditProject}
               onView={handleViewProject}
+              onViewDocuments={handleViewDocuments}
               onContinueDraft={handleContinueDraft}
               onSubmitForReview={handleSubmitForReview}
               onDelete={handleDeleteProject}
@@ -393,6 +400,14 @@ const LandownerDashboard = () => {
         <ProjectDetailModal
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
+        />
+      )}
+
+      {/* Documents Modal */}
+      {selectedProjectForDocuments && (
+        <DocumentsModal
+          project={selectedProjectForDocuments}
+          onClose={() => setSelectedProjectForDocuments(null)}
         />
       )}
 

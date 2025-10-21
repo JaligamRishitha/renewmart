@@ -14,6 +14,8 @@ def add_demo_users():
     
     try:
         print("Adding demo users...")
+        print(f"Database engine: {engine}")
+        print(f"Connection: {conn}")
         
         # Demo users data
         demo_users = [
@@ -111,13 +113,13 @@ def add_demo_users():
                     "role_key": role
                 })
             
-            print(f"✓ Added user: {user_data['email']} with roles: {', '.join(user_data['roles'])}")
+            print(f"[OK] Added user: {user_data['email']} with roles: {', '.join(user_data['roles'])}")
         
         conn.commit()
-        print("\n✅ Successfully added all demo users!")
+        print("\n[SUCCESS] Successfully added all demo users!")
         
     except Exception as e:
-        print(f"❌ Error adding demo users: {e}")
+        print(f"[ERROR] Error adding demo users: {e}")
         conn.rollback()
         raise
     finally:

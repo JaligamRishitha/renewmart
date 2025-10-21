@@ -1,7 +1,7 @@
 import React from 'react';
 import Icon from '../../../components/AppIcon';
 
-const MetricsCard = ({ title, value, change, changeType, icon, color = 'primary' }) => {
+const MetricsCard = ({ title, value, change, changeType, icon, color = 'primary', onClick }) => {
   const getColorClasses = () => {
     switch (color) {
       case 'success':
@@ -29,7 +29,10 @@ const MetricsCard = ({ title, value, change, changeType, icon, color = 'primary'
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6 shadow-elevation-1 hover:shadow-elevation-2 transition-smooth">
+    <div 
+      className={`bg-card border border-border rounded-lg p-6 shadow-elevation-1 hover:shadow-elevation-2 transition-smooth ${onClick ? 'cursor-pointer hover:border-primary' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <p className="font-body text-sm text-muted-foreground mb-1">{title}</p>

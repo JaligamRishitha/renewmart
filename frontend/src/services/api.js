@@ -108,6 +108,31 @@ export const usersAPI = {
   getUserById: async (userId) => {
     const response = await api.get(`/users/${userId}`);
     return response.data;
+  },
+  
+  createUser: async (userData, roles = []) => {
+    const response = await api.post('/users/admin/create', { ...userData, roles });
+    return response.data;
+  },
+  
+  getAvailableRoles: async () => {
+    const response = await api.get('/users/roles/available');
+    return response.data;
+  },
+  
+  assignRole: async (userId, roleKey) => {
+    const response = await api.post(`/users/${userId}/roles`, { role_key: roleKey });
+    return response.data;
+  },
+  
+  removeRole: async (userId, roleKey) => {
+    const response = await api.delete(`/users/${userId}/roles/${roleKey}`);
+    return response.data;
+  },
+  
+  getUserRoles: async (userId) => {
+    const response = await api.get(`/users/${userId}/roles`);
+    return response.data;
   }
 };
 
@@ -193,6 +218,39 @@ export const landsAPI = {
   markLandReadyToBuy: async (landId) => {
     const response = await api.post(`/lands/${landId}/mark-rtb`);
     return response.data;
+  },
+
+  getMarketplaceProjects: async (params = {}) => {
+    const response = await api.get('/lands/marketplace/published', { params });
+    return response.data;
+  },
+
+  getAdminInvestorInterests: async () => {
+    const response = await api.get('/lands/admin/investor-interests');
+    return response.data;
+  }
+};
+
+// Reviews API
+export const reviewsAPI = {
+  saveReviewStatus: async (landId, reviewerRole, reviewData) => {
+    const response = await api.post(`/reviews/land/${landId}/role/${reviewerRole}`, reviewData);
+    return response.data;
+  },
+
+  getReviewStatus: async (landId, reviewerRole) => {
+    const response = await api.get(`/reviews/land/${landId}/role/${reviewerRole}`);
+    return response.data;
+  },
+
+  getAllReviewStatuses: async (landId) => {
+    const response = await api.get(`/reviews/land/${landId}/all`);
+    return response.data;
+  },
+
+  deleteReviewStatus: async (landId, reviewerRole) => {
+    const response = await api.delete(`/reviews/land/${landId}/role/${reviewerRole}`);
+    return response.data;
   }
 };
 
@@ -218,8 +276,7 @@ export const sectionsAPI = {
     return response.data;
   }
 };
-
-// Documents API
+//Documents API
 export const documentsAPI = {
   uploadDocument: async (landId, formData) => {
     const response = await api.post(`/documents/upload/${landId}`, formData, {
@@ -229,17 +286,17 @@ export const documentsAPI = {
     });
     return response.data;
   },
-  
+ 
   getDocuments: async (landId, params = {}) => {
     const response = await api.get(`/documents/land/${landId}`, { params });
     return response.data;
   },
-  
+ 
   getDocumentById: async (documentId) => {
     const response = await api.get(`/documents/${documentId}`);
     return response.data;
   },
-  
+ 
   updateDocumentStatus: async (documentId, status, reviewNotes = '') => {
     const response = await api.put(`/documents/${documentId}/review`, {
       status,
@@ -247,20 +304,72 @@ export const documentsAPI = {
     });
     return response.data;
   },
-  
+ 
   deleteDocument: async (documentId) => {
     const response = await api.delete(`/documents/${documentId}`);
     return response.data;
   },
-  
+
+  // Task-based document operations
+  uploadTaskDocument: async (taskId, formData) => {
+    const response = await api.post(`/documents/task/${taskId}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  getTaskDocuments: async (taskId) => {
+    const response = await api.get(`/documents/task/${taskId}`);
+    return response.data;
+  },
+
+  approveDocument: async (documentId, adminComments = '') => {
+    const formData = new FormData();
+    if (adminComments) formData.append('admin_comments', adminComments);
+    const response = await api.post(`/documents/approve/${documentId}`, formData);
+    return response.data;
+  },
+
+  rejectDocument: async (documentId, rejectionReason, adminComments = '') => {
+    const formData = new FormData();
+    formData.append('rejection_reason', rejectionReason);
+    if (adminComments) formData.append('admin_comments', adminComments);
+    const response = await api.post(`/documents/reject/${documentId}`, formData);
+    return response.data;
+  },
+
+  // Subtask-based document operations
+  uploadSubtaskDocument: async (subtaskId, formData) => {
+    const response = await api.post(`/documents/subtask/${subtaskId}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  getSubtaskDocuments: async (subtaskId) => {
+    const response = await api.get(`/documents/subtask/${subtaskId}`);
+    return response.data;
+  },
+ 
+  viewDocument: async (documentId) => {
+    const response = await api.get(`/documents/view/${documentId}`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+ 
   downloadDocument: async (documentId) => {
-    const response = await api.get(`/documents/${documentId}/download`, {
+    const response = await api.get(`/documents/download/${documentId}`, {
       responseType: 'blob'
     });
     return response.data;
   }
 };
-
+ 
 // Tasks API
 export const tasksAPI = {
   getTasks: async (params = {}) => {
@@ -349,6 +458,11 @@ export const taskAPI = {
     return response.data;
   },
   
+  getTaskById: async (taskId) => {
+    const response = await api.get(`/tasks/${taskId}`);
+    return response.data;
+  },
+  
   createTask: async (taskData) => {
     const response = await api.post('/tasks', taskData);
     return response.data;
@@ -371,6 +485,63 @@ export const taskAPI = {
   
   getTasksCreatedByMe: async (params = {}) => {
     const response = await api.get('/tasks/created/me', { params });
+    return response.data;
+  },
+  
+  updateTaskStatus: async (taskId, status, notes = '') => {
+    const response = await api.put(`/tasks/${taskId}/status`, {
+      status,
+      notes
+    });
+    return response.data;
+  },
+  
+  assignTask: async (taskId, assigneeId) => {
+    const response = await api.put(`/tasks/${taskId}/assign`, {
+      assignee_id: assigneeId
+    });
+    return response.data;
+  },
+  
+  getMyTasks: async (params = {}) => {
+    const response = await api.get('/tasks/my-tasks', { params });
+    return response.data;
+  },
+  
+  getTaskHistory: async (taskId) => {
+    const response = await api.get(`/tasks/${taskId}/history`);
+    return response.data;
+  },
+  
+  // Subtask methods
+  getSubtasks: async (taskId) => {
+    const response = await api.get(`/tasks/${taskId}/subtasks`);
+    return response.data;
+  },
+  
+  createSubtask: async (taskId, subtaskData) => {
+    const response = await api.post(`/tasks/${taskId}/subtasks`, subtaskData);
+    return response.data;
+  },
+  
+  updateSubtask: async (taskId, subtaskId, subtaskData) => {
+    const response = await api.put(`/tasks/${taskId}/subtasks/${subtaskId}`, subtaskData);
+    return response.data;
+  },
+  
+  deleteSubtask: async (taskId, subtaskId) => {
+    const response = await api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`);
+    return response.data;
+  },
+
+  // Get default subtask templates for a role
+  getSubtaskTemplates: async (role) => {
+    const response = await api.get(`/tasks/subtask-templates/${role}`);
+    return response.data;
+  },
+  // Submit subtasks status
+  submitSubtasksStatus: async (taskId) => {
+    const response = await api.post(`/tasks/${taskId}/subtasks/submit`);
     return response.data;
   }
 };

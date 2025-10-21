@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
+import Button from '../../../components/ui/Button';
 
 const TaskDetails = ({ 
   taskInfo = {},
   reviewerInfo = {},
-  projectInfo = {}
+  projectInfo = {},
+  taskId = null
 }) => {
   // Use props directly - parent should provide real data
   const mockTaskInfo = taskInfo;
@@ -207,32 +209,6 @@ const TaskDetails = ({
               />
             </div>
           </div>
-        </div>
-      </div>
-      {/* Quick Actions */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h4 className="text-base font-semibold text-foreground mb-3 flex items-center space-x-2">
-          <Icon name="Zap" size={18} className="text-primary" />
-          <span>Quick Actions</span>
-        </h4>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted transition-smooth text-left">
-            <Icon name="MessageSquare" size={16} className="text-primary" />
-            <span className="text-sm text-foreground">Add Comment</span>
-          </button>
-          <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted transition-smooth text-left">
-            <Icon name="Flag" size={16} className="text-primary" />
-            <span className="text-sm text-foreground">Flag Issue</span>
-          </button>
-          <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted transition-smooth text-left">
-            <Icon name="Users" size={16} className="text-primary" />
-            <span className="text-sm text-foreground">Request Collaboration</span>
-          </button>
-          <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted transition-smooth text-left">
-            <Icon name="Clock" size={16} className="text-primary" />
-            <span className="text-sm text-foreground">Request Extension</span>
-          </button>
         </div>
       </div>
     </div>

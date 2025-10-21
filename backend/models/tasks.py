@@ -32,6 +32,7 @@ class Task(Base):
     creator = relationship("User", foreign_keys=[created_by], back_populates="created_tasks")
     status_ref = relationship("LuTaskStatus")
     history = relationship("TaskHistory", back_populates="task", cascade="all, delete-orphan")
+    subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan", order_by="Subtask.order_index")
 
 
 class TaskHistory(Base):
@@ -50,3 +51,25 @@ class TaskHistory(Base):
     # Relationships
     task = relationship("Task", back_populates="history")
     changed_by_user = relationship("User")
+
+
+class Subtask(Base):
+    """Subtask model for breaking down tasks into smaller items"""
+    __tablename__ = "subtasks"
+    
+    subtask_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    status = Column(String, nullable=False, default='pending')  # pending, in_progress, completed, cancelled
+    assigned_to = Column(UUID(as_uuid=True), ForeignKey("user.user_id"))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("user.user_id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    order_index = Column(Integer, default=0)
+    
+    # Relationships
+    task = relationship("Task", back_populates="subtasks")
+    assigned_user = relationship("User", foreign_keys=[assigned_to])
+    creator = relationship("User", foreign_keys=[created_by])

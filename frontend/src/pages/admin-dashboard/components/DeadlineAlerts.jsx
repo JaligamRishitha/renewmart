@@ -43,8 +43,8 @@ const DeadlineAlerts = ({ alerts }) => {
     return deadlineDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const handleViewTask = (taskId) => {
-    navigate('/document-review', { state: { taskId } });
+  const handleViewTask = (alert) => {
+    navigate('/document-review', { state: { landId: alert.landId, taskId: alert.taskId } });
   };
 
   return (
@@ -96,20 +96,11 @@ const DeadlineAlerts = ({ alerts }) => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleViewTask(alert?.taskId)}
+                          onClick={() => handleViewTask(alert)}
                           className="text-current hover:bg-current/10"
                         >
                           View Task
                         </Button>
-                        {alert?.urgency === 'critical' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-current hover:bg-current/10"
-                          >
-                            Escalate
-                          </Button>
-                        )}
                       </div>
                     </div>
                   </div>

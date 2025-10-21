@@ -1,120 +1,438 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import Header from '../../components/ui/Header';
-import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
-import NotificationIndicator from '../../components/ui/NotificationIndicator';
-import QuickActions from '../../components/ui/QuickActions';
-import DocumentViewer from './components/DocumentViewer';
-import ReviewPanel from './components/ReviewPanel';
-import TaskDetails from './components/TaskDetails';
-import CollaborationTools from './components/CollaborationTools';
-import Icon from '../../components/AppIcon';
-import Button from '../../components/ui/Button';
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import Header from "../../components/ui/Header";
+import WorkflowBreadcrumbs from "../../components/ui/WorkflowBreadcrumbs";
+import NotificationIndicator from "../../components/ui/NotificationIndicator";
+import QuickActions from "../../components/ui/QuickActions";
+import DocumentViewer from "./components/DocumentViewer";
+import ReviewPanel from "./components/ReviewPanel";
+import TaskDetails from "./components/TaskDetails";
+import CollaborationTools from "./components/CollaborationTools";
+import RoleStatusTracking from "./components/RoleStatusTracking";
+import Icon from "../../components/AppIcon";
+import Button from "../../components/ui/Button";
+import { taskAPI, documentsAPI, landsAPI, reviewsAPI } from "../../services/api";
 
 const DocumentReview = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+
   const [selectedDocument, setSelectedDocument] = useState(null);
-  const [reviewerRole, setReviewerRole] = useState('analyst');
-  const [activeTab, setActiveTab] = useState('review');
+  const [reviewerRole, setReviewerRole] = useState("re_sales_advisor");
+  const [activeTab, setActiveTab] = useState("review");
   const [annotations, setAnnotations] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentTask, setCurrentTask] = useState(null);
+  const [currentLand, setCurrentLand] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [subtasks, setSubtasks] = useState([]);
+  const [error, setError] = useState(null);
+  const [allTasksForLand, setAllTasksForLand] = useState([]);
+  const [isRoleChanging, setIsRoleChanging] = useState(false);
+  const [roleStatuses, setRoleStatuses] = useState({});
+  const [isPublishing, setIsPublishing] = useState(false);
 
-  // Mock reviewer roles for demonstration
   const reviewerRoles = [
-    { id: 'sales_advisor', label: 'RE Sales Advisor', icon: 'TrendingUp' },
-    { id: 'analyst', label: 'RE Analyst', icon: 'Calculator' },
-    { id: 'governance_lead', label: 'RE Governance Lead', icon: 'Shield' }
+    { id: "re_sales_advisor", label: "RE Sales Advisor", icon: "TrendingUp" },
+    { id: "re_analyst", label: "RE Analyst", icon: "Calculator" },
+    { id: "re_governance_lead", label: "RE Governance Lead", icon: "Shield" },
   ];
 
   const tabs = [
-    { id: 'review', label: 'Review', icon: 'FileCheck' },
-    { id: 'task', label: 'Task Details', icon: 'Clock' },
-    { id: 'collaboration', label: 'Collaboration', icon: 'Users' }
+    { id: "review", label: "Review", icon: "FileCheck" },
+    { id: "task", label: "Task Details", icon: "Clock" },
+    { id: "collaboration", label: "Collaboration", icon: "Users" },
   ];
 
-  useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+  /** 🧩 Create Default Subtasks */
+  const createDefaultSubtasks = async (taskId, assignedRole) => {
+    try {
+      const templates = await taskAPI.getSubtaskTemplates(assignedRole);
+      const defaultSubtasks = templates?.templates || [];
 
-    // Mock notifications
-    setNotifications([
-      {
-        id: 'notif-1',
-        type: 'info',
-        title: 'New Document Assigned',
-        message: 'Land ownership certificate requires your review',
-        timestamp: new Date()?.toISOString()
+      for (const subtask of defaultSubtasks) {
+        await taskAPI.createSubtask(taskId, {
+          title: subtask.title,
+          description: `${subtask.section} - ${subtask.title}`,
+          status: "pending",
+          order_index: subtask.order,
+        });
       }
-    ]);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleDocumentSelect = (document) => {
-    setSelectedDocument(document);
+      console.log(`✅ Created ${defaultSubtasks.length} default subtasks for ${taskId}`);
+    } catch (err) {
+      console.error("Error creating default subtasks:", err);
+    }
   };
 
-  const handleAddAnnotation = (annotation) => {
-    setAnnotations(prev => [...prev, annotation]);
+  /** 🧩 Update Role Status */
+  const updateRoleStatus = useCallback(async (roleId, statusData) => {
+    const landId = currentLand?.land_id;
+    
+    if (!landId) {
+      console.warn('[DocumentReview] Cannot update role status: No land ID available');
+      return;
+    }
+
+    // Update local state first for immediate UI feedback
+    setRoleStatuses(prev => ({
+      ...prev,
+      [roleId]: {
+        ...prev[roleId],
+        ...statusData,
+        updatedAt: new Date().toISOString()
+      }
+    }));
+
+    // Persist to database
+    try {
+      await reviewsAPI.saveReviewStatus(landId, roleId, {
+        ...statusData,
+        updatedAt: new Date().toISOString()
+      });
+      console.log('[DocumentReview] Review status saved to database:', roleId);
+    } catch (error) {
+      console.error('[DocumentReview] Failed to save review status:', error);
+      // Still keep the local state update even if API fails
+    }
+  }, [currentLand]);
+
+  /** 🧩 Handle Approve from ReviewPanel */
+  const handleApproveReview = async (reviewData) => {
+    console.log('[DocumentReview] Approve clicked with data:', reviewData);
+    
+    // Update role status to approved
+    await updateRoleStatus(reviewerRole, {
+      status: 'approved',
+      approvedAt: new Date().toISOString(),
+      reviewData: reviewData,
+      subtasksCompleted: subtasks.filter(s => s.status === 'completed').length,
+      totalSubtasks: subtasks.length,
+      documentsApproved: reviewData.documentsApproved || 0,
+      totalDocuments: reviewData.totalDocuments || 0,
+      reviewerName: user?.first_name + ' ' + user?.last_name,
+      rating: reviewData.overallRating,
+      comments: reviewData.comments,
+      justification: reviewData.justification
+    });
+
+    // Show success notification
+    setNotifications([{
+      id: Date.now(),
+      type: 'success',
+      title: 'Review Approved',
+      message: `${reviewerRoles.find(r => r.id === reviewerRole)?.label} review has been approved successfully!`,
+      timestamp: new Date()
+    }]);
   };
 
-  const handleDeleteAnnotation = (annotationId) => {
-    setAnnotations(prev => prev?.filter(ann => ann?.id !== annotationId));
+  /** 🧩 Handle Publish */
+  const handlePublish = async (roleId) => {
+    setIsPublishing(true);
+    try {
+      console.log('[DocumentReview] Publishing review for role:', roleId);
+      
+      // Update role status to published
+      await updateRoleStatus(roleId, {
+        published: true,
+        publishedAt: new Date().toISOString()
+      });
+
+      // Check if this is the first published review
+      const allRoles = ['re_sales_advisor', 're_analyst', 're_governance_lead'];
+      const updatedStatuses = { ...roleStatuses };
+      updatedStatuses[roleId] = { ...updatedStatuses[roleId], published: true };
+      
+      const publishedCount = allRoles.filter(role => 
+        updatedStatuses[role]?.published === true
+      ).length;
+
+      const allPublished = publishedCount === allRoles.length;
+
+      // Show appropriate notification based on publish status
+      // Backend automatically publishes to marketplace after first reviewer publishes
+      if (publishedCount === 1) {
+        // First reviewer - land is now published to marketplace
+        setNotifications([{
+          id: Date.now(),
+          type: 'success',
+          title: 'Project Published to Marketplace!',
+          message: `${reviewerRoles.find(r => r.id === roleId)?.label} review published! The project "${currentLand.title || 'Project'}" is now visible to investors in the marketplace.`,
+          timestamp: new Date()
+        }]);
+      } else if (allPublished) {
+        // All reviewers have published
+        setNotifications([{
+          id: Date.now(),
+          type: 'success',
+          title: 'All Reviews Complete!',
+          message: `${reviewerRoles.find(r => r.id === roleId)?.label} review published! All three reviewer roles have now completed their reviews.`,
+          timestamp: new Date()
+        }]);
+      } else {
+        // Additional reviewer (not first, not last)
+        setNotifications([{
+          id: Date.now(),
+          type: 'success',
+          title: 'Review Published',
+          message: `${reviewerRoles.find(r => r.id === roleId)?.label} review has been published successfully! (${publishedCount} of ${allRoles.length} reviewers completed)`,
+          timestamp: new Date()
+        }]);
+      }
+    } catch (error) {
+      console.error('[DocumentReview] Error publishing:', error);
+      setNotifications([{
+        id: Date.now(),
+        type: 'error',
+        title: 'Publish Failed',
+        message: 'Failed to publish review. Please try again.',
+        timestamp: new Date()
+      }]);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
-  const handleReviewAction = (action, data) => {
-    const actionMessages = {
-      approve: 'Document approved successfully',
-      reject: 'Document rejected with comments',
-      clarification: 'Clarification requested from landowner',
-      save: 'Review progress saved'
+  /** 🧩 Main Fetch */
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const taskId = location.state?.taskId || new URLSearchParams(location.search).get("taskId");
+      const landId = location.state?.landId || new URLSearchParams(location.search).get("landId");
+
+      console.log("[DocumentReview] Fetching Data:", { taskId, landId });
+
+      let task = null;
+      let land = null;
+      let docs = [];
+
+      // CASE 1: TaskId given
+      if (taskId) {
+        task = await taskAPI.getTaskById(taskId);
+      }
+      // CASE 2: LandId given
+      else if (landId) {
+        const tasks = await taskAPI.getTasks({ land_id: landId });
+        setAllTasksForLand(tasks);
+        task = tasks.find((t) => t.assigned_to === user?.user_id) || tasks[0];
+      }
+      // CASE 3: No params → user’s first assigned task
+      else {
+        const myTasks = await taskAPI.getTasksAssignedToMe();
+        if (myTasks.length === 0) {
+          setError("No tasks assigned to you");
+          setIsLoading(false);
+          return;
+        }
+        task = myTasks[0];
+      }
+
+      if (!task) {
+        setError("No valid task found");
+        setIsLoading(false);
+        return;
+      }
+
+      setCurrentTask(task);
+      setReviewerRole(task.assigned_role || "re_sales_advisor");
+
+      // Land + Documents
+      if (task.land_id) {
+        land = await landsAPI.getLandById(task.land_id);
+        setCurrentLand(land);
+        docs = await documentsAPI.getDocuments(task.land_id);
+        setDocuments(docs);
+        if (docs.length > 0) setSelectedDocument(docs[0]);
+      }
+
+      // Subtasks
+      let taskSubtasks = await taskAPI.getSubtasks(task.task_id);
+      if (!taskSubtasks || taskSubtasks.length === 0) {
+        await createDefaultSubtasks(task.task_id, task.assigned_role);
+        taskSubtasks = await taskAPI.getSubtasks(task.task_id);
+      }
+      setSubtasks(taskSubtasks);
+
+      setNotifications([
+        {
+          id: "notif-1",
+          type: "success",
+          title: "Data Loaded",
+          message: "Document review data loaded successfully",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } catch (err) {
+      console.error("❌ Fetch error:", err);
+      setError("Failed to load data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [location.state, location.search, user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  /** 🧩 Fetch Review Statuses from Database */
+  useEffect(() => {
+    const fetchReviewStatuses = async () => {
+      if (!currentLand?.land_id) return;
+
+      try {
+        console.log('[DocumentReview] Fetching review statuses for land:', currentLand.land_id);
+        const statuses = await reviewsAPI.getAllReviewStatuses(currentLand.land_id);
+        
+        if (statuses && Object.keys(statuses).length > 0) {
+          setRoleStatuses(statuses);
+          console.log('[DocumentReview] Review statuses loaded from database:', statuses);
+        }
+      } catch (error) {
+        console.error('[DocumentReview] Failed to fetch review statuses:', error);
+        // Don't show error to user - just use default empty state
+      }
     };
 
-    setNotifications(prev => [...prev, {
-      id: `notif-${Date.now()}`,
-      type: action === 'approve' ? 'success' : action === 'reject' ? 'error' : 'info',
-      title: 'Review Action Completed',
-      message: actionMessages?.[action],
-      timestamp: new Date()?.toISOString()
-    }]);
+    fetchReviewStatuses();
+  }, [currentLand?.land_id]);
 
-    if (action === 'approve' || action === 'reject') {
-      // Simulate navigation to next task or dashboard
-      setTimeout(() => {
-        navigate('/admin-dashboard');
-      }, 2000);
+  /** 🧩 Role Switching */
+  const handleRoleChange = async (newRole) => {
+    if (isRoleChanging || reviewerRole === newRole) return;
+  
+    setIsRoleChanging(true);
+    setIsLoading(true);
+  
+    try {
+      // Fetch all tasks for the current land
+      const landId = currentTask?.land_id || currentLand?.land_id;
+      if (!landId) throw new Error("No land selected");
+  
+      const tasksForLand = await taskAPI.getTasks({ land_id: landId });
+  
+      // Filter for tasks with this role AND assigned to current user
+      const roleTask = tasksForLand.find(
+        t => t.assigned_role === newRole && t.assigned_to === user?.user_id
+      );
+  
+      if (!roleTask) {
+        setNotifications(prev => [
+          ...prev,
+          {
+            id: `role-missing-${Date.now()}`,
+            type: 'error',
+            title: 'No Task',
+            message: `No task assigned for ${newRole} to you`,
+          },
+        ]);
+        setCurrentTask(null); // clear current task
+        setSubtasks([]);       // clear subtasks
+        setReviewerRole(newRole); // still update role
+        return;
+      }
+  
+      // Fetch subtasks
+      let subtasksForRole = await taskAPI.getSubtasks(roleTask.task_id);
+      if (!subtasksForRole || subtasksForRole.length === 0) {
+        await createDefaultSubtasks(roleTask.task_id, roleTask.assigned_role);
+        subtasksForRole = await taskAPI.getSubtasks(roleTask.task_id);
+      }
+  
+      // Update state
+      setCurrentTask(roleTask);
+      setReviewerRole(newRole);
+      setSubtasks(subtasksForRole);
+  
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: `role-switched-${Date.now()}`,
+          type: 'success',
+          title: 'Role switched',
+          message: `Now viewing ${newRole}`,
+        },
+      ]);
+    } catch (err) {
+      console.error(err);
+      setNotifications(prev => [
+        ...prev,
+        {
+          id: `role-error-${Date.now()}`,
+          type: 'error',
+          title: 'Error',
+          message: err.message,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+      setIsRoleChanging(false);
+    }
+  };
+  
+  
+  /** 🧩 Annotation & Subtask handlers */
+  const handleAddAnnotation = (a) => setAnnotations((prev) => [...prev, a]);
+  const handleDeleteAnnotation = (id) => setAnnotations((p) => p.filter((a) => a.id !== id));
+
+  const handleSubtaskUpdate = async (subtaskId, updates) => {
+    if (!currentTask) return;
+    await taskAPI.updateSubtask(currentTask.task_id, subtaskId, updates);
+    const updated = await taskAPI.getSubtasks(currentTask.task_id);
+    setSubtasks(updated);
+  };
+
+  const handleAddSubtask = async (data) => {
+    if (!currentTask) return;
+    await taskAPI.createSubtask(currentTask.task_id, data);
+    const updated = await taskAPI.getSubtasks(currentTask.task_id);
+    setSubtasks(updated);
+  };
+
+  /** 🧩 Review Actions */
+  const handleReviewAction = async (action) => {
+    if (!currentTask) return;
+    const newStatus = action === "approve" ? "completed" : action === "reject" ? "rejected" : null;
+
+    try {
+      if (newStatus) await taskAPI.updateTask(currentTask.task_id, { status: newStatus });
+      setNotifications((p) => [
+        ...p,
+        {
+          id: `action-${Date.now()}`,
+          type: newStatus ? "success" : "info",
+          title: "Review Updated",
+          message: `Task ${action} successfully`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      if (newStatus) setTimeout(() => navigate("/admin-dashboard"), 2000);
+    } catch (err) {
+      console.error("Review action failed:", err);
     }
   };
 
-  const handleQuickAction = (actionId) => {
-    switch (actionId) {
-      case 'approve': handleReviewAction('approve', {});
-        break;
-      case 'request-changes': handleReviewAction('clarification', {});
-        break;
-      case 'reject': handleReviewAction('reject', {});
-        break;
-      default:
-        console.log('Quick action:', actionId);
-    }
+  const handleQuickAction = (id) => {
+    if (id === "approve") handleReviewAction("approve");
+    else if (id === "reject") handleReviewAction("reject");
+    else if (id === "request-changes") handleReviewAction("clarification");
   };
 
+  const handleViewDocument = (doc) => setSelectedDocument(doc);
+  const handleEditDocument = (docId) =>
+    console.log("Edit document:", docId);
+
+  /** 🧩 UI Render */
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header userRole="admin" />
-        <div className="pt-16">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <Icon name="Loader2" size={48} className="text-primary animate-spin mx-auto mb-4" />
-              <p className="text-lg font-medium text-foreground">Loading document review...</p>
-              <p className="text-sm text-muted-foreground">Preparing your review workspace</p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Icon name="Loader2" size={48} className="animate-spin text-primary mx-auto" />
+          <p className="text-lg font-medium mt-3 text-foreground">Loading document review...</p>
         </div>
       </div>
     );
@@ -124,164 +442,158 @@ const DocumentReview = () => {
     <div className="min-h-screen bg-background">
       <Header userRole="admin" />
       <WorkflowBreadcrumbs />
-      <div className="pt-16">
-        <div className="max-w-9xl mx-auto p-4 lg:p-6">
-          {/* Page Header */}
-          <div className="mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">
-                  Document Review
-                </h1>
-                <p className="text-muted-foreground">
-                  Review and evaluate land documentation for renewable energy projects
-                </p>
-              </div>
-              
-              {/* Reviewer Role Selector */}
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-foreground">Role:</span>
-                <div className="flex items-center space-x-1 bg-muted rounded-lg p-1">
-                  {reviewerRoles?.map((role) => (
-                    <button
-                      key={role?.id}
-                      onClick={() => setReviewerRole(role?.id)}
-                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-smooth ${
-                        reviewerRole === role?.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background'
-                      }`}
-                    >
-                      <Icon name={role?.icon} size={16} />
-                      <span className="hidden sm:inline">{role?.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+      <div className="pt-16 max-w-9xl mx-auto p-4 lg:p-6">
+        {/* HEADER */}
+        <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">Document Review</h1>
+            <p className="text-muted-foreground">Review and evaluate project documentation</p>
           </div>
 
-          {/* Main Content */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Document Viewer - Takes up 2 columns on xl screens */}
-            <div className="xl:col-span-2">
-              <DocumentViewer
-                selectedDocument={selectedDocument}
-                onDocumentSelect={handleDocumentSelect}
-                annotations={annotations}
-                onAddAnnotation={handleAddAnnotation}
-                onDeleteAnnotation={handleDeleteAnnotation}
-              />
-            </div>
-
-            {/* Right Panel - Takes up 1 column on xl screens */}
-            <div className="space-y-6">
-              {/* Tab Navigation */}
-              <div className="bg-card border border-border rounded-lg overflow-hidden">
-                <div className="flex border-b border-border">
-                  {tabs?.map((tab) => (
-                    <button
-                      key={tab?.id}
-                      onClick={() => setActiveTab(tab?.id)}
-                      className={`flex-1 flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium transition-smooth ${
-                        activeTab === tab?.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <Icon name={tab?.icon} size={16} />
-                      <span className="hidden sm:inline">{tab?.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab Content */}
-                <div className="h-96 lg:h-[600px] overflow-hidden">
-                  {activeTab === 'review' && (
-                    <ReviewPanel
-                      reviewerRole={reviewerRole}
-                      documentCategory="ownership"
-                      onApprove={(data) => handleReviewAction('approve', data)}
-                      onReject={(data) => handleReviewAction('reject', data)}
-                      onRequestClarification={(data) => handleReviewAction('clarification', data)}
-                      onSaveProgress={(data) => handleReviewAction('save', data)}
-                    />
-                  )}
-                  
-                  {activeTab === 'task' && (
-                    <div className="p-4 h-full overflow-y-auto">
-                      <TaskDetails />
-                    </div>
-                  )}
-                  
-                  {activeTab === 'collaboration' && (
-                    <div className="p-4 h-full overflow-y-auto">
-                      <CollaborationTools
-                        onAddComment={(comment) => console.log('Add comment:', comment)}
-                        onAssignReviewer={(reviewerId) => console.log('Assign reviewer:', reviewerId)}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Bar */}
-          <div className="mt-6 bg-card border border-border rounded-lg p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <Icon name="Clock" size={16} className="text-muted-foreground" />
-                  <span className="text-sm text-foreground">
-                    Last updated: {new Date()?.toLocaleTimeString()}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Icon name="User" size={16} className="text-muted-foreground" />
-                  <span className="text-sm text-foreground">
-                    Reviewer: {reviewerRoles?.find(r => r?.id === reviewerRole)?.label}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/admin-dashboard')}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium">Role:</span>
+            <div className="flex bg-muted rounded-lg p-1">
+              {reviewerRoles.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => handleRoleChange(r.id)}
+                  disabled={isRoleChanging}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm ${
+                    reviewerRole === r.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <Icon name="ArrowLeft" size={16} />
-                  Back to Dashboard
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => handleReviewAction('save', {})}
-                >
-                  <Icon name="Save" size={16} />
-                  Save Progress
-                </Button>
-              </div>
+                  <Icon name={r.icon} size={16} />
+                  <span>{r.label}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
+
+        {/* GRID */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
+            <DocumentViewer
+              documents={documents}
+              selectedDocument={selectedDocument}
+              onDocumentSelect={setSelectedDocument}
+              annotations={annotations}
+              onAddAnnotation={handleAddAnnotation}
+              onDeleteAnnotation={handleDeleteAnnotation}
+            />
+          </div>
+
+          <div className="space-y-6">
+            {/* Tabs */}
+            <div className="bg-card border rounded-lg overflow-hidden">
+              <div className="flex border-b">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 flex items-center justify-center px-4 py-3 text-sm ${
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Icon name={tab.icon} size={16} />
+                    <span className="ml-1">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-[850px] overflow-hidden relative">
+                {activeTab === "review" && (
+                  <ReviewPanel
+                    reviewerRole={reviewerRole}
+                    currentTask={currentTask}
+                    subtasks={subtasks}
+                    currentUser={user}
+                    onSubtaskUpdate={handleSubtaskUpdate}
+                    onAddSubtask={handleAddSubtask}
+                    onViewDocument={handleViewDocument}
+                    onEditDocument={handleEditDocument}
+                    onApprove={handleApproveReview}
+                  />
+                )}
+                {activeTab === "task" && (
+                  <div className="p-4 h-full overflow-y-auto">
+                    <TaskDetails
+                      taskId={currentTask?.task_id}
+                      taskInfo={
+                        currentTask
+                          ? {
+                              id: currentTask.task_id,
+                              title: currentTask.title || currentTask.task_type,
+                              status: currentTask.status,
+                              assignedDate: currentTask.created_at,
+                              dueDate: currentTask.due_date,
+                            }
+                          : {}
+                      }
+                      reviewerInfo={
+                        currentTask
+                          ? {
+                              name: currentTask.assigned_to_name || "N/A",
+                              role: currentTask.assigned_role || reviewerRole,
+                              department: "RE Division",
+                            }
+                          : {}
+                      }
+                      projectInfo={
+                        currentLand
+                          ? {
+                              name: currentLand.title || "N/A",
+                              location: currentLand.location || "N/A",
+                              reviewedDocuments: documents.filter((d) => d.status === "approved").length,
+                              totalDocuments: documents.length,
+                            }
+                          : {}
+                      }
+                    />
+                  </div>
+                )}
+                {activeTab === "collaboration" && (
+                  <div className="p-4 h-full overflow-y-auto">
+                    <CollaborationTools />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Role Status Tracking */}
+            <RoleStatusTracking
+              roleStatuses={roleStatuses}
+              onPublish={handlePublish}
+              isPublishing={isPublishing}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-6 bg-card border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center space-x-4">
+            <Icon name="Clock" size={16} className="text-muted-foreground" />
+            <span className="text-sm">Last updated: {new Date().toLocaleTimeString()}</span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin-dashboard")}>
+              <Icon name="ArrowLeft" size={16} /> Back
+            </Button>
+            <Button size="sm" onClick={() => handleReviewAction("save")}>
+              <Icon name="Save" size={16} /> Save Progress
+            </Button>
+          </div>
+        </div>
       </div>
-      {/* Notifications */}
-      <NotificationIndicator
-        notifications={notifications}
-        position="top-right"
-        maxVisible={3}
-        autoHide={true}
-        hideDelay={5000}
-      />
-      {/* Quick Actions */}
-      <QuickActions
-        userRole="admin"
-        currentContext="document-review"
-        onActionComplete={handleQuickAction}
-        position="bottom-right"
-      />
+
+      {/* Floating UI */}
+      <NotificationIndicator notifications={notifications} position="top-right" autoHide hideDelay={5000} />
+      <QuickActions userRole="admin" currentContext="document-review" onActionComplete={handleQuickAction} />
     </div>
   );
 };

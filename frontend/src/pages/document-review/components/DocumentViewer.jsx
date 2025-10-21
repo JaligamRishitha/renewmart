@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 import Button from '../../../components/ui/Button';
+import { documentsAPI } from '../../../services/api';
 
 const DocumentViewer = ({ 
   documents = [], 
@@ -15,6 +16,9 @@ const DocumentViewer = ({
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [annotationText, setAnnotationText] = useState('');
   const [annotationPosition, setAnnotationPosition] = useState(null);
+  const [downloading, setDownloading] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [documentBlob, setDocumentBlob] = useState(null);
   const viewerRef = useRef(null);
 
   const documentCategories = [
@@ -28,8 +32,40 @@ const DocumentViewer = ({
     { id: 'government', label: 'Government NOCs', icon: 'Shield', count: 3 }
   ];
 
-  // TODO: Get documents from API
-  const mockDocuments = [];
+  // Load document blob when selectedDocument changes
+  useEffect(() => {
+    const loadDocument = async () => {
+      if (selectedDocument?.document_id) {
+        try {
+          setViewing(selectedDocument.document_id);
+          console.log('Loading document for viewer:', selectedDocument.document_id);
+          const blob = await documentsAPI.downloadDocument(selectedDocument.document_id);
+          if (blob && blob.size > 0) {
+            setDocumentBlob(URL.createObjectURL(blob));
+          } else {
+            console.warn('Document has no data');
+            setDocumentBlob(null);
+          }
+        } catch (error) {
+          console.error('Error loading document:', error);
+          setDocumentBlob(null);
+        } finally {
+          setViewing(null);
+        }
+      } else {
+        setDocumentBlob(null);
+      }
+    };
+
+    loadDocument();
+
+    // Cleanup blob URL when component unmounts or document changes
+    return () => {
+      if (documentBlob) {
+        URL.revokeObjectURL(documentBlob);
+      }
+    };
+  }, [selectedDocument]);
 
   const handleZoomIn = () => {
     setZoomLevel(prev => Math.min(prev + 25, 200));
@@ -43,12 +79,43 @@ const DocumentViewer = ({
     setZoomLevel(100);
   };
 
-  const handleDownload = (document) => {
-    // Mock download functionality
-    const link = document?.createElement('a');
-    link.href = document?.url;
-    link.download = document?.name;
-    link?.click();
+  const handleDownload = async (doc) => {
+    if (!doc?.document_id) {
+      alert('Cannot download this document.');
+      return;
+    }
+
+    try {
+      setDownloading(doc.document_id);
+      console.log('Downloading document:', doc.document_id, doc.file_name);
+      
+      const blob = await documentsAPI.downloadDocument(doc.document_id);
+      
+      if (!blob) {
+        throw new Error('No data received from server');
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const linkElement = window.document.createElement('a');
+      linkElement.href = url;
+      linkElement.download = doc.file_name;
+      window.document.body.appendChild(linkElement);
+      linkElement.click();
+      window.document.body.removeChild(linkElement);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      alert('Failed to download: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'N/A';
+    const kb = bytes / 1024;
+    const mb = kb / 1024;
+    return mb >= 1 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(2)} KB`;
   };
 
   const handleViewerClick = (event) => {
@@ -116,49 +183,62 @@ const DocumentViewer = ({
       </div>
       {/* Document List */}
       <div className="border-b border-border p-4 max-h-48 overflow-y-auto">
-        <div className="space-y-2">
-          {mockDocuments?.map((doc) => (
-            <div
-              key={doc?.id}
-              onClick={() => onDocumentSelect(doc)}
-              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-smooth hover:bg-muted ${
-                selectedDocument?.id === doc?.id ? 'border-primary bg-primary/5' : 'border-border'
-              }`}
-            >
-              <div className="flex items-center space-x-3 flex-1 min-w-0">
-                <Icon 
-                  name={doc?.type === 'pdf' ? 'FileText' : 'Image'} 
-                  size={20} 
-                  className="text-primary flex-shrink-0" 
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-foreground truncate">
-                    {doc?.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {doc?.size} • {new Date(doc.uploadDate)?.toLocaleDateString()}
-                  </p>
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
+          <Icon name="FileText" size={16} className="mr-2 text-primary" />
+          Documents Review ({documents?.length || 0})
+        </h3>
+        {documents && documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <div
+                key={doc?.document_id}
+                onClick={() => onDocumentSelect(doc)}
+                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-smooth hover:bg-muted ${
+                  selectedDocument?.document_id === doc?.document_id ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+              >
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  <Icon 
+                    name={doc?.mime_type?.includes('pdf') ? 'FileText' : 'Image'} 
+                    size={20} 
+                    className="text-primary flex-shrink-0" 
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-foreground truncate">
+                      {doc?.file_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatFileSize(doc?.file_size)} • {doc?.document_type?.replace('_', ' ').toUpperCase()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(doc?.status)}`}>
+                    {doc?.status || 'pending'}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e?.stopPropagation();
+                      handleDownload(doc);
+                    }}
+                    disabled={downloading === doc?.document_id}
+                    className="w-8 h-8"
+                    title="Download Document"
+                  >
+                    <Icon name={downloading === doc?.document_id ? "Loader" : "Download"} size={16} />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 flex-shrink-0">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(doc?.status)}`}>
-                  {doc?.status}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e?.stopPropagation();
-                    handleDownload(doc);
-                  }}
-                  className="w-8 h-8"
-                >
-                  <Icon name="Download" size={16} />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Icon name="FolderOpen" size={48} className="mx-auto text-muted-foreground opacity-50 mb-2" />
+            <p className="text-sm text-muted-foreground">No documents available for review</p>
+          </div>
+        )}
       </div>
       {/* Document Viewer */}
       <div className="flex-1 flex flex-col">
@@ -217,10 +297,17 @@ const DocumentViewer = ({
 
         {/* Document Display */}
         <div className="flex-1 p-4 overflow-auto bg-muted/30">
-          {selectedDocument ? (
+          {viewing ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Icon name="Loader2" size={48} className="animate-spin text-primary mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">Loading document...</p>
+              </div>
+            </div>
+          ) : selectedDocument && documentBlob ? (
             <div
               ref={viewerRef}
-              className="relative mx-auto bg-white shadow-elevation-2 rounded-lg overflow-hidden cursor-crosshair"
+              className="relative mx-auto bg-white shadow-elevation-2 rounded-lg overflow-hidden"
               style={{
                 width: `${zoomLevel}%`,
                 maxWidth: '100%',
@@ -228,11 +315,20 @@ const DocumentViewer = ({
               }}
               onClick={handleViewerClick}
             >
-              <Image
-                src={selectedDocument?.url}
-                alt={selectedDocument?.name}
-                className="w-full h-auto"
-              />
+              {selectedDocument?.mime_type?.includes('pdf') ? (
+                <iframe
+                  src={documentBlob}
+                  className="w-full h-full"
+                  style={{ minHeight: '800px' }}
+                  title={selectedDocument?.file_name}
+                />
+              ) : (
+                <img
+                  src={documentBlob}
+                  alt={selectedDocument?.file_name}
+                  className="w-full h-auto"
+                />
+              )}
               
               {/* Annotations */}
               {annotations?.map((annotation) => (
@@ -263,6 +359,24 @@ const DocumentViewer = ({
                   <Icon name="Plus" size={12} className="text-primary-foreground" />
                 </div>
               )}
+            </div>
+          ) : selectedDocument && !documentBlob ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Icon name="AlertCircle" size={64} className="text-warning mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Document Not Available</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  This document could not be loaded. It may need to be re-uploaded.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDocumentSelect(null)}
+                >
+                  <Icon name="X" size={16} />
+                  Clear Selection
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">

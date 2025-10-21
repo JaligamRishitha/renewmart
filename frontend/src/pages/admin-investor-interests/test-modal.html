@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investor Details Modal Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Investor Details Modal Test</h1>
+        
+        <button 
+            id="openModal" 
+            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        >
+            Open Investor Details Modal
+        </button>
+        
+        <!-- Modal -->
+        <div id="modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+            <!-- Backdrop -->
+            <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+            
+            <!-- Modal -->
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-2xl transform overflow-hidden rounded-lg bg-white shadow-xl transition-all">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            Investor Details
+                        </h3>
+                        <button
+                            id="closeModal"
+                            class="rounded-lg p-1 hover:bg-gray-100 transition-colors"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    
+                    <!-- Content -->
+                    <div class="px-6 py-4">
+                        <div class="space-y-6">
+                            <!-- Investor Information -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                        👤
+                                    </div>
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-gray-900">
+                                            John Smith
+                                        </h4>
+                                        <p class="text-sm text-gray-600">
+                                            Investor Profile
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Email Address
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            📧 john.smith@example.com
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Phone Number
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            📞 +1 (555) 123-4567
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Project Information -->
+                            <div class="bg-green-50 rounded-lg p-4">
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                        📍
+                                    </div>
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-gray-900">
+                                            Solar Farm Project - Texas
+                                        </h4>
+                                        <p class="text-sm text-gray-600">
+                                            Project of Interest
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Project Type
+                                        </label>
+                                        <div class="mt-1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                SOLAR
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Location
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            📍 Austin, Texas
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Capacity
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            ⚡ 50 MW
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Price per MWh
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            💰 $45/MWh
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Interest Details -->
+                            <div class="bg-purple-50 rounded-lg p-4">
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                                        ❤️
+                                    </div>
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-gray-900">
+                                            Interest Details
+                                        </h4>
+                                        <p class="text-sm text-gray-600">
+                                            Investment Information
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Interest Status
+                                        </label>
+                                        <div class="mt-1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-yellow-100 text-yellow-800 border-yellow-200">
+                                                pending
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Interest Date
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            📅 January 15, 2024 at 2:30 PM
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Investment Amount
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            💰 $2,500,000
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Interest Level
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1 flex items-center">
+                                            📈 High
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Comments Section -->
+                            <div class="bg-yellow-50 rounded-lg p-4">
+                                <div class="flex items-center space-x-3 mb-3">
+                                    <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                                        💬
+                                    </div>
+                                    <h4 class="text-md font-semibold text-gray-900">
+                                        Investor Comments
+                                    </h4>
+                                </div>
+                                <div class="bg-white rounded-lg p-3 border border-yellow-200">
+                                    <p class="text-sm text-gray-900 leading-relaxed">
+                                        "I am very interested in this renewable energy project! The location and capacity are perfect for our investment portfolio. I would like to schedule a call to discuss the project details further."
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+                                <button
+                                    id="closeModalBtn"
+                                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                                >
+                                    View Project Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('modal');
+        const openModalBtn = document.getElementById('openModal');
+        const closeModalBtn = document.getElementById('closeModal');
+        const closeModalBtn2 = document.getElementById('closeModalBtn');
+
+        openModalBtn.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        closeModalBtn2.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        // Close modal when clicking backdrop
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

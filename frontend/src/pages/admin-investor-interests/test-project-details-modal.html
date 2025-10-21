@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Details Modal Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Project Details & Task Tracking Modal Test</h1>
+        
+        <button 
+            id="openModal" 
+            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        >
+            Open Project Details Modal
+        </button>
+        
+        <!-- Modal -->
+        <div id="modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+            <!-- Backdrop -->
+            <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+            
+            <!-- Modal -->
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative w-full max-w-6xl transform overflow-hidden rounded-lg bg-white shadow-xl transition-all">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            Project Details & Task Tracking
+                        </h3>
+                        <button
+                            id="closeModal"
+                            class="rounded-lg p-1 hover:bg-gray-100 transition-colors"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    
+                    <!-- Content -->
+                    <div class="px-6 py-4 max-h-96 overflow-y-auto">
+                        <div class="space-y-6">
+                            <!-- Project Overview -->
+                            <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+                                <div class="flex items-center space-x-4 mb-4">
+                                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                                        📍
+                                    </div>
+                                    <div class="flex-1">
+                                        <h3 class="text-2xl font-bold text-gray-900 mb-2">
+                                            Solar Farm Project - Texas
+                                        </h3>
+                                        <p class="text-lg text-gray-600">
+                                            Austin, Texas
+                                        </p>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-3xl font-bold text-green-600">
+                                            75%
+                                        </div>
+                                        <div class="text-sm text-gray-600">Complete</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div class="bg-white rounded-lg p-4">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                Project Type
+                                            </span>
+                                        </div>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            SOLAR
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-lg p-4">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                Capacity
+                                            </span>
+                                        </div>
+                                        <div class="text-lg font-semibold text-gray-900">
+                                            50 MW
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-lg p-4">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                Price
+                                            </span>
+                                        </div>
+                                        <div class="text-lg font-semibold text-gray-900">
+                                            $45/MWh
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-lg p-4">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                Created
+                                            </span>
+                                        </div>
+                                        <div class="text-sm text-gray-900">
+                                            January 15, 2024
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Task Progress Overview -->
+                            <div class="bg-white rounded-lg border border-gray-200 p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h4 class="text-lg font-semibold text-gray-900 flex items-center">
+                                        ✅ Task Progress Overview
+                                    </h4>
+                                    <div class="flex items-center space-x-4">
+                                        <div class="text-sm text-gray-600">
+                                            8 Total Tasks
+                                        </div>
+                                        <button class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">
+                                            🔄 Refresh
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="mb-6">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-sm font-medium text-gray-900">Overall Progress</span>
+                                        <span class="text-sm text-gray-600">75%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-3">
+                                        <div class="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500" style="width: 75%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Task Status Summary -->
+                                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                                    <div class="text-center">
+                                        <div class="text-2xl font-bold text-yellow-600">1</div>
+                                        <div class="text-xs text-gray-600">Pending</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-2xl font-bold text-blue-600">1</div>
+                                        <div class="text-xs text-gray-600">In Progress</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-2xl font-bold text-green-600">6</div>
+                                        <div class="text-xs text-gray-600">Completed</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-2xl font-bold text-gray-600">0</div>
+                                        <div class="text-xs text-gray-600">On Hold</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-2xl font-bold text-red-600">0</div>
+                                        <div class="text-xs text-gray-600">Cancelled</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Task Details -->
+                            <div class="bg-white rounded-lg border border-gray-200">
+                                <div class="px-6 py-4 border-b border-gray-200">
+                                    <h4 class="text-lg font-semibold text-gray-900 flex items-center">
+                                        📋 Task Details
+                                    </h4>
+                                </div>
+                                
+                                <div class="p-6">
+                                    <div class="space-y-4">
+                                        <!-- Task 1 -->
+                                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                                            <div class="flex items-start justify-between">
+                                                <div class="flex-1">
+                                                    <div class="flex items-center space-x-3 mb-2">
+                                                        <h5 class="font-semibold text-gray-900">Site Assessment</h5>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-green-100 text-green-800 border-green-200">
+                                                            COMPLETED
+                                                        </span>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                            HIGH
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <p class="text-sm text-gray-600 mb-3">Complete environmental and technical site assessment</p>
+                                                    
+                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                        <div>
+                                                            <span class="text-gray-600">Assigned to:</span>
+                                                            <span class="ml-2 text-gray-900">John Smith</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Created:</span>
+                                                            <span class="ml-2 text-gray-900">Jan 15, 2024</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Due Date:</span>
+                                                            <span class="ml-2 text-gray-900">Jan 30, 2024</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="ml-4 flex items-center space-x-2">
+                                                    ✅
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Task 2 -->
+                                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                                            <div class="flex items-start justify-between">
+                                                <div class="flex-1">
+                                                    <div class="flex items-center space-x-3 mb-2">
+                                                        <h5 class="font-semibold text-gray-900">Permit Application</h5>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
+                                                            IN PROGRESS
+                                                        </span>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                            HIGH
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <p class="text-sm text-gray-600 mb-3">Submit all required permits and regulatory approvals</p>
+                                                    
+                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                        <div>
+                                                            <span class="text-gray-600">Assigned to:</span>
+                                                            <span class="ml-2 text-gray-900">Sarah Johnson</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Created:</span>
+                                                            <span class="ml-2 text-gray-900">Jan 20, 2024</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Due Date:</span>
+                                                            <span class="ml-2 text-gray-900">Feb 15, 2024</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="ml-4 flex items-center space-x-2">
+                                                    🕐
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Task 3 -->
+                                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                                            <div class="flex items-start justify-between">
+                                                <div class="flex-1">
+                                                    <div class="flex items-center space-x-3 mb-2">
+                                                        <h5 class="font-semibold text-gray-900">Financial Modeling</h5>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-yellow-100 text-yellow-800 border-yellow-200">
+                                                            PENDING
+                                                        </span>
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            MEDIUM
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <p class="text-sm text-gray-600 mb-3">Develop comprehensive financial model and ROI analysis</p>
+                                                    
+                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                        <div>
+                                                            <span class="text-gray-600">Assigned to:</span>
+                                                            <span class="ml-2 text-gray-900">Mike Chen</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Created:</span>
+                                                            <span class="ml-2 text-gray-900">Jan 25, 2024</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-gray-600">Due Date:</span>
+                                                            <span class="ml-2 text-gray-900">Feb 28, 2024</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="ml-4 flex items-center space-x-2">
+                                                    ⭕
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Project Information -->
+                            <div class="bg-blue-50 rounded-lg p-6">
+                                <div class="flex items-center space-x-3 mb-4">
+                                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                        ℹ️
+                                    </div>
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-gray-900">
+                                            Project Information
+                                        </h4>
+                                        <p class="text-sm text-gray-600">
+                                            Additional project details and metadata
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Project Status
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1">
+                                            Active
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Landowner
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1">
+                                            Texas Solar Corp
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Investment Amount
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1">
+                                            $2,500,000
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                            Interest Level
+                                        </label>
+                                        <p class="text-sm text-gray-900 mt-1">
+                                            High
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+                                <button
+                                    id="closeModalBtn"
+                                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                                >
+                                    View Full Project
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('modal');
+        const openModalBtn = document.getElementById('openModal');
+        const closeModalBtn = document.getElementById('closeModal');
+        const closeModalBtn2 = document.getElementById('closeModalBtn');
+
+        openModalBtn.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        closeModalBtn2.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        // Close modal when clicking backdrop
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

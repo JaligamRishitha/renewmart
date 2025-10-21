@@ -34,7 +34,11 @@ class User(Base):
         foreign_keys="Task.created_by",
         back_populates="creator"
     )
-    uploaded_documents = relationship("Document", back_populates="uploader")
+    uploaded_documents = relationship(
+        "Document",
+        foreign_keys="Document.uploaded_by",
+        back_populates="uploader"
+    )
     investor_interests = relationship("InvestorInterest", back_populates="investor")
 
 

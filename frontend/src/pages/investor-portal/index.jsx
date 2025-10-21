@@ -11,6 +11,7 @@ import FilterPanel from './components/FilterPanel';
 import MapView from './components/MapView';
 import SavedSearches from './components/SavedSearches';
 import WatchlistPanel from './components/WatchlistPanel';
+import { landsAPI } from '../../services/api';
 
 const InvestorPortal = () => {
   const navigate = useNavigate();
@@ -33,13 +34,32 @@ const InvestorPortal = () => {
     availableOnly: true
   });
 
-  // TODO: Replace with real API integration
-  const mockProjects = [];
+  // Projects state
+  const [projects, setProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const mockSavedSearches = [];
   const mockWatchlistItems = [];
 
+  // Fetch published projects
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setIsLoadingProjects(true);
+        const data = await landsAPI.getMarketplaceProjects();
+        setProjects(data || []);
+      } catch (error) {
+        console.error('Error fetching marketplace projects:', error);
+        setProjects([]);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+    
+    fetchProjects();
+  }, []);
+
   // Filter projects based on current filters
-  const filteredProjects = mockProjects?.filter(project => {
+  const filteredProjects = projects?.filter(project => {
     if (filters?.search && !project?.name?.toLowerCase()?.includes(filters?.search?.toLowerCase()) && 
         !project?.location?.toLowerCase()?.includes(filters?.search?.toLowerCase())) {
       return false;
@@ -127,24 +147,18 @@ const InvestorPortal = () => {
 
   const handleViewDetails = (projectId) => {
     console.log('View details for project:', projectId);
-    // In a real app, this would navigate to project details page
-    const notification = {
-      id: `view-${projectId}-${Date.now()}`,
-      type: 'info',
-      message: 'Project details would open in a new view.',
-      timestamp: new Date()
-    };
-    setNotifications(prev => [...prev, notification]);
+    // Navigate to project details page
+    navigate(`/project-details/${projectId}`);
   };
 
   const handleExpressInterest = (projectId) => {
-    const project = mockProjects?.find(p => p?.id === projectId);
+    const project = projects?.find(p => p?.id === projectId);
     if (project) {
       const notification = {
         id: `interest-${projectId}-${Date.now()}`,
         type: 'success',
         title: 'Interest Expressed',
-        message: `Your interest in "${project?.name}" has been recorded. The project team will contact you soon.`,
+        message: `Your interest in "${project?.name || project?.title}" has been recorded. The project team will contact you soon.`,
         timestamp: new Date()
       };
       setNotifications(prev => [...prev, notification]);
@@ -152,7 +166,7 @@ const InvestorPortal = () => {
   };
 
   const handleSaveToWatchlist = (projectId) => {
-    const project = mockProjects?.find(p => p?.id === projectId);
+    const project = projects?.find(p => p?.id === projectId);
     const isAlreadyWatchlisted = watchlistItems?.some(item => item?.id === projectId);
     
     if (isAlreadyWatchlisted) {
@@ -160,7 +174,7 @@ const InvestorPortal = () => {
       const notification = {
         id: `remove-watchlist-${projectId}-${Date.now()}`,
         type: 'info',
-        message: `"${project?.name}" removed from watchlist.`,
+        message: `"${project?.name || project?.title}" removed from watchlist.`,
         timestamp: new Date()
       };
       setNotifications(prev => [...prev, notification]);
@@ -169,7 +183,7 @@ const InvestorPortal = () => {
       const notification = {
         id: `add-watchlist-${projectId}-${Date.now()}`,
         type: 'success',
-        message: `"${project?.name}" added to watchlist.`,
+        message: `"${project?.name || project?.title}" added to watchlist.`,
         timestamp: new Date()
       };
       setNotifications(prev => [...prev, notification]);
@@ -177,12 +191,12 @@ const InvestorPortal = () => {
   };
 
   const handleRemoveFromWatchlist = (projectId) => {
-    const project = mockProjects?.find(p => p?.id === projectId);
+    const project = projects?.find(p => p?.id === projectId);
     setWatchlistItems(prev => prev?.filter(item => item?.id !== projectId));
     const notification = {
       id: `remove-watchlist-${projectId}-${Date.now()}`,
       type: 'info',
-      message: `"${project?.name}" removed from watchlist.`,
+      message: `"${project?.name || project?.title}" removed from watchlist.`,
       timestamp: new Date()
     };
     setNotifications(prev => [...prev, notification]);
@@ -224,7 +238,7 @@ const InvestorPortal = () => {
 
   const handleProjectSelect = (projectId, action = null) => {
     if (projectId) {
-      const project = mockProjects?.find(p => p?.id === projectId);
+      const project = projects?.find(p => p?.id === projectId);
       setSelectedProject(project);
       
       if (action === 'view') {
@@ -366,7 +380,17 @@ const InvestorPortal = () => {
             </div>
 
             {/* Content Area */}
-            {viewMode === 'grid' ? (
+            {isLoadingProjects ? (
+              <div className="text-center py-12">
+                <Icon name="Loader2" size={64} className="text-primary mx-auto mb-4 animate-spin" />
+                <h3 className="font-heading font-semibold text-xl text-foreground mb-2">
+                  Loading Projects...
+                </h3>
+                <p className="text-muted-foreground">
+                  Fetching latest investment opportunities
+                </p>
+              </div>
+            ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {sortedProjects?.map((project) => (
                   <ProjectCard
@@ -390,23 +414,27 @@ const InvestorPortal = () => {
             )}
 
             {/* No Results */}
-            {sortedProjects?.length === 0 && (
+            {!isLoadingProjects && sortedProjects?.length === 0 && (
               <div className="text-center py-12">
                 <Icon name="Search" size={64} className="text-muted-foreground mx-auto mb-4" />
                 <h3 className="font-heading font-semibold text-xl text-foreground mb-2">
                   No projects found
                 </h3>
                 <p className="text-muted-foreground mb-4">
-                  Try adjusting your filters to see more opportunities
+                  {projects?.length === 0 
+                    ? 'No published projects available yet. Check back later for new opportunities!' 
+                    : 'Try adjusting your filters to see more opportunities'}
                 </p>
-                <Button
-                  variant="outline"
-                  onClick={handleClearFilters}
-                  iconName="RotateCcw"
-                  iconPosition="left"
-                >
-                  Reset Filters
-                </Button>
+                {projects?.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleClearFilters}
+                    iconName="RotateCcw"
+                    iconPosition="left"
+                  >
+                    Reset Filters
+                  </Button>
+                )}
               </div>
             )}
           </div>

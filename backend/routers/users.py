@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List
+from typing import List, Optional
 from datetime import timedelta
 from uuid import UUID
+from pydantic import validator
 import logging
 
 from database import get_db
@@ -13,7 +14,7 @@ from models.schemas import (
 )
 from auth import (
     get_password_hash, authenticate_user, create_access_token,
-    get_current_active_user, require_admin, ACCESS_TOKEN_EXPIRE_MINUTES
+    get_current_active_user, get_current_user, require_admin, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -276,14 +277,40 @@ async def list_users(
 @router.get("/{user_id}", response_model=User)
 async def get_user(
     user_id: UUID,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user by ID (admin only)."""
+    """Get user by ID. Admins can view anyone, users can view themselves, and reviewers can view users on same projects."""
+    user_roles = current_user.get("roles", [])
+    is_admin = "administrator" in user_roles
+    is_self = str(current_user["user_id"]) == str(user_id)
+    
+    # Admins and viewing own profile is always allowed
+    if not (is_admin or is_self):
+        # Check if the requesting user and target user share any projects
+        shared_project_query = text("""
+            SELECT COUNT(*) as count
+            FROM tasks t1
+            JOIN tasks t2 ON t1.land_id = t2.land_id
+            WHERE t1.assigned_to = CAST(:current_user_id AS uuid)
+              AND t2.assigned_to = CAST(:target_user_id AS uuid)
+        """)
+        
+        shared_result = db.execute(shared_project_query, {
+            "current_user_id": str(current_user["user_id"]),
+            "target_user_id": str(user_id)
+        }).fetchone()
+        
+        if not shared_result or shared_result.count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this user's information"
+            )
+    
     query = text("""
         SELECT user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
         FROM \"user\"
-        WHERE user_id = :user_id
+        WHERE user_id = CAST(:user_id AS uuid)
     """)
     
     result = db.execute(query, {"user_id": str(user_id)}).fetchone()
@@ -409,3 +436,98 @@ async def get_available_roles(
         LuRole(role_key=row.role_key, label=row.label)
         for row in results
     ]
+
+class UserCreateWithRoles(UserCreate):
+    roles: List[str] = []
+    confirm_password: Optional[str] = None  # Optional for admin-created users
+    
+    @validator('confirm_password', always=True)
+    def set_confirm_password(cls, v, values):
+        # If confirm_password not provided, automatically set it to password
+        if v is None and 'password' in values:
+            return values['password']
+        return v
+
+@router.post("/admin/create", response_model=User, status_code=status.HTTP_201_CREATED)
+async def create_user_by_admin(
+    user_data: UserCreateWithRoles,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a new user with roles (admin only)."""
+    try:
+        # Check if user already exists
+        check_query = text("SELECT user_id FROM \"user\" WHERE email = :email")
+        existing_user = db.execute(check_query, {"email": user_data.email}).fetchone()
+        
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Hash password
+        hashed_password = get_password_hash(user_data.password)
+        
+        # Create user
+        insert_query = text("""
+            INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, is_active)
+            VALUES (:email, :password_hash, :first_name, :last_name, :phone, :is_active)
+            RETURNING user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
+        """)
+        
+        result = db.execute(insert_query, {
+            "email": user_data.email,
+            "password_hash": hashed_password,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+            "phone": user_data.phone,
+            "is_active": user_data.is_active if user_data.is_active is not None else True
+        }).fetchone()
+        
+        user_id = result.user_id
+        
+        # Assign roles if provided
+        if user_data.roles:
+            for role_key in user_data.roles:
+                # Verify role exists
+                role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key")
+                if not db.execute(role_check, {"role_key": role_key}).fetchone():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid role: {role_key}"
+                    )
+                
+                # Assign role
+                role_insert = text("""
+                    INSERT INTO user_roles (user_id, role_key)
+                    VALUES (:user_id, :role_key)
+                    ON CONFLICT (user_id, role_key) DO NOTHING
+                """)
+                db.execute(role_insert, {
+                    "user_id": str(user_id),
+                    "role_key": role_key
+                })
+        
+        db.commit()
+        
+        return User(
+            user_id=result.user_id,
+            email=result.email,
+            first_name=result.first_name,
+            last_name=result.last_name,
+            phone=result.phone,
+            is_active=result.is_active,
+            created_at=result.created_at,
+            updated_at=result.updated_at
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )

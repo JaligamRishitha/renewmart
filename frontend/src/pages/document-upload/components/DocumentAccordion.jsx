@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
+import { documentsAPI } from '../../../services/api';
 
 
 const DocumentAccordion = ({ 
@@ -12,6 +13,7 @@ const DocumentAccordion = ({
   onSectionToggle 
 }) => {
   const [draggedOver, setDraggedOver] = useState(null);
+  const [downloading, setDownloading] = useState(null);
 
   const handleDragOver = (e, sectionId) => {
     e?.preventDefault();
@@ -96,6 +98,71 @@ const DocumentAccordion = ({
         return 'text-warning';
       default:
         return 'text-muted-foreground';
+    }
+  };
+
+  const handleViewDocument = async (file) => {
+    if (!file?.id) {
+      alert('Cannot view this document. It may not be uploaded yet.');
+      return;
+    }
+
+    try {
+      console.log('Viewing document:', file.id, file.name);
+      const blob = await documentsAPI.downloadDocument(file.id);
+      
+      if (!blob || blob.size === 0) {
+        alert('Document has no data. Please try re-uploading it.');
+        return;
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const newWindow = window.open(url, '_blank');
+      
+      if (!newWindow) {
+        alert('Pop-up blocked! Please allow pop-ups for this site.');
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 2000);
+    } catch (err) {
+      console.error('Error viewing document:', err);
+      alert('Failed to view document: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleDownloadDocument = async (file) => {
+    if (!file?.id) {
+      alert('Cannot download this document. It may not be uploaded yet.');
+      return;
+    }
+
+    try {
+      setDownloading(file.id);
+      console.log('Downloading document:', file.id, file.name);
+      
+      const blob = await documentsAPI.downloadDocument(file.id);
+      
+      if (!blob) {
+        throw new Error('No data received from server');
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const linkElement = window.document.createElement('a');
+      linkElement.href = url;
+      linkElement.download = file.name;
+      window.document.body.appendChild(linkElement);
+      linkElement.click();
+      window.document.body.removeChild(linkElement);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      alert('Failed to download: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -261,18 +328,33 @@ const DocumentAccordion = ({
                           </div>
                           
                           <div className="flex items-center space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {/* Preview functionality */}}
-                            >
-                              <Icon name="Eye" size={16} />
-                            </Button>
+                            {file?.id && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewDocument(file)}
+                                  title="View Document"
+                                >
+                                  <Icon name="Eye" size={16} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDownloadDocument(file)}
+                                  disabled={downloading === file.id}
+                                  title="Download Document"
+                                >
+                                  <Icon name={downloading === file.id ? "Loader" : "Download"} size={16} />
+                                </Button>
+                              </>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => onFileRemove(section?.id, index)}
                               className="text-error hover:text-error hover:bg-error/10"
+                              title="Remove Document"
                             >
                               <Icon name="Trash2" size={16} />
                             </Button>

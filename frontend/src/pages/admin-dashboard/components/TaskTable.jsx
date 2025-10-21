@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
+import TaskEditModal from './TaskEditModal';
 
-const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignReviewer }) => {
+const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignReviewer, onTaskUpdate }) => {
   const [sortField, setSortField] = useState('startDate');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const navigate = useNavigate();
 
   const handleSort = (field) => {
@@ -46,8 +49,20 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
     return new Date(endDate) < new Date() && status !== 'Completed';
   };
 
-  const handleViewDocuments = (taskId) => {
-    navigate('/document-review', { state: { taskId } });
+  const handleViewDocuments = (task) => {
+    // Navigate with land_id and task_id to document review
+    navigate('/document-review', { state: { landId: task.landId, taskId: task.taskId } });
+  };
+
+  const handleEditTask = (task) => {
+    setSelectedTask(task);
+    setIsEditModalOpen(true);
+  };
+
+  const handleTaskUpdate = async (taskId, updateData, isPlaceholder, landId) => {
+    if (onTaskUpdate) {
+      await onTaskUpdate(taskId, updateData, isPlaceholder, landId);
+    }
   };
 
   const SortIcon = ({ field }) => {
@@ -75,6 +90,15 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                   }}
                   className="rounded border-border focus:ring-2 focus:ring-ring"
                 />
+              </th>
+              <th 
+                className="text-left px-4 py-3 font-body font-medium text-sm text-foreground cursor-pointer hover:bg-muted/70 transition-smooth"
+                onClick={() => handleSort('projectName')}
+              >
+                <div className="flex items-center space-x-2">
+                  <span>Project Name</span>
+                  <SortIcon field="projectName" />
+                </div>
               </th>
               <th 
                 className="text-left px-4 py-3 font-body font-medium text-sm text-foreground cursor-pointer hover:bg-muted/70 transition-smooth"
@@ -149,11 +173,30 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                 <td className="px-4 py-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Icon name="Folder" size={16} className="text-primary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <p className="font-body font-medium text-sm text-foreground">{task?.projectName}</p>
+                        {task?.investorInterestCount > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                            <Icon name="Users" size={12} className="mr-1" />
+                            {task.investorInterestCount}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-body text-xs text-muted-foreground">{task?.location}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                       <Icon name="User" size={16} className="text-primary" />
                     </div>
                     <div>
                       <p className="font-body font-medium text-sm text-foreground">{task?.landownerName}</p>
-                      <p className="font-body text-xs text-muted-foreground">{task?.location}</p>
+                      <p className="font-body text-xs text-muted-foreground">{task?.landownerEmail || 'No email'}</p>
                     </div>
                   </div>
                 </td>
@@ -164,25 +207,37 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                   </div>
                 </td>
                 <td className="px-4 py-4">
-                  <p className="font-body text-sm text-foreground">{task?.assignedReviewer}</p>
-                  <p className="font-body text-xs text-muted-foreground">{task?.reviewerRole}</p>
+                  <div>
+                    <p className="font-body text-sm text-foreground font-medium">{task?.assignedReviewer}</p>
+                    <p className="font-body text-xs text-muted-foreground">{task?.reviewerRole}</p>
+                  </div>
                 </td>
                 <td className="px-4 py-4">
                   <p className="font-body text-sm text-foreground">{formatDate(task?.startDate)}</p>
                 </td>
                 <td className="px-4 py-4">
-                  <p className={`font-body text-sm ${isOverdue(task?.endDate, task?.status) ? 'text-error font-medium' : 'text-foreground'}`}>
-                    {formatDate(task?.endDate)}
-                  </p>
-                  {isOverdue(task?.endDate, task?.status) && (
-                    <p className="font-body text-xs text-error">Overdue</p>
+                  {task?.endDate ? (
+                    <>
+                      <p className={`font-body text-sm ${isOverdue(task?.endDate, task?.status) ? 'text-error font-medium' : 'text-foreground'}`}>
+                        {formatDate(task?.endDate)}
+                      </p>
+                      {isOverdue(task?.endDate, task?.status) && (
+                        <p className="font-body text-xs text-error">Overdue</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="font-body text-sm text-muted-foreground">Not Assigned</p>
                   )}
                 </td>
                 <td className="px-4 py-4">
                   <StatusBadge status={task?.status} />
                 </td>
                 <td className="px-4 py-4">
-                  <StatusBadge status={task?.priority} />
+                  {task?.priority ? (
+                    <StatusBadge status={task?.priority} />
+                  ) : (
+                    <p className="font-body text-sm text-muted-foreground">Not Assigned</p>
+                  )}
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-center space-x-2">
@@ -191,21 +246,27 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                         variant="default"
                         size="sm"
                         onClick={() => onAssignReviewer && onAssignReviewer(task)}
-                        iconName="UserPlus"
+                        iconName="Plus"
                         iconSize={16}
-                      >
-                        Assign
-                      </Button>
+                        title="Assign Reviewer"
+                      />
                     )}
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleViewDocuments(task?.id)}
+                      onClick={() => handleEditTask(task)}
+                      iconName="Edit"
+                      iconSize={16}
+                      title="Edit Task"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewDocuments(task)}
                       iconName="Eye"
                       iconSize={16}
-                    >
-                      View
-                    </Button>
+                      title="View Task"
+                    />
                   </div>
                 </td>
               </tr>
@@ -232,13 +293,18 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                   className="rounded border-border focus:ring-2 focus:ring-ring"
                 />
                 <div>
-                  <p className="font-body font-medium text-sm text-foreground">{task?.landownerName}</p>
+                  <p className="font-body font-bold text-sm text-foreground">{task?.projectName}</p>
+                  <p className="font-body text-xs text-muted-foreground">{task?.landownerName}</p>
                   <p className="font-body text-xs text-muted-foreground">{task?.location}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <StatusBadge status={task?.status} size="sm" />
-                <StatusBadge status={task?.priority} size="sm" />
+                {task?.priority ? (
+                  <StatusBadge status={task?.priority} size="sm" />
+                ) : (
+                  <span className="font-body text-xs text-muted-foreground">No Priority</span>
+                )}
               </div>
             </div>
             
@@ -253,6 +319,7 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
               <div>
                 <p className="font-body text-xs text-muted-foreground mb-1">Reviewer</p>
                 <p className="font-body text-sm text-foreground">{task?.assignedReviewer}</p>
+                <p className="font-body text-xs text-muted-foreground">{task?.reviewerRole}</p>
               </div>
               <div>
                 <p className="font-body text-xs text-muted-foreground mb-1">Start Date</p>
@@ -260,9 +327,13 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
               </div>
               <div>
                 <p className="font-body text-xs text-muted-foreground mb-1">End Date</p>
-                <p className={`font-body text-sm ${isOverdue(task?.endDate, task?.status) ? 'text-error font-medium' : 'text-foreground'}`}>
-                  {formatDate(task?.endDate)}
-                </p>
+                {task?.endDate ? (
+                  <p className={`font-body text-sm ${isOverdue(task?.endDate, task?.status) ? 'text-error font-medium' : 'text-foreground'}`}>
+                    {formatDate(task?.endDate)}
+                  </p>
+                ) : (
+                  <p className="font-body text-sm text-muted-foreground">Not Assigned</p>
+                )}
               </div>
             </div>
             
@@ -276,26 +347,40 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                     variant="default"
                     size="sm"
                     onClick={() => onAssignReviewer && onAssignReviewer(task)}
-                    iconName="UserPlus"
-                    iconSize={14}
-                  >
-                    Assign
-                  </Button>
+                    iconName="Plus"
+                    iconSize={16}
+                    title="Assign Reviewer"
+                  />
                 )}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => handleViewDocuments(task?.id)}
+                  onClick={() => handleEditTask(task)}
+                  iconName="Edit"
+                  iconSize={16}
+                  title="Edit Task"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewDocuments(task)}
                   iconName="Eye"
-                  iconSize={14}
-                >
-                  View
-                </Button>
+                  iconSize={16}
+                  title="View Task"
+                />
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Edit Modal */}
+      <TaskEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        task={selectedTask}
+        onUpdate={handleTaskUpdate}
+      />
     </div>
   );
 };

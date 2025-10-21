@@ -4,7 +4,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 
-const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForReview, onDelete }) => {
+const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForReview, onDelete, onViewDocuments }) => {
   const navigate = useNavigate();
 
   const formatDate = (dateString) => {
@@ -21,7 +21,11 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
         onEdit(project);
         break;
       case 'view':
+        // Show modal instead of navigation
         onView(project);
+        break;
+      case 'documents':
+        onViewDocuments(project);
         break;
       case 'continue':
         onContinueDraft(project);
@@ -111,32 +115,15 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end space-x-2">
                     {project?.status === 'draft' && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAction('continue', project)}
-                          iconName="Edit"
-                          iconPosition="left"
-                        >
-                          Continue
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => handleAction('submit', project)}
-                          iconName="Send"
-                          iconPosition="left"
-                        >
-                          Submit
-                        </Button>
-                      </>
-                    )}
-                    {project?.status === 'under-review' && (
-                      <div className="text-sm text-muted-foreground flex items-center space-x-1">
-                        <Icon name="Clock" size={14} />
-                        <span>Awaiting Review</span>
-                      </div>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleAction('submit', project)}
+                        iconName="Send"
+                        iconPosition="left"
+                      >
+                        Submit
+                      </Button>
                     )}
                     {(project?.status === 'published' || project?.status === 'rtb') && (
                       <Button
@@ -152,19 +139,24 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleAction('documents', project)}
+                      iconName="FileText"
+                      title="View Documents"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleAction('view', project)}
                       iconName="Eye"
                       title="View Details"
                     />
-                    {(project?.status === 'draft' || project?.status === 'approved') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleAction('edit', project)}
-                        iconName="Edit"
-                        title="Edit Project"
-                      />
-                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAction('edit', project)}
+                      iconName="Edit"
+                      title="Edit & Upload Documents"
+                    />
                     {project?.status === 'draft' && (
                       <Button
                         variant="ghost"
@@ -224,28 +216,16 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
             
             <div className="space-y-2">
               {project?.status === 'draft' && (
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAction('continue', project)}
-                    iconName="Edit"
-                    iconPosition="left"
-                    className="flex-1"
-                  >
-                    Continue Draft
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleAction('submit', project)}
-                    iconName="Send"
-                    iconPosition="left"
-                    className="flex-1"
-                  >
-                    Submit
-                  </Button>
-                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleAction('submit', project)}
+                  iconName="Send"
+                  iconPosition="left"
+                  fullWidth
+                >
+                  Submit for Review
+                </Button>
               )}
               {project?.status === 'under-review' && (
                 <div className="text-sm text-center py-2 text-muted-foreground flex items-center justify-center space-x-1">
@@ -269,23 +249,30 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => handleAction('documents', project)}
+                  iconName="FileText"
+                  fullWidth
+                >
+                  Documents
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => handleAction('view', project)}
                   iconName="Eye"
                   fullWidth
                 >
-                  View Details
+                  View
                 </Button>
-                {(project?.status === 'draft' || project?.status === 'approved') && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAction('edit', project)}
-                    iconName="Edit"
-                    fullWidth
-                  >
-                    Edit
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleAction('edit', project)}
+                  iconName="Edit"
+                  fullWidth
+                >
+                  Edit
+                </Button>
                 {project?.status === 'draft' && (
                   <Button
                     variant="ghost"

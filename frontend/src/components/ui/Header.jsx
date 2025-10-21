@@ -21,7 +21,9 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
     },
     {
       label: 'Projects',
-      path: userRole === 'admin' ? '/document-review' : '/document-upload',
+      path: userRole === 'admin' ? '/document-review' : 
+            userRole === 'reviewer' ? '/reviewer-dashboard' :
+            '/landowner-project-status',
       icon: 'FolderOpen',
       roles: ['landowner', 'admin', 'reviewer'],
       badge: notifications?.projects || 0

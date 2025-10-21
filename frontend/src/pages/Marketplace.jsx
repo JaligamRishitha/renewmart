@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Grid, List, RefreshCw, Heart, Bookmark, MessageCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, Grid, List, RefreshCw, Heart, Bookmark, MessageCircle, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { landsAPI } from '../services/api';
 
 const Marketplace = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('relevance');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(true);
   const [activeTab, setActiveTab] = useState('saved');
+  const [projects, setProjects] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Filter states
   const [filters, setFilters] = useState({
@@ -21,66 +26,6 @@ const Marketplace = () => {
     timeline: ''
   });
 
-  // Sample project data matching the image
-  const [projects] = useState([
-    {
-      id: 1,
-      title: 'California Solar 50MW+',
-      type: 'Solar',
-      location: 'Riverside County, CA',
-      capacity: 75,
-      price: 48.50,
-      timeline: '6-12 months',
-      contract: '20 years',
-      status: 'New Listing',
-      image: '/api/placeholder/300/200',
-      saved: false,
-      liked: false
-    },
-    {
-      id: 2,
-      title: 'Texas Wind Projects',
-      type: 'Wind',
-      location: 'Lubbock County, TX',
-      capacity: 120,
-      price: 52.75,
-      timeline: '12-24 months',
-      contract: '25 years',
-      status: 'Hot',
-      image: '/api/placeholder/300/200',
-      saved: true,
-      liked: true
-    },
-    {
-      id: 3,
-      title: 'Nevada Solar Farm',
-      type: 'Solar',
-      location: 'Clark County, NV',
-      capacity: 60,
-      price: 46.25,
-      timeline: '0-6 months',
-      contract: '15 years',
-      status: 'New Listing',
-      image: '/api/placeholder/300/200',
-      saved: false,
-      liked: false
-    },
-    {
-      id: 4,
-      title: 'Oregon Hydro Project',
-      type: 'Hydro',
-      location: 'Columbia River, OR',
-      capacity: 85,
-      price: 55.00,
-      timeline: '24+ months',
-      contract: '30 years',
-      status: 'New Listing',
-      image: '/api/placeholder/300/200',
-      saved: true,
-      liked: false
-    }
-  ]);
-
   const [savedSearches] = useState([
     { name: 'California Solar 50MW+', type: 'Solar, California, 50-100MW', results: 12, time: '2 hours ago' },
     { name: 'Texas Wind Projects', type: 'Wind, Texas, $45-50/MWh', results: 8, time: '1 day ago' }
@@ -89,6 +34,24 @@ const Marketplace = () => {
   const [recentActivity] = useState([
     { name: 'Hydro Northeast', type: 'Hydro, Northeast, 6-12 months', results: 3, time: '3 days ago' }
   ]);
+
+  // Fetch published projects from marketplace
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setIsLoading(true);
+        const data = await landsAPI.getMarketplaceProjects();
+        setProjects(data || []);
+      } catch (error) {
+        console.error('Error fetching marketplace projects:', error);
+        setProjects([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchProjects();
+  }, []);
 
   const projectTypes = ['Solar', 'Wind', 'Hydroelectric', 'Biomass', 'Geothermal'];
   const timelineOptions = ['0-6 months', '6-12 months', '12-24 months', '24+ months'];
@@ -122,20 +85,63 @@ const Marketplace = () => {
     });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Hot': return 'bg-red-500';
-      case 'New Listing': return 'bg-green-500';
-      default: return 'bg-blue-500';
+  // Refresh projects function
+  const refreshProjects = async () => {
+    try {
+      setIsLoading(true);
+      const params = {};
+      
+      // Apply filters
+      if (filters.location) params.location = filters.location;
+      if (filters.capacityMin) params.min_capacity = parseFloat(filters.capacityMin);
+      if (filters.capacityMax) params.max_capacity = parseFloat(filters.capacityMax);
+      if (filters.priceMin) params.min_price = parseFloat(filters.priceMin);
+      if (filters.priceMax) params.max_price = parseFloat(filters.priceMax);
+      
+      const data = await landsAPI.getMarketplaceProjects(params);
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error refreshing marketplace projects:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleViewProjectDetails = (project) => {
+    const landId = project.id || project.land_id;
+    if (landId) {
+      navigate(`/project-details/${landId}`);
+    }
+  };
+
+  const getStatusColor = (project) => {
+    // Check if it's a new listing (published within last 7 days)
+    const publishedDate = new Date(project.publishedAt);
+    const daysSincePublished = (new Date() - publishedDate) / (1000 * 60 * 60 * 24);
+    
+    if (daysSincePublished <= 7) return 'bg-green-500';
+    if (project.interestCount > 5) return 'bg-red-500'; // Hot if many interests
+    return 'bg-blue-500';
+  };
+
+  const getStatusLabel = (project) => {
+    const publishedDate = new Date(project.publishedAt);
+    const daysSincePublished = (new Date() - publishedDate) / (1000 * 60 * 60 * 24);
+    
+    if (daysSincePublished <= 7) return 'New Listing';
+    if (project.interestCount > 5) return 'Hot';
+    return 'Available';
+  };
+
   const getTypeColor = (type) => {
-    switch (type) {
-      case 'Solar': return 'bg-yellow-100 text-yellow-800';
-      case 'Wind': return 'bg-blue-100 text-blue-800';
-      case 'Hydro': return 'bg-cyan-100 text-cyan-800';
-      case 'Hydroelectric': return 'bg-cyan-100 text-cyan-800';
+    const typeKey = type?.toLowerCase();
+    switch (typeKey) {
+      case 'solar': return 'bg-yellow-100 text-yellow-800';
+      case 'wind': return 'bg-blue-100 text-blue-800';
+      case 'hydro':
+      case 'hydroelectric': return 'bg-cyan-100 text-cyan-800';
+      case 'biomass': return 'bg-green-100 text-green-800';
+      case 'geothermal': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -204,8 +210,12 @@ const Marketplace = () => {
                 <List className="w-4 h-4" />
               </button>
             </div>
-            <button className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50">
-              <RefreshCw className="w-4 h-4" />
+            <button 
+              onClick={refreshProjects}
+              disabled={isLoading}
+              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
@@ -315,68 +325,95 @@ const Marketplace = () => {
         <div className="flex-1 flex">
           {/* Projects Grid */}
           <div className="flex-1 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              {projects.map(project => (
-                <div key={project.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-                  <div className="relative">
-                    <div className="h-48 bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center">
-                      <div className="text-white text-center">
-                        <div className="text-2xl font-bold mb-2">{project.type}</div>
-                        <div className="text-sm opacity-90">{project.location}</div>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <RefreshCw className="w-8 h-8 animate-spin text-green-600" />
+                <span className="ml-2 text-gray-600">Loading projects...</span>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <p className="text-gray-600 text-lg mb-2">No published projects available yet</p>
+                <p className="text-gray-500 text-sm">Check back later for new opportunities</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                {projects.map(project => (
+                  <div key={project.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="relative">
+                      <div className="h-48 bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center">
+                        <div className="text-white text-center">
+                          <div className="text-2xl font-bold mb-2">{project.type || project.energyType}</div>
+                          <div className="text-sm opacity-90">{project.location}</div>
+                        </div>
+                      </div>
+                      <div className="absolute top-3 left-3 flex space-x-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${getTypeColor(project.type || project.energyType)}`}>
+                          {project.type || project.energyType}
+                        </span>
+                        <span className={`px-2 py-1 text-xs font-medium text-white rounded ${getStatusColor(project)}`}>
+                          {getStatusLabel(project)}
+                        </span>
+                      </div>
+                      <div className="absolute top-3 right-3 flex space-x-1">
+                        <button className="p-1.5 bg-white/80 rounded-full hover:bg-white transition-colors">
+                          <Heart className={`w-4 h-4 ${project.liked ? 'text-red-500 fill-current' : 'text-gray-600'}`} />
+                        </button>
+                        <button className="p-1.5 bg-white/80 rounded-full hover:bg-white transition-colors">
+                          <Bookmark className={`w-4 h-4 ${project.saved ? 'text-blue-500 fill-current' : 'text-gray-600'}`} />
+                        </button>
                       </div>
                     </div>
-                    <div className="absolute top-3 left-3 flex space-x-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${getTypeColor(project.type)}`}>
-                        {project.type}
-                      </span>
-                      <span className={`px-2 py-1 text-xs font-medium text-white rounded ${getStatusColor(project.status)}`}>
-                        {project.status}
-                      </span>
-                    </div>
-                    <div className="absolute top-3 right-3 flex space-x-1">
-                      <button className="p-1.5 bg-white/80 rounded-full hover:bg-white transition-colors">
-                        <Heart className={`w-4 h-4 ${project.liked ? 'text-red-500 fill-current' : 'text-gray-600'}`} />
-                      </button>
-                      <button className="p-1.5 bg-white/80 rounded-full hover:bg-white transition-colors">
-                        <Bookmark className={`w-4 h-4 ${project.saved ? 'text-blue-500 fill-current' : 'text-gray-600'}`} />
-                      </button>
+                    
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">{project.title || project.name}</h3>
+                      <p className="text-sm text-gray-600 mb-3">{project.location}</p>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <div className="text-xs text-gray-500">Capacity</div>
+                          <div className="font-semibold">{project.capacity || project.capacityMW} MW</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Price</div>
+                          <div className="font-semibold">${project.price || project.pricePerMWh}/MWh</div>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <div className="text-xs text-gray-500">Timeline</div>
+                          <div className="text-sm">{project.timeline}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Contract</div>
+                          <div className="text-sm">{project.contract}</div>
+                        </div>
+                      </div>
+                      
+                      {project.interestCount > 0 && (
+                        <div className="mb-3 text-xs text-gray-600">
+                          {project.interestCount} {project.interestCount === 1 ? 'investor' : 'investors'} interested
+                        </div>
+                      )}
+                      
+                      <div className="flex space-x-2">
+                        <button 
+                          onClick={() => handleViewProjectDetails(project)}
+                          className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>View Details</span>
+                        </button>
+                        <button className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2">
+                          <MessageCircle className="w-4 h-4" />
+                          <span>Contact</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  
-                  <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 mb-2">{project.title}</h3>
-                    <p className="text-sm text-gray-600 mb-3">{project.location}</p>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <div className="text-xs text-gray-500">Capacity</div>
-                        <div className="font-semibold">{project.capacity} MW</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Price</div>
-                        <div className="font-semibold">${project.price}/MWh</div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <div className="text-xs text-gray-500">Timeline</div>
-                        <div className="text-sm">{project.timeline}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Contract</div>
-                        <div className="text-sm">{project.contract}</div>
-                      </div>
-                    </div>
-                    
-                    <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2">
-                      <MessageCircle className="w-4 h-4" />
-                      <span>Contact</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Activity Sidebar */}

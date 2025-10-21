@@ -40,6 +40,8 @@ class Land(Base):
     developer_name = Column(String)
     published_at = Column(DateTime(timezone=True))
     interest_locked_at = Column(DateTime(timezone=True))
+    project_priority = Column(String)  # Project-level priority (low, medium, high, critical)
+    project_due_date = Column(DateTime(timezone=True))  # Project-level due date
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

@@ -14,11 +14,17 @@ import RoleBasedRedirect from './components/RoleBasedRedirect';
 
 // Import new pages from landinvest_pro
 import AdminDashboard from './pages/admin-dashboard';
+import AdminMarketplace from './pages/admin-marketplace';
+import AdminInvestorInterests from './pages/admin-investor-interests';
 import InvestorPortal from './pages/investor-portal';
 import DocumentReview from './pages/document-review';
+import AdminDocumentReview from './pages/document-review/AdminDocumentReview';
 import DocumentUpload from './pages/document-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
+import LandownerProjectStatus from './pages/landowner-project-status';
 import ReviewerDashboard from './pages/reviewer-dashboard';
+import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
+import ProjectDetailsPage from './pages/project-details';
 import Register from './pages/register';
 
 const Routes = () => {
@@ -68,6 +74,20 @@ const Routes = () => {
           </ReviewerRoute>
         } />
         
+        {/* Admin Marketplace */}
+        <Route path="/admin-marketplace" element={
+          <ReviewerRoute>
+            <AdminMarketplace />
+          </ReviewerRoute>
+        } />
+        
+        {/* Admin Investor Interests */}
+        <Route path="/admin-investor-interests" element={
+          <ReviewerRoute>
+            <AdminInvestorInterests />
+          </ReviewerRoute>
+        } />
+        
         {/* Investor Portal */}
         <Route path="/investor-portal" element={
           <ProtectedRoute>
@@ -86,6 +106,11 @@ const Routes = () => {
             <DocumentReview />
           </ReviewerRoute>
         } />
+        <Route path="/admin-document-review" element={
+          <ReviewerRoute>
+            <AdminDocumentReview />
+          </ReviewerRoute>
+        } />
         
         {/* Landowner Dashboard */}
         <Route path="/landowner-dashboard" element={
@@ -94,10 +119,22 @@ const Routes = () => {
           </OwnerRoute>
         } />
         
+        {/* Landowner Project Status */}
+        <Route path="/landowner-project-status" element={
+          <OwnerRoute>
+            <LandownerProjectStatus />
+          </OwnerRoute>
+        } />
+        
         {/* Reviewer Dashboard (for RE Sales Advisor, RE Analyst, RE Governance Lead) */}
         <Route path="/reviewer-dashboard" element={
           <ReviewerRoute>
             <ReviewerDashboard />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer-dashboard/project/:landId" element={
+          <ReviewerRoute>
+            <ProjectDetails />
           </ReviewerRoute>
         } />
         
@@ -113,6 +150,13 @@ const Routes = () => {
           <ReviewerRoute>
             <DocumentManagement />
           </ReviewerRoute>
+        } />
+        
+        {/* Project Details Route */}
+        <Route path="/project-details/:landId" element={
+          <ProtectedRoute>
+            <ProjectDetailsPage />
+          </ProtectedRoute>
         } />
         
         <Route path="*" element={<NotFound />} />

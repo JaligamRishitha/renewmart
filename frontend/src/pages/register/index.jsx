@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
+import Sidebar from '../../components/ui/Sidebar';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
@@ -20,6 +21,7 @@ const Register = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -522,8 +524,12 @@ const Register = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="guest" />
+      <Sidebar 
+        isCollapsed={sidebarCollapsed} 
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
+      />
       <WorkflowBreadcrumbs />
-      <main className="pt-4 pb-20">
+      <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
         <div className="max-w-4xl mx-auto px-4 lg:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Registration Form */}

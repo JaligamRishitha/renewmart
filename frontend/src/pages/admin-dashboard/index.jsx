@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
+import Sidebar from '../../components/ui/Sidebar';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
@@ -14,7 +15,8 @@ import ActivityFeed from './components/ActivityFeed';
 import DeadlineAlerts from './components/DeadlineAlerts';
 import BulkActions from './components/BulkActions';
 import AssignReviewerModal from './components/AssignReviewerModal';
-import { landsAPI, taskAPI } from '../../services/api';
+import CreateUserModal from './components/CreateUserModal';
+import { landsAPI, taskAPI, usersAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
 
 const AdminDashboard = () => {
@@ -36,10 +38,23 @@ const AdminDashboard = () => {
   const [error, setError] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [tasksWithDetails, setTasksWithDetails] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     fetchAdminData();
   }, [filters.status]);
+
+  const getRoleLabel = (role) => {
+    const roleLabels = {
+      're_sales_advisor': 'RE Sales Advisor',
+      're_analyst': 'RE Analyst',
+      're_governance_lead': 'RE Governance Lead',
+      'administrator': 'Administrator'
+    };
+    return roleLabels[role] || role;
+  };
 
   const fetchAdminData = async () => {
     try {
@@ -59,8 +74,101 @@ const AdminDashboard = () => {
       console.log('[Admin Dashboard] Summary response:', summaryResponse);
       console.log('[Admin Dashboard] Number of projects:', projectsResponse?.length || 0);
       
+      // Log first project structure for debugging
+      if (projectsResponse && projectsResponse.length > 0) {
+        console.log('[Admin Dashboard] First project structure:', {
+          id: projectsResponse[0].id,
+          title: projectsResponse[0].title,
+          location_text: projectsResponse[0].location_text,
+          energy_key: projectsResponse[0].energy_key,
+          status: projectsResponse[0].status,
+          landowner_name: projectsResponse[0].landowner_name,
+          owner: projectsResponse[0].owner
+        });
+      }
+      
       setProjects(projectsResponse || []);
       setSummaryData(summaryResponse);
+
+      // Fetch tasks for each project with reviewer details
+      const tasksWithReviewers = await Promise.all(
+        (projectsResponse || []).map(async (project) => {
+          try {
+            // Fetch tasks for this land
+            const tasks = await taskAPI.getTasks({ land_id: project.id });
+            console.log(`[Admin Dashboard] Tasks for project ${project.id}:`, tasks);
+            
+            // If no tasks exist, create a placeholder entry so project still shows
+            if (!tasks || tasks.length === 0) {
+              console.log(`[Admin Dashboard] No tasks for project ${project.id}, creating placeholder`);
+              return [{
+                task_id: `placeholder-${project.id}`,
+                land_id: project.id,
+                status: 'pending',
+                created_at: project.created_at || project.submittedDate,
+                due_date: project.project_due_date || null,
+                priority: project.project_priority || null,
+                project,
+                reviewerName: 'Unassigned',
+                reviewerRole: 'Pending Assignment',
+                isPlaceholder: true
+              }];
+            }
+            
+            // Fetch reviewer details for each task
+            const tasksWithReviewerInfo = await Promise.all(
+              (tasks || []).map(async (task) => {
+                let reviewerInfo = null;
+                let reviewerRole = 'Unassigned';
+                let reviewerName = 'Unassigned';
+                
+                if (task.assigned_to) {
+                  try {
+                    reviewerInfo = await usersAPI.getUserById(task.assigned_to);
+                    reviewerName = `${reviewerInfo.first_name || ''} ${reviewerInfo.last_name || ''}`.trim() || reviewerInfo.email;
+                    reviewerRole = getRoleLabel(task.assigned_role || reviewerInfo.roles?.[0]);
+                  } catch (err) {
+                    console.error(`[Admin Dashboard] Failed to fetch reviewer ${task.assigned_to}:`, err);
+                  }
+                }
+                
+                return {
+                  ...task,
+                  project,
+                  reviewerInfo,
+                  reviewerName,
+                  reviewerRole,
+                  isPlaceholder: false
+                };
+              })
+            );
+            
+            return tasksWithReviewerInfo;
+          } catch (err) {
+            console.error(`[Admin Dashboard] Failed to fetch tasks for project ${project.id}:`, err);
+            // Even on error, create a placeholder so project shows
+            return [{
+              task_id: `placeholder-${project.id}`,
+              land_id: project.id,
+              status: 'pending',
+              created_at: project.created_at || project.submittedDate,
+              due_date: project.project_due_date || null,
+              priority: project.project_priority || null,
+              project,
+              reviewerName: 'Unassigned',
+              reviewerRole: 'Pending Assignment',
+              isPlaceholder: true
+            }];
+          }
+        })
+      );
+      
+      // Flatten the array of task arrays
+      const allTasks = tasksWithReviewers.flat();
+      console.log('[Admin Dashboard] All tasks with details (including placeholders):', allTasks);
+      console.log('[Admin Dashboard] Total entries to display:', allTasks.length);
+      setTasksWithDetails(allTasks);
+      
     } catch (err) {
       console.error('[Admin Dashboard] Error fetching admin data:', err);
       console.error('[Admin Dashboard] Error response:', err.response?.data);
@@ -114,26 +222,40 @@ const AdminDashboard = () => {
     return 'Low';
   };
 
-  // Transform projects to task format for the table
-  const tasksData = projects.map(project => ({
-    id: project.id,
-    landownerName: project.landownerName,
-    landownerEmail: project.landownerEmail,
-    landownerPhone: project.landownerPhone,
-    location: project.location,
-    projectType: project.projectType,
-    projectIcon: getProjectIcon(project.projectType),
-    assignedReviewer: "Unassigned", // TODO: Add reviewer assignment
-    reviewerRole: "Pending Assignment",
-    startDate: project.submittedDate,
-    endDate: project.lastUpdated,
-    status: getStatusLabel(project.status),
-    priority: getPriority(project.status),
-    title: project.title,
-    capacity: project.capacity,
-    energyType: project.energyType,
-    rawStatus: project.status
-  }));
+  // Transform tasks to table format with better field mapping
+  const tasksData = tasksWithDetails.map(task => {
+    const project = task.project || {};
+    
+    return {
+      id: task.task_id,
+      taskId: task.task_id,
+      landId: task.land_id || project.land_id || project.id,
+      projectName: project.title || project.name || 'Unnamed Project',
+      landownerName: project.landowner_name || project.landownerName || 
+                     project.owner?.first_name || project.owner?.email || 'Unknown',
+      landownerEmail: project.landowner_email || project.landownerEmail || 
+                     project.owner?.email || '',
+      landownerPhone: project.landowner_phone || project.landownerPhone || 
+                     project.owner?.phone || '',
+      location: project.location_text || project.location || 'N/A',
+      projectType: project.energy_key || project.energyType || project.projectType || 
+                   project.energy_type || 'N/A',
+      projectIcon: getProjectIcon(project.energy_key || project.energyType || project.projectType),
+      assignedReviewer: task.reviewerName || "Unassigned",
+      reviewerRole: task.reviewerRole || "Pending Assignment",
+      startDate: task.created_at || project.created_at || project.submittedDate,
+      endDate: task.due_date || null,
+      status: task.isPlaceholder ? 'Pending' : getStatusLabel(task.status),
+      priority: task.priority || null,
+      title: task.title || (task.task_type ? task.task_type.replace(/_/g, ' ').toUpperCase() : 'Review'),
+      capacity: project.capacity_mw || project.capacity,
+      energyType: project.energy_key || project.energyType,
+      rawStatus: task.status,
+      taskStatus: task.status,
+      isPlaceholder: task.isPlaceholder || false,
+      investorInterestCount: project.investorInterestCount || 0
+    };
+  });
 
   // Calculate metrics from summary data
   const metricsData = summaryData ? [
@@ -168,14 +290,159 @@ const AdminDashboard = () => {
       changeType: "neutral",
       icon: "Zap",
       color: "secondary"
+    },
+    {
+      title: "Investor Interest",
+      value: summaryData.totalInvestorInterests?.toString() || "0",
+      change: `${summaryData.totalInvestors || 0} investors`,
+      changeType: summaryData.totalInvestorInterests > 0 ? "increase" : "neutral",
+      icon: "Users",
+      color: "accent"
     }
   ] : [];
 
-  // Activities will be fetched from API (TODO: Implement activity feed API)
-  const activitiesData = [];
+  // Generate deadline alerts from tasks data
+  const alertsData = React.useMemo(() => {
+    const now = new Date();
+    const alerts = [];
 
-  // Deadline alerts will be fetched from API (TODO: Implement deadline alerts API)
-  const alertsData = [];
+    tasksData.forEach(task => {
+      if (!task.endDate) return;
+
+      const dueDate = new Date(task.endDate);
+      const diffInHours = (dueDate - now) / (1000 * 60 * 60);
+      const diffInDays = diffInHours / 24;
+
+      // Overdue tasks (critical)
+      if (diffInHours < 0 && task.rawStatus !== 'completed') {
+        alerts.push({
+          id: `overdue-${task.id}`,
+          taskId: task.taskId,
+          landId: task.landId,
+          taskTitle: task.title || task.projectName,
+          deadline: task.endDate,
+          assignedTo: task.assignedReviewer,
+          description: `${task.projectName} - ${task.projectType} project is overdue`,
+          urgency: 'critical',
+          projectName: task.projectName
+        });
+      }
+      // Due within 24 hours (critical)
+      else if (diffInHours > 0 && diffInHours <= 24 && task.rawStatus !== 'completed') {
+        alerts.push({
+          id: `urgent-${task.id}`,
+          taskId: task.taskId,
+          landId: task.landId,
+          taskTitle: task.title || task.projectName,
+          deadline: task.endDate,
+          assignedTo: task.assignedReviewer,
+          description: `${task.projectName} - Due in less than 24 hours`,
+          urgency: 'critical',
+          projectName: task.projectName
+        });
+      }
+      // Due within 3 days (warning)
+      else if (diffInDays > 1 && diffInDays <= 3 && task.rawStatus !== 'completed') {
+        alerts.push({
+          id: `warning-${task.id}`,
+          taskId: task.taskId,
+          landId: task.landId,
+          taskTitle: task.title || task.projectName,
+          deadline: task.endDate,
+          assignedTo: task.assignedReviewer,
+          description: `${task.projectName} - Due in ${Math.ceil(diffInDays)} days`,
+          urgency: 'warning',
+          projectName: task.projectName
+        });
+      }
+      // Due within 7 days (info)
+      else if (diffInDays > 3 && diffInDays <= 7 && task.rawStatus !== 'completed') {
+        alerts.push({
+          id: `info-${task.id}`,
+          taskId: task.taskId,
+          landId: task.landId,
+          taskTitle: task.title || task.projectName,
+          deadline: task.endDate,
+          assignedTo: task.assignedReviewer,
+          description: `${task.projectName} - Due in ${Math.ceil(diffInDays)} days`,
+          urgency: 'info',
+          projectName: task.projectName
+        });
+      }
+    });
+
+    // Sort by urgency and deadline
+    return alerts.sort((a, b) => {
+      const urgencyOrder = { critical: 0, warning: 1, info: 2 };
+      if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+      }
+      return new Date(a.deadline) - new Date(b.deadline);
+    });
+  }, [tasksData]);
+
+  // Generate recent activity from tasks data
+  const activitiesData = React.useMemo(() => {
+    const activities = [];
+
+    // Sort tasks by most recent update/creation
+    const sortedTasks = [...tasksWithDetails].sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0);
+      const dateB = new Date(b.updated_at || b.created_at || 0);
+      return dateB - dateA;
+    });
+
+    // Generate activities from tasks (limit to 20 most recent)
+    sortedTasks.slice(0, 20).forEach(task => {
+      const timestamp = task.updated_at || task.created_at;
+      if (!timestamp) return;
+
+      // Task assignment activity
+      if (task.assigned_to && task.reviewerName !== 'Unassigned') {
+        activities.push({
+          id: `assign-${task.task_id}`,
+          type: 'review_assigned',
+          user: 'Admin',
+          action: 'assigned',
+          target: `${task.reviewerName} to ${task.project?.title || 'project'}`,
+          details: `${task.title || task.task_type?.replace(/_/g, ' ')} - ${task.reviewerRole}`,
+          timestamp: timestamp
+        });
+      }
+
+      // Status change activity
+      if (task.status) {
+        const statusLabels = {
+          'pending': 'set status to Pending',
+          'in_progress': 'started working on',
+          'completed': 'completed',
+          'under_review': 'marked for review',
+          'approved': 'approved',
+          'rejected': 'rejected'
+        };
+        
+        activities.push({
+          id: `status-${task.task_id}`,
+          type: task.status === 'completed' ? 'task_completed' : 'status_changed',
+          user: task.reviewerName !== 'Unassigned' ? task.reviewerName : 'Admin',
+          action: statusLabels[task.status] || 'updated status for',
+          target: task.project?.title || 'project',
+          details: `${task.title || task.task_type?.replace(/_/g, ' ')}`,
+          timestamp: timestamp
+        });
+      }
+    });
+
+    // Remove duplicates and sort by timestamp
+    const uniqueActivities = activities
+      .filter((activity, index, self) => 
+        index === self.findIndex(a => a.id === activity.id)
+      )
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 15); // Limit to 15 most recent
+
+    return uniqueActivities;
+  }, [tasksWithDetails]);
 
   // Filter tasks based on current filters
   const filteredTasks = tasksData?.filter(task => {
@@ -235,6 +502,7 @@ const AdminDashboard = () => {
         task_type: assignmentData.taskType,
         description: assignmentData.description,
         assigned_to: assignmentData.assignedTo,
+        assigned_role: assignmentData.reviewerRole,  // Add assigned_role for auto-creating subtasks
         due_date: assignmentData.dueDate || null,
         priority: assignmentData.priority
       });
@@ -263,12 +531,59 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleTaskUpdate = async (taskId, updateData, isPlaceholder, landId) => {
+    try {
+      console.log('[Admin Dashboard] Updating task/project:', { taskId, updateData, isPlaceholder, landId });
+      
+      if (isPlaceholder) {
+        // For placeholder tasks, update the land/project record with metadata
+        console.log('[Admin Dashboard] Updating project metadata for land:', landId);
+        
+        // Store priority and due_date in land metadata or custom fields
+        const landUpdateData = {
+          project_priority: updateData.priority,
+          project_due_date: updateData.due_date
+        };
+        
+        await landsAPI.updateLand(landId, landUpdateData);
+        console.log('[Admin Dashboard] Project metadata updated successfully');
+      } else {
+        // For real tasks, update the task record
+        console.log('[Admin Dashboard] Updating task:', taskId);
+        await taskAPI.updateTask(taskId, updateData);
+        console.log('[Admin Dashboard] Task updated successfully');
+      }
+      
+      // Show success notification
+      const successNotification = {
+        id: Date.now(),
+        type: 'success',
+        title: isPlaceholder ? 'Project Updated' : 'Task Updated',
+        message: isPlaceholder 
+          ? 'Project priority and due date have been updated successfully' 
+          : 'Task details have been updated successfully',
+        timestamp: new Date()
+      };
+      setNotifications(prev => [successNotification, ...prev.slice(0, 4)]);
+
+      // Refresh data to reflect changes
+      await fetchAdminData();
+    } catch (err) {
+      console.error('[Admin Dashboard] Error updating:', err);
+      throw new Error(err.response?.data?.detail || 'Failed to update');
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="admin" notifications={{ dashboard: 3, projects: 7 }} />
+      <Sidebar 
+        isCollapsed={sidebarCollapsed} 
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
+      />
       <WorkflowBreadcrumbs />
-      <main className="pt-4 pb-20">
+      <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
         <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
           <div className="mb-6">
@@ -285,12 +600,36 @@ const AdminDashboard = () => {
               <div className="flex items-center space-x-3">
                 <Button
                   variant="outline"
+                  onClick={() => setShowCreateUserModal(true)}
+                  iconName="UserPlus"
+                  iconSize={18}
+                >
+                  Create Reviewer
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => navigate('/document-review')}
                   iconName="FileCheck"
                   iconSize={18}
                 >
                   Review Queue
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/admin-marketplace')}
+                  iconName="Store"
+                  iconSize={18}
+                >
+                  Marketplace
+                </Button>
+               {/* <Button
+                  variant="outline"
+                  onClick={() => navigate('/admin-document-review')}
+                  iconName="FolderCheck"
+                  iconSize={18}
+                >
+                  Document Review
+                </Button> */}
                 <Button
                   variant="default"
                   onClick={() => handleQuickAction('generate-report')}
@@ -329,7 +668,7 @@ const AdminDashboard = () => {
 
           {/* Metrics Cards */}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
               {metricsData?.map((metric, index) => (
                 <MetricsCard
                   key={index}
@@ -339,6 +678,7 @@ const AdminDashboard = () => {
                   changeType={metric?.changeType}
                   icon={metric?.icon}
                   color={metric?.color}
+                  onClick={metric?.title === "Investor Interest" ? () => navigate('/admin-investor-interests') : undefined}
                 />
               ))}
             </div>
@@ -397,6 +737,7 @@ const AdminDashboard = () => {
                     onTaskSelect={setSelectedTasks}
                     onBulkAction={handleBulkAction}
                     onAssignReviewer={handleAssignReviewer}
+                    onTaskUpdate={handleTaskUpdate}
                   />
                 )}
               </div>
@@ -437,6 +778,23 @@ const AdminDashboard = () => {
             setSelectedProject(null);
           }}
           onAssign={handleAssignSubmit}
+        />
+      )}
+
+      {/* Create User Modal */}
+      {showCreateUserModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateUserModal(false)}
+          onSuccess={() => {
+            const successNotification = {
+              id: Date.now(),
+              type: 'success',
+              title: 'User Created',
+              message: 'Reviewer account created successfully',
+              timestamp: new Date()
+            };
+            setNotifications(prev => [successNotification, ...prev.slice(0, 4)]);
+          }}
         />
       )}
     </div>

@@ -433,6 +433,8 @@ class LandUpdate(BaseSchema):
     timeline_text: Optional[str] = None
     contract_term_years: Optional[int] = None
     developer_name: Optional[str] = None
+    project_priority: Optional[str] = None
+    project_due_date: Optional[str] = None
 
 class Land(LandBase):
     land_id: UUID
@@ -440,6 +442,8 @@ class Land(LandBase):
     status: str
     published_at: Optional[datetime] = None
     interest_locked_at: Optional[datetime] = None
+    project_priority: Optional[str] = None
+    project_due_date: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -484,15 +488,20 @@ class LandSection(LandSectionBase):
 class DocumentBase(BaseSchema):
     document_type: Optional[str] = Field(None, max_length=100, description="Type of document")
     file_name: str = Field(..., max_length=255, description="Original file name")
-    file_path: str = Field(..., max_length=500, description="Storage file path")
+    file_path: Optional[str] = Field(None, max_length=500, description="Legacy storage file path (deprecated)")
     file_size: Optional[int] = Field(None, ge=0, le=104857600, description="File size in bytes (max 100MB)")
     mime_type: Optional[str] = Field(None, max_length=100, description="MIME type")
     is_draft: bool = Field(True, description="Whether document is in draft mode")
+    status: Optional[str] = Field("pending", max_length=50, description="Document approval status")
+    approved_by: Optional[UUID] = Field(None, description="Admin who approved/rejected the document")
+    approved_at: Optional[datetime] = Field(None, description="When the document was approved/rejected")
+    rejection_reason: Optional[str] = Field(None, description="Reason for rejection")
+    admin_comments: Optional[str] = Field(None, description="Admin comments")
 
     @validator('file_name')
     def validate_file_name(cls, v):
         # Check for valid file name characters
-        if not re.match(r'^[a-zA-Z0-9._-]+$', v):
+        if not re.match(r'^[a-zA-Z0-9._\- ]+$', v):
             raise ValueError('File name contains invalid characters')
         return v
 
@@ -506,6 +515,7 @@ class DocumentBase(BaseSchema):
                 'image/jpeg',
                 'image/png',
                 'image/gif',
+                'image/tiff',
                 'text/plain'
             ]
             if v not in allowed_types:
@@ -515,6 +525,8 @@ class DocumentBase(BaseSchema):
 class DocumentCreate(DocumentBase):
     land_id: Optional[UUID] = None
     land_section_id: Optional[UUID] = None
+    task_id: Optional[UUID] = None
+    subtask_id: Optional[UUID] = None
 
 class DocumentUpdate(BaseSchema):
     document_type: Optional[str] = None
@@ -524,6 +536,8 @@ class Document(DocumentBase):
     document_id: UUID
     land_id: Optional[UUID] = None
     land_section_id: Optional[UUID] = None
+    task_id: Optional[UUID] = None
+    subtask_id: Optional[UUID] = None
     uploaded_by: Optional[UUID] = None
     created_at: datetime
 
@@ -535,6 +549,7 @@ class TaskBase(BaseSchema):
     task_type: str = Field(..., min_length=1, max_length=100, description="Task type")
     description: Optional[str] = Field(None, max_length=1000, description="Task description")
     assigned_to: Optional[UUID] = Field(None, description="Assigned user")
+    assigned_role: Optional[str] = Field(None, description="Assigned reviewer role")
     priority: str = Field("medium", description="Task priority (low, medium, high, urgent)")
     due_date: Optional[date] = Field(None, description="Task due date")
 
@@ -579,6 +594,40 @@ class TaskHistory(TaskHistoryBase):
     changed_by: Optional[UUID] = None
     start_ts: datetime
     end_ts: Optional[datetime] = None
+
+# ============================================================================
+# SUBTASK SCHEMAS
+# ============================================================================
+
+class SubtaskBase(BaseSchema):
+    title: str = Field(..., min_length=1, max_length=255, description="Subtask title")
+    description: Optional[str] = Field(None, max_length=1000, description="Subtask description")
+    assigned_to: Optional[UUID] = Field(None, description="Assigned user")
+    status: str = Field("pending", description="Subtask status (pending, in_progress, completed, cancelled)")
+    order_index: int = Field(0, description="Order index for sorting")
+
+class SubtaskCreate(SubtaskBase):
+    # task_id comes from URL path parameter, not request body
+    pass
+
+class SubtaskUpdate(BaseSchema):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    assigned_to: Optional[UUID] = None
+    status: Optional[str] = None
+    order_index: Optional[int] = None
+
+class Subtask(SubtaskBase):
+    subtask_id: UUID
+    task_id: UUID
+    created_by: UUID
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+
+class SubtaskResponse(Subtask):
+    assigned_user: Optional['User'] = None
+    creator: Optional['User'] = None
 
 # ============================================================================
 # INVESTOR INTEREST SCHEMAS
@@ -709,6 +758,10 @@ class LandResponse(Land):
 class TaskResponse(Task):
     assigned_user: Optional['User'] = None
     history: Optional[List['TaskHistory']] = None
+    subtasks: Optional[List['SubtaskResponse']] = None
+    land_title: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    assigned_by_name: Optional[str] = None
 
 class TaskHistoryResponse(TaskHistory):
     changed_by_user: Optional['User'] = None

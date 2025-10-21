@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '../../components/ui/Header';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
@@ -14,6 +14,7 @@ import { landsAPI, documentsAPI } from '../../services/api';
 
 const DocumentUpload = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [expandedSections, setExpandedSections] = useState(['project-details']);
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [projectDetails, setProjectDetails] = useState({});
@@ -22,6 +23,9 @@ const DocumentUpload = () => {
   const [notifications, setNotifications] = useState([]);
   const [errors, setErrors] = useState({});
   const [showToast, setShowToast] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
 
   const documentSections = [
     {
@@ -107,6 +111,122 @@ const DocumentUpload = () => {
     }
   ];
 
+  // Load existing project data in edit mode
+  useEffect(() => {
+    const loadProjectData = async () => {
+      const projectId = location.state?.projectId;
+      const mode = location.state?.mode;
+      
+      if (projectId && (mode === 'edit' || mode === 'continue')) {
+        console.log('[Document Upload] Loading project for editing:', projectId);
+        setIsEditMode(true);
+        setEditingProjectId(projectId);
+        setIsLoadingProject(true);
+        
+        try {
+          // Fetch project details
+          const project = await landsAPI.getLandById(projectId);
+          console.log('[Document Upload] Loaded project:', project);
+          
+          // Populate ALL project details form fields
+          // Using exact backend field names from schemas.py
+          console.log('[Document Upload] Raw project data:', project);
+          
+          setProjectDetails({
+            // Basic Info (from LandBase schema)
+            projectName: project.title || '',
+            location: project.location_text || project.location || '',
+            landArea: String(project.area_acres || project.landArea || ''),
+            projectType: project.energy_key || project.energy_type || project.projectType || '',
+            capacity: String(project.capacity_mw || project.capacity || ''),
+            
+            // Pricing & Financial
+            pricePerMWh: String(project.price_per_mwh || project.pricePerMWh || ''),
+            estimatedBudget: project.estimated_budget || project.estimatedBudget || '',
+            
+            // Timeline & Contract
+            timeline: project.timeline_text || project.timeline || '',
+            contractDuration: project.contract_term_years ? `${project.contract_term_years}-years` : 
+                            (project.contractDuration || ''),
+            
+            // Additional Info
+            partners: project.developer_name || project.partners || '',
+            description: project.admin_notes || project.description || project.land_type || '',
+            additionalNotes: project.admin_notes || project.additional_notes || '',
+            
+            // Confirmation
+            detailsConfirmed: true
+          });
+          
+          console.log('[Document Upload] ✅ ALL Fields Populated from backend:', {
+            title: project.title,
+            location_text: project.location_text,
+            area_acres: project.area_acres,
+            energy_key: project.energy_key,
+            capacity_mw: project.capacity_mw,
+            price_per_mwh: project.price_per_mwh,
+            timeline_text: project.timeline_text,
+            contract_term_years: project.contract_term_years,
+            developer_name: project.developer_name,
+            admin_notes: project.admin_notes,
+            land_type: project.land_type
+          });
+          
+          // Fetch and load existing documents
+          try {
+            const documents = await documentsAPI.getDocuments(projectId);
+            console.log('[Document Upload] Loaded documents:', documents);
+            
+            // Group documents by type/section
+            const filesBySection = {};
+            documents.forEach(doc => {
+              const sectionId = doc.document_type || 'other';
+              if (!filesBySection[sectionId]) {
+                filesBySection[sectionId] = [];
+              }
+              // Create a file-like object for existing documents
+              filesBySection[sectionId].push({
+                name: doc.file_name || doc.document_type,
+                size: doc.file_size || 0,
+                type: doc.mime_type || 'application/pdf',
+                uploadedAt: doc.uploaded_at,
+                documentId: doc.document_id,
+                url: doc.file_path,
+                isExisting: true
+              });
+            });
+            
+            setUploadedFiles(filesBySection);
+          } catch (err) {
+            console.error('[Document Upload] Failed to load documents:', err);
+          }
+          
+          addNotification({
+            id: Date.now(),
+            type: 'info',
+            title: 'Project Loaded',
+            message: `Editing "${project.title || project.name}". You can update details and add more documents.`,
+            timestamp: new Date()
+          });
+          
+        } catch (err) {
+          console.error('[Document Upload] Failed to load project:', err);
+          addNotification({
+            id: Date.now(),
+            type: 'error',
+            title: 'Load Failed',
+            message: 'Failed to load project data. Starting fresh.',
+            timestamp: new Date()
+          });
+        } finally {
+          setIsLoadingProject(false);
+        }
+      }
+    };
+    
+    loadProjectData();
+  }, [location.state]);
+
   // Calculate overall progress
   const calculateOverallProgress = () => {
     const totalSections = documentSections?.length;
@@ -157,15 +277,15 @@ const DocumentUpload = () => {
       [sectionId]: [...(prev?.[sectionId] || []), ...validFiles]
     }));
 
-    if (validFiles?.length > 0) {
-      addNotification({
-        id: Date.now(),
-        type: 'success',
-        title: 'Files uploaded successfully',
-        message: `${validFiles?.length} file(s) added to ${documentSections?.find(s => s?.id === sectionId)?.title}`,
-        timestamp: new Date()
-      });
-    }
+    // if (validFiles?.length > 0) {
+    //   addNotification({
+    //     id: Date.now(),
+    //     type: 'success',
+    //     title: 'Files uploaded successfully',
+    //     message: `${validFiles?.length} file(s) added to ${documentSections?.find(s => s?.id === sectionId)?.title}`,
+    //     timestamp: new Date()
+    //   });
+    // }
   };
 
   // Handle file removal
@@ -420,6 +540,24 @@ const DocumentUpload = () => {
 
   const overallProgress = calculateOverallProgress();
 
+  // Show loading state when loading project data
+  if (isLoadingProject) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header userRole="landowner" />
+        <WorkflowBreadcrumbs />
+        <div className="max-w-9xl mx-auto px-4 lg:px-6 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading project data...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="landowner" />
@@ -427,19 +565,47 @@ const DocumentUpload = () => {
       <div className="max-w-9xl mx-auto px-4 lg:px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
+          {isEditMode && (
+            <div className="mb-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/landowner-dashboard')}
+                iconName="ArrowLeft"
+                iconPosition="left"
+              >
+                Back to Dashboard
+              </Button>
+            </div>
+          )}
           <div className="flex items-center space-x-3 mb-4">
             <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
-              <Icon name="Upload" size={24} color="white" />
+              <Icon name={isEditMode ? "Edit" : "Upload"} size={24} color="white" />
             </div>
             <div>
               <h1 className="font-heading font-bold text-3xl text-foreground">
-                Document Upload
+                {isEditMode ? "Edit Project" : "Document Upload"}
               </h1>
               <p className="font-body text-lg text-muted-foreground">
-                Submit your land documentation for renewable energy project review
+                {isEditMode 
+                  ? "Update your land details and upload additional documents"
+                  : "Submit your land documentation for renewable energy project review"}
               </p>
             </div>
           </div>
+          {isEditMode && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start space-x-3">
+                <Icon name="Info" size={20} className="text-blue-600 mt-0.5" />
+                <div>
+                  <p className="text-sm text-blue-900 font-medium">Editing Existing Project</p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    You can update project details and add more documents. Existing documents will be preserved.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="flex items-center space-x-6 text-sm">
             <div className="flex items-center space-x-2">
