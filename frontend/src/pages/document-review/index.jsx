@@ -21,7 +21,6 @@ const DocumentReview = () => {
 
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reviewerRole, setReviewerRole] = useState("re_sales_advisor");
-  const [activeTab, setActiveTab] = useState("review");
   const [annotations, setAnnotations] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,11 +40,6 @@ const DocumentReview = () => {
     { id: "re_governance_lead", label: "RE Governance Lead", icon: "Shield" },
   ];
 
-  const tabs = [
-    { id: "review", label: "Review", icon: "FileCheck" },
-    { id: "task", label: "Task Details", icon: "Clock" },
-    { id: "collaboration", label: "Collaboration", icon: "Users" },
-  ];
 
   /** 🧩 Create Default Subtasks */
   const createDefaultSubtasks = async (taskId, assignedRole) => {
@@ -306,18 +300,27 @@ const DocumentReview = () => {
   
     setIsRoleChanging(true);
     setIsLoading(true);
+    
+    // Clear subtasks immediately to prevent stale data display
+    setSubtasks([]);
+    
+    console.log('🔄 Role change initiated:', newRole);
   
     try {
       // Fetch all tasks for the current land
       const landId = currentTask?.land_id || currentLand?.land_id;
       if (!landId) throw new Error("No land selected");
   
+      console.log('📋 Fetching tasks for land:', landId);
       const tasksForLand = await taskAPI.getTasks({ land_id: landId });
+      console.log('📋 Available tasks for land:', tasksForLand);
   
       // Filter for tasks with this role AND assigned to current user
       const roleTask = tasksForLand.find(
         t => t.assigned_role === newRole && t.assigned_to === user?.user_id
       );
+      
+      console.log('✅ Task found for role:', roleTask);
   
       if (!roleTask) {
         setNotifications(prev => [
@@ -329,23 +332,40 @@ const DocumentReview = () => {
             message: `No task assigned for ${newRole} to you`,
           },
         ]);
-        setCurrentTask(null); // clear current task
-        setSubtasks([]);       // clear subtasks
-        setReviewerRole(newRole); // still update role
+        
+        // Update role first, then clear task and subtasks
+        setReviewerRole(newRole);
+        setCurrentTask(null);
         return;
       }
   
+      // Update role immediately
+      setReviewerRole(newRole);
+      
       // Fetch subtasks
+      console.log('📥 Fetching subtasks for task:', roleTask.task_id);
       let subtasksForRole = await taskAPI.getSubtasks(roleTask.task_id);
+      console.log('📦 Fetched subtasks:', subtasksForRole);
+      
       if (!subtasksForRole || subtasksForRole.length === 0) {
         await createDefaultSubtasks(roleTask.task_id, roleTask.assigned_role);
         subtasksForRole = await taskAPI.getSubtasks(roleTask.task_id);
       }
-  
-      // Update state
-      setCurrentTask(roleTask);
-      setReviewerRole(newRole);
-      setSubtasks(subtasksForRole);
+      
+      // Ensure subtasks is always an array
+      const finalSubtasks = Array.isArray(subtasksForRole) ? subtasksForRole : [];
+      
+      // Update task first, then subtasks with a small delay to ensure proper rendering
+      setCurrentTask({...roleTask});
+      
+      // Small delay to ensure state updates properly
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Update subtasks
+      setSubtasks(finalSubtasks);
+      
+      console.log('💾 State updated - Role:', newRole, 'Task:', roleTask.task_id, 'Subtasks:', finalSubtasks?.length);
+      console.log('📊 Final subtasks array:', finalSubtasks);
   
       setNotifications(prev => [
         ...prev,
@@ -370,6 +390,7 @@ const DocumentReview = () => {
     } finally {
       setIsLoading(false);
       setIsRoleChanging(false);
+      console.log('✅ Role change complete for:', newRole);
     }
   };
   
@@ -410,7 +431,7 @@ const DocumentReview = () => {
         },
       ]);
 
-      if (newStatus) setTimeout(() => navigate("/admin-dashboard"), 2000);
+      if (newStatus) setTimeout(() => navigate("/admin/dashboard"), 2000);
     } catch (err) {
       console.error("Review action failed:", err);
     }
@@ -442,38 +463,17 @@ const DocumentReview = () => {
     <div className="min-h-screen bg-background">
       <Header userRole="admin" />
       <WorkflowBreadcrumbs />
-      <div className="pt-16 max-w-9xl mx-auto p-4 lg:p-6">
+      <div className="pt-16 mt-10 max-w-10xl mx-auto p-4 lg:p-6">
         {/* HEADER */}
         <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">Document Review</h1>
+            <h1 className="text-2xl lg:text-2xl font-bold text-foreground mb-2 mt-5">Document Review</h1>
             <p className="text-muted-foreground">Review and evaluate project documentation</p>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium">Role:</span>
-            <div className="flex bg-muted rounded-lg p-1">
-              {reviewerRoles.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => handleRoleChange(r.id)}
-                  disabled={isRoleChanging}
-                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm ${
-                    reviewerRole === r.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Icon name={r.icon} size={16} />
-                  <span>{r.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
         {/* GRID */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
           <div className="xl:col-span-2">
             <DocumentViewer
               documents={documents}
@@ -482,93 +482,33 @@ const DocumentReview = () => {
               annotations={annotations}
               onAddAnnotation={handleAddAnnotation}
               onDeleteAnnotation={handleDeleteAnnotation}
+              landId={currentLand?.land_id}
             />
+            
+            {/* Role Status Tracking - Moved under Document Viewer */}
+            <div className="mt-6">
+              <RoleStatusTracking
+                roleStatuses={roleStatuses}
+                onPublish={handlePublish}
+                isPublishing={isPublishing}
+              />
+            </div>
           </div>
 
-          <div className="space-y-6">
-            {/* Tabs */}
-            <div className="bg-card border rounded-lg overflow-hidden">
-              <div className="flex border-b">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 flex items-center justify-center px-4 py-3 text-sm ${
-                      activeTab === tab.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <Icon name={tab.icon} size={16} />
-                    <span className="ml-1">{tab.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="h-[850px] overflow-hidden relative">
-                {activeTab === "review" && (
-                  <ReviewPanel
-                    reviewerRole={reviewerRole}
-                    currentTask={currentTask}
-                    subtasks={subtasks}
-                    currentUser={user}
-                    onSubtaskUpdate={handleSubtaskUpdate}
-                    onAddSubtask={handleAddSubtask}
-                    onViewDocument={handleViewDocument}
-                    onEditDocument={handleEditDocument}
-                    onApprove={handleApproveReview}
-                  />
-                )}
-                {activeTab === "task" && (
-                  <div className="p-4 h-full overflow-y-auto">
-                    <TaskDetails
-                      taskId={currentTask?.task_id}
-                      taskInfo={
-                        currentTask
-                          ? {
-                              id: currentTask.task_id,
-                              title: currentTask.title || currentTask.task_type,
-                              status: currentTask.status,
-                              assignedDate: currentTask.created_at,
-                              dueDate: currentTask.due_date,
-                            }
-                          : {}
-                      }
-                      reviewerInfo={
-                        currentTask
-                          ? {
-                              name: currentTask.assigned_to_name || "N/A",
-                              role: currentTask.assigned_role || reviewerRole,
-                              department: "RE Division",
-                            }
-                          : {}
-                      }
-                      projectInfo={
-                        currentLand
-                          ? {
-                              name: currentLand.title || "N/A",
-                              location: currentLand.location || "N/A",
-                              reviewedDocuments: documents.filter((d) => d.status === "approved").length,
-                              totalDocuments: documents.length,
-                            }
-                          : {}
-                      }
-                    />
-                  </div>
-                )}
-                {activeTab === "collaboration" && (
-                  <div className="p-4 h-full overflow-y-auto">
-                    <CollaborationTools />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Role Status Tracking */}
-            <RoleStatusTracking
-              roleStatuses={roleStatuses}
-              onPublish={handlePublish}
-              isPublishing={isPublishing}
+          <div className="xl:col-span-3">
+            <ReviewPanel
+              reviewerRole={reviewerRole}
+              currentTask={currentTask}
+              subtasks={subtasks}
+              currentUser={user}
+              reviewerRoles={reviewerRoles}
+              onRoleChange={handleRoleChange}
+              isRoleChanging={isRoleChanging}
+              onSubtaskUpdate={handleSubtaskUpdate}
+              onAddSubtask={handleAddSubtask}
+              onViewDocument={handleViewDocument}
+              onEditDocument={handleEditDocument}
+              onApprove={handleApproveReview}
             />
           </div>
         </div>
@@ -581,7 +521,7 @@ const DocumentReview = () => {
           </div>
 
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/admin-dashboard")}>
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin/dashboard")}>
               <Icon name="ArrowLeft" size={16} /> Back
             </Button>
             <Button size="sm" onClick={() => handleReviewAction("save")}>

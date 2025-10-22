@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
-import Image from '../../../components/AppImage';
 import Button from '../../../components/ui/Button';
 import { documentsAPI } from '../../../services/api';
 
@@ -10,192 +9,208 @@ const DocumentViewer = ({
   onDocumentSelect = () => {},
   annotations = [],
   onAddAnnotation = () => {},
-  onDeleteAnnotation = () => {}
+  onDeleteAnnotation = () => {},
+  landId = null
 }) => {
-  const [zoomLevel, setZoomLevel] = useState(100);
-  const [isAnnotating, setIsAnnotating] = useState(false);
-  const [annotationText, setAnnotationText] = useState('');
-  const [annotationPosition, setAnnotationPosition] = useState(null);
   const [downloading, setDownloading] = useState(null);
-  const [viewing, setViewing] = useState(null);
-  const [documentBlob, setDocumentBlob] = useState(null);
-  const viewerRef = useRef(null);
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [categoryDocuments, setCategoryDocuments] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
 
-  const documentCategories = [
-    { id: 'ownership', label: 'Ownership Documents', icon: 'FileText', count: 3 },
-    { id: 'valuation', label: 'Land Valuation Reports', icon: 'TrendingUp', count: 2 },
-    { id: 'survey', label: 'Topographical Surveys', icon: 'Map', count: 4 },
-    { id: 'grid', label: 'Grid Connectivity', icon: 'Zap', count: 2 },
-    { id: 'financial', label: 'Financial Models', icon: 'Calculator', count: 3 },
-    { id: 'zoning', label: 'Zoning Approvals', icon: 'Building', count: 1 },
-    { id: 'environmental', label: 'Environmental Impact', icon: 'Leaf', count: 2 },
-    { id: 'government', label: 'Government NOCs', icon: 'Shield', count: 3 }
-  ];
+  // Get category icon based on document type
+  const getCategoryIcon = (documentType) => {
+    const iconMap = {
+      'land_survey': 'Map',
+      'title_deed': 'FileText',
+      'environmental_clearance': 'Leaf',
+      'zoning_certificate': 'Building',
+      'tax_receipt': 'Receipt',
+      'financial_documents': 'DollarSign',
+      'legal_documents': 'Scale',
+      'other': 'File'
+    };
+    return iconMap[documentType] || 'File';
+  };
 
-  // Load document blob when selectedDocument changes
+  // Fetch document categories from backend
   useEffect(() => {
-    const loadDocument = async () => {
-      if (selectedDocument?.document_id) {
-        try {
-          setViewing(selectedDocument.document_id);
-          console.log('Loading document for viewer:', selectedDocument.document_id);
-          const blob = await documentsAPI.downloadDocument(selectedDocument.document_id);
-          if (blob && blob.size > 0) {
-            setDocumentBlob(URL.createObjectURL(blob));
-          } else {
-            console.warn('Document has no data');
-            setDocumentBlob(null);
-          }
-        } catch (error) {
-          console.error('Error loading document:', error);
-          setDocumentBlob(null);
-        } finally {
-          setViewing(null);
-        }
-      } else {
-        setDocumentBlob(null);
+    const fetchCategories = async () => {
+      if (!landId) return;
+      
+      setLoadingCategories(true);
+      try {
+        const types = await documentsAPI.getDocumentTypes();
+        const categories = types.map(type => ({
+          id: type,
+          label: type.replace('_', ' ').toUpperCase(),
+          icon: getCategoryIcon(type),
+          count: 0 // Will be updated when documents are fetched
+        }));
+        setDocumentCategories(categories);
+      } catch (error) {
+        console.error('Error fetching document categories:', error);
+      } finally {
+        setLoadingCategories(false);
       }
     };
 
-    loadDocument();
+    fetchCategories();
+  }, [landId]);
 
-    // Cleanup blob URL when component unmounts or document changes
-    return () => {
-      if (documentBlob) {
-        URL.revokeObjectURL(documentBlob);
-      }
-    };
-  }, [selectedDocument]);
-
-  const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 25, 200));
-  };
-
-  const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 25, 50));
-  };
-
-  const handleResetZoom = () => {
-    setZoomLevel(100);
-  };
-
-  const handleDownload = async (doc) => {
-    if (!doc?.document_id) {
-      alert('Cannot download this document.');
-      return;
+  // Calculate document counts from the documents prop
+  useEffect(() => {
+    if (documents && documents.length > 0 && documentCategories.length > 0) {
+      console.log('📊 Calculating document counts:', {
+        totalDocuments: documents.length,
+        categories: documentCategories.length,
+        documents: documents.map(doc => ({ id: doc.document_id, type: doc.document_type }))
+      });
+      
+      const updatedCategories = documentCategories.map(category => {
+        const count = documents.filter(doc => doc.document_type === category.id).length;
+        console.log(`📊 Category ${category.id}: ${count} documents`);
+        return {
+          ...category,
+          count: count
+        };
+      });
+      setDocumentCategories(updatedCategories);
     }
+  }, [documents, documentCategories.length]);
 
+  // Handle category selection
+  const handleCategorySelect = async (categoryId) => {
+    if (!landId) return;
+    
+    setSelectedCategory(categoryId);
+    setLoadingDocuments(true);
+    
     try {
-      setDownloading(doc.document_id);
-      console.log('Downloading document:', doc.document_id, doc.file_name);
-      
-      const blob = await documentsAPI.downloadDocument(doc.document_id);
-      
-      if (!blob) {
-        throw new Error('No data received from server');
-      }
-      
-      const url = window.URL.createObjectURL(blob);
-      const linkElement = window.document.createElement('a');
-      linkElement.href = url;
-      linkElement.download = doc.file_name;
-      window.document.body.appendChild(linkElement);
-      linkElement.click();
-      window.document.body.removeChild(linkElement);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Error downloading document:', err);
-      alert('Failed to download: ' + (err.response?.data?.detail || err.message));
+      const documents = await documentsAPI.getDocumentsByType(landId, categoryId);
+      setCategoryDocuments(prev => ({
+        ...prev,
+        [categoryId]: documents
+      }));
+    } catch (error) {
+      console.error('Error fetching documents for category:', error);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  // Handle document click - open in new tab
+  const handleDocumentClick = async (document) => {
+    try {
+      const response = await documentsAPI.downloadDocument(document.document_id);
+      const blob = new Blob([response.data]);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Error opening document:', error);
+    }
+  };
+
+  // Handle document download
+  const handleDownload = async (document) => {
+    setDownloading(document.document_id);
+    try {
+      const response = await documentsAPI.downloadDocument(document.document_id);
+      const blob = new Blob([response.data]);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = document.file_name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading document:', error);
     } finally {
       setDownloading(null);
     }
   };
 
+  // Format file size
   const formatFileSize = (bytes) => {
-    if (!bytes) return 'N/A';
-    const kb = bytes / 1024;
-    const mb = kb / 1024;
-    return mb >= 1 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(2)} KB`;
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleViewerClick = (event) => {
-    if (!isAnnotating) return;
-
-    const rect = viewerRef?.current?.getBoundingClientRect();
-    const x = ((event?.clientX - rect?.left) / rect?.width) * 100;
-    const y = ((event?.clientY - rect?.top) / rect?.height) * 100;
-
-    setAnnotationPosition({ x, y });
-  };
-
-  const handleAddAnnotation = () => {
-    if (annotationText?.trim() && annotationPosition) {
-      onAddAnnotation({
-        id: Date.now(),
-        text: annotationText,
-        position: annotationPosition,
-        documentId: selectedDocument?.id,
-        timestamp: new Date()?.toISOString(),
-        author: 'Current Reviewer'
-      });
-      setAnnotationText('');
-      setAnnotationPosition(null);
-      setIsAnnotating(false);
-    }
-  };
-
+  // Get status color
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'approved':
-        return 'text-success bg-success/10';
-      case 'rejected':
-        return 'text-error bg-error/10';
-      case 'reviewed':
-        return 'text-warning bg-warning/10';
-      default:
-        return 'text-muted-foreground bg-muted';
-    }
+    const colors = {
+      'approved': 'bg-green-100 text-green-800',
+      'rejected': 'bg-red-100 text-red-800',
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'under_review': 'bg-blue-100 text-blue-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border border-border rounded-lg overflow-hidden">
+    <div className="flex flex-col  bg-card border border-border rounded-lg overflow-hidden">
       {/* Document Categories */}
-      <div className="border-b border-border p-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          {documentCategories?.map((category) => (
-            <button
-              key={category?.id}
-              onClick={() => onDocumentSelect(category?.id)}
-              className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted transition-smooth text-left"
-            >
-              <Icon name={category?.icon} size={16} className="text-primary" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {category?.label}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {category?.count} files
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-border px-4 pt-4 pb-2">
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
+          <Icon name="Folder" size={16} className="mr-2 text-primary" />
+          Document Categories
+        </h3>
+        {loadingCategories ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            <span className="ml-2 text-sm text-muted-foreground">Loading categories...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+            {documentCategories?.map((category) => (
+              <button
+                key={category?.id}
+                onClick={() => handleCategorySelect(category?.id)}
+                className={`flex items-center space-x-2 p-2 rounded-lg transition-smooth text-left ${
+                  selectedCategory === category?.id 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Icon name={category?.icon} size={16} className={selectedCategory === category?.id ? 'text-primary-foreground' : 'text-primary'} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {category?.label}
+                  </p>
+                  <p className="text-xs opacity-75">
+                    {category?.count} files
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {/* Document List */}
-      <div className="border-b border-border p-4 max-h-48 overflow-y-auto">
+      <div className="border-b border-border p-4">
         <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
           <Icon name="FileText" size={16} className="mr-2 text-primary" />
-          Documents Review ({documents?.length || 0})
+          {selectedCategory ? `${documentCategories.find(c => c.id === selectedCategory)?.label} Documents` : 'Select a Category'} 
+          ({selectedCategory ? categoryDocuments[selectedCategory]?.length || 0 : 0})
         </h3>
-        {documents && documents.length > 0 ? (
+        {loadingDocuments ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+            <span className="ml-2 text-sm text-muted-foreground">Loading documents...</span>
+          </div>
+        ) : selectedCategory && categoryDocuments[selectedCategory] ? (
           <div className="space-y-2">
-            {documents.map((doc) => (
+            {categoryDocuments[selectedCategory].map((doc) => (
               <div
                 key={doc?.document_id}
-                onClick={() => onDocumentSelect(doc)}
-                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-smooth hover:bg-muted ${
-                  selectedDocument?.document_id === doc?.document_id ? 'border-primary bg-primary/5' : 'border-border'
-                }`}
+                onClick={() => handleDocumentClick(doc)}
+                className="flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-smooth hover:bg-muted border-border"
               >
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <Icon 
@@ -233,199 +248,18 @@ const DocumentViewer = ({
               </div>
             ))}
           </div>
-        ) : (
+        ) : selectedCategory ? (
           <div className="text-center py-8">
             <Icon name="FolderOpen" size={48} className="mx-auto text-muted-foreground opacity-50 mb-2" />
-            <p className="text-sm text-muted-foreground">No documents available for review</p>
+            <p className="text-sm text-muted-foreground">No documents found in this category</p>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Icon name="Folder" size={48} className="mx-auto text-muted-foreground opacity-50 mb-2" />
+            <p className="text-sm text-muted-foreground">Select a category to view documents</p>
           </div>
         )}
       </div>
-      {/* Document Viewer */}
-      <div className="flex-1 flex flex-col">
-        {/* Viewer Controls */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleZoomOut}
-              disabled={zoomLevel <= 50}
-            >
-              <Icon name="ZoomOut" size={16} />
-            </Button>
-            <span className="text-sm font-medium text-foreground min-w-[60px] text-center">
-              {zoomLevel}%
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleZoomIn}
-              disabled={zoomLevel >= 200}
-            >
-              <Icon name="ZoomIn" size={16} />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetZoom}
-            >
-              Reset
-            </Button>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Button
-              variant={isAnnotating ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsAnnotating(!isAnnotating)}
-            >
-              <Icon name="MessageSquare" size={16} />
-              Annotate
-            </Button>
-            {selectedDocument && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDownload(selectedDocument)}
-              >
-                <Icon name="Download" size={16} />
-                Download
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Document Display */}
-        <div className="flex-1 p-4 overflow-auto bg-muted/30">
-          {viewing ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <Icon name="Loader2" size={48} className="animate-spin text-primary mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Loading document...</p>
-              </div>
-            </div>
-          ) : selectedDocument && documentBlob ? (
-            <div
-              ref={viewerRef}
-              className="relative mx-auto bg-white shadow-elevation-2 rounded-lg overflow-hidden"
-              style={{
-                width: `${zoomLevel}%`,
-                maxWidth: '100%',
-                minHeight: '600px'
-              }}
-              onClick={handleViewerClick}
-            >
-              {selectedDocument?.mime_type?.includes('pdf') ? (
-                <iframe
-                  src={documentBlob}
-                  className="w-full h-full"
-                  style={{ minHeight: '800px' }}
-                  title={selectedDocument?.file_name}
-                />
-              ) : (
-                <img
-                  src={documentBlob}
-                  alt={selectedDocument?.file_name}
-                  className="w-full h-auto"
-                />
-              )}
-              
-              {/* Annotations */}
-              {annotations?.map((annotation) => (
-                <div
-                  key={annotation?.id}
-                  className="absolute w-6 h-6 bg-accent rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                  style={{
-                    left: `${annotation?.position?.x}%`,
-                    top: `${annotation?.position?.y}%`,
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                  title={annotation?.text}
-                >
-                  <Icon name="MessageCircle" size={12} className="text-accent-foreground" />
-                </div>
-              ))}
-
-              {/* New Annotation Marker */}
-              {annotationPosition && (
-                <div
-                  className="absolute w-6 h-6 bg-primary rounded-full flex items-center justify-center animate-pulse"
-                  style={{
-                    left: `${annotationPosition?.x}%`,
-                    top: `${annotationPosition?.y}%`,
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                >
-                  <Icon name="Plus" size={12} className="text-primary-foreground" />
-                </div>
-              )}
-            </div>
-          ) : selectedDocument && !documentBlob ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <Icon name="AlertCircle" size={64} className="text-warning mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">Document Not Available</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  This document could not be loaded. It may need to be re-uploaded.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onDocumentSelect(null)}
-                >
-                  <Icon name="X" size={16} />
-                  Clear Selection
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <Icon name="FileText" size={64} className="text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                No Document Selected
-              </h3>
-              <p className="text-muted-foreground">
-                Select a document from the list above to begin reviewing
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-      {/* Annotation Input Modal */}
-      {annotationPosition && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md mx-4 shadow-elevation-3">
-            <h3 className="text-lg font-semibold text-foreground mb-4">
-              Add Annotation
-            </h3>
-            <textarea
-              value={annotationText}
-              onChange={(e) => setAnnotationText(e?.target?.value)}
-              placeholder="Enter your annotation..."
-              className="w-full h-24 p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <div className="flex items-center justify-end space-x-3 mt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAnnotationPosition(null);
-                  setAnnotationText('');
-                  setIsAnnotating(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleAddAnnotation}
-                disabled={!annotationText?.trim()}
-              >
-                Add Annotation
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

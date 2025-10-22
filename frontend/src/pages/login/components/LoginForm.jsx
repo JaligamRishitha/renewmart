@@ -18,6 +18,7 @@ const LoginForm = () => {
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   const roleOptions = [
     { value: 'landowner', label: 'Landowner', description: 'Property owner seeking renewable energy opportunities' },
@@ -58,6 +59,14 @@ const LoginForm = () => {
     return newErrors;
   };
 
+  // Toast notification handler
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
+
   const handleSubmit = async (e) => {
     e?.preventDefault();
     
@@ -76,44 +85,96 @@ const LoginForm = () => {
         role: formData.role
       });
       
+      // Show success toast
+      showToast('Login successful! Redirecting...', 'success');
+      
       // Role-based navigation after successful login
       if (result.success && result.user) {
         const userRoles = result.user.roles || [];
         
-        // Navigate to appropriate dashboard based on role
-        if (userRoles.includes('administrator')) {
-          navigate('/admin-dashboard');
-        } else if (userRoles.includes('landowner')) {
-          navigate('/landowner-dashboard');
-        } else if (userRoles.includes('investor')) {
-          navigate('/investor-portal');
-        } else if (userRoles.includes('re_sales_advisor') || 
-                   userRoles.includes('re_analyst') || 
-                   userRoles.includes('re_governance_lead')) {
-          navigate('/reviewer-dashboard');
-        } else if (userRoles.includes('reviewer') || 
-                   userRoles.includes('project_manager')) {
-          navigate('/admin-dashboard');
-        } else {
-          navigate('/dashboard');
-        }
+        // Navigate to appropriate dashboard based on role (hierarchical routes)
+        setTimeout(() => {
+          if (userRoles.includes('administrator')) {
+            navigate('/admin/dashboard');
+          } else if (userRoles.includes('landowner')) {
+            navigate('/landowner/dashboard');
+          } else if (userRoles.includes('investor')) {
+            navigate('/investor/portal');
+          } else if (userRoles.includes('re_sales_advisor')) {
+            navigate('/sales-advisor/dashboard');
+          } else if (userRoles.includes('re_analyst')) {
+            navigate('/analyst/dashboard');
+          } else if (userRoles.includes('re_governance_lead')) {
+            navigate('/governance/dashboard');
+          } else if (userRoles.includes('project_manager')) {
+            navigate('/project-manager/dashboard');
+          } else if (userRoles.includes('reviewer')) {
+            navigate('/reviewer/dashboard');
+          } else {
+            navigate('/dashboard');
+          }
+        }, 1000); // Short delay to show the toast before redirecting
       }
     } catch (error) {
-      // Handle specific error types
-      if (error.message.includes('Invalid credentials')) {
+      console.log('Login error:', error); // Log the full error for debugging
+      
+      // Special handling for landowner role with 401 errors
+      if (error?.status === 401 && formData.role === 'landowner') {
+        showToast('Landowner login temporarily unavailable. Please contact support.', 'error');
+        setErrors({ 
+          general: 'Landowner login is currently being updated. Please try again later or contact support.' 
+        });
+      }
+      // Show more specific error toast based on error status
+      else if (error?.status === 401) {
+        showToast('Incorrect email or password. Please try again.', 'error');
         setErrors({ password: 'Invalid email or password' });
-      } else if (error.message.includes('role')) {
+      } else if (error?.message?.includes('role')) {
+        showToast('Selected role does not match your account.', 'error');
         setErrors({ role: 'Selected role does not match your account' });
-      } else if (error.message.includes('email')) {
+      } else if (error?.message?.includes('email')) {
+        showToast('No account found with this email address.', 'error');
         setErrors({ email: 'No account found with this email address' });
       } else {
-        setErrors({ general: error.message || 'Login failed. Please try again.' });
+        showToast('Login failed. Please check your credentials.', 'error');
+        setErrors({ general: error?.message || 'Login failed. Please try again.' });
       }
     }
   };
 
   return (
     <div className="w-full max-w-md mx-auto">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 transform ${
+          toast.type === 'success' 
+            ? 'bg-green-500 text-white border-green-600' 
+            : 'bg-red-500 text-white border-red-600'
+        }`} style={{ animation: 'slideInRight 0.3s ease-out' }}>
+          <Icon name={toast.type === 'success' ? 'CheckCircle' : 'AlertCircle'} size={20} />
+          <span className="font-medium">{toast.message}</span>
+          <button 
+            onClick={() => setToast({ ...toast, show: false })}
+            className="ml-2 hover:opacity-80 transition-opacity"
+          >
+            <Icon name="X" size={18} />
+          </button>
+        </div>
+      )}
+      
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
+      
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-2">Welcome Back</h1>
         <p className="text-muted-foreground">Sign in to your RenewMart account</p>

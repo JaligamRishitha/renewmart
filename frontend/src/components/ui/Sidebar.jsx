@@ -1,37 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../AppIcon';
+import { useAuth } from '../../contexts/AuthContext';
+import { getNavigationMenu } from '../../utils/navigation';
 
 const Sidebar = ({ isCollapsed = false, onToggleCollapse }) => {
   const location = useLocation();
+  const { user } = useAuth();
   const [hoveredItem, setHoveredItem] = useState(null);
 
-  const navigationItems = [
-    { 
-      label: 'Dashboard', 
-      path: '/dashboard', 
-      icon: 'LayoutDashboard',
-      description: 'Overview and analytics'
-    },
-    { 
-      label: 'Marketplace', 
-      path: '/marketplace', 
-      icon: 'Store',
-      description: 'Browse and manage PPAs'
-    },
-    { 
-      label: 'Projects', 
-      path: '/project-management', 
-      icon: 'FolderOpen',
-      description: 'Project lifecycle management'
-    },
-    { 
-      label: 'Documents', 
-      path: '/document-management', 
-      icon: 'FileText',
-      description: 'Document repository'
-    }
-  ];
+  // Get role-based navigation items
+  const navigationItems = getNavigationMenu(user) || [];
 
   const isActivePath = (path) => {
     return location?.pathname === path;
@@ -58,47 +37,50 @@ const Sidebar = ({ isCollapsed = false, onToggleCollapse }) => {
         {/* Navigation Items */}
         <nav className="flex-1 p-4">
           <ul className="space-y-2">
-            {navigationItems?.map((item) => (
-              <li key={item?.path}>
-                <Link
-                  to={item?.path}
-                  onMouseEnter={() => setHoveredItem(item?.path)}
-                  onMouseLeave={() => setHoveredItem(null)}
-                  className={`relative flex items-center space-x-3 px-3 py-3 rounded-lg text-sm font-medium transition-smooth group ${
-                    isActivePath(item?.path)
-                      ? 'text-primary bg-primary/10 border border-primary/20' :'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
-                >
-                  <Icon 
-                    name={item?.icon} 
-                    size={18} 
-                    className={isActivePath(item?.path) ? 'text-primary' : 'text-current'}
-                  />
-                  
-                  {!isCollapsed && (
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium">{item?.label}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {item?.description}
+            {navigationItems?.filter(item => item && (item.href || item.path)).map((item) => {
+              const itemPath = item.href || item.path;
+              return (
+                <li key={itemPath}>
+                  <Link
+                    to={itemPath}
+                    onMouseEnter={() => setHoveredItem(itemPath)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    className={`relative flex items-center space-x-3 px-3 py-3 rounded-lg text-sm font-medium transition-smooth group ${
+                      isActivePath(itemPath)
+                        ? 'text-primary bg-primary/10 border border-primary/20' :'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <Icon 
+                      name={item?.icon} 
+                      size={18} 
+                      className={isActivePath(itemPath) ? 'text-primary' : 'text-current'}
+                    />
+                    
+                    {!isCollapsed && (
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">{item?.label}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {item?.description}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Active Indicator */}
-                  {isActivePath(item?.path) && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-                  )}
+                    {/* Active Indicator */}
+                    {isActivePath(itemPath) && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                    )}
 
-                  {/* Tooltip for Collapsed State */}
-                  {isCollapsed && hoveredItem === item?.path && (
-                    <div className="absolute left-full ml-2 px-3 py-2 bg-popover border border-border rounded-md shadow-moderate z-300 whitespace-nowrap">
-                      <div className="font-medium text-sm">{item?.label}</div>
-                      <div className="text-xs text-muted-foreground">{item?.description}</div>
-                    </div>
-                  )}
-                </Link>
-              </li>
-            ))}
+                    {/* Tooltip for Collapsed State */}
+                    {isCollapsed && hoveredItem === itemPath && (
+                      <div className="absolute left-full ml-2 px-3 py-2 bg-popover border border-border rounded-md shadow-moderate z-300 whitespace-nowrap">
+                        <div className="font-medium text-sm">{item?.label}</div>
+                        <div className="text-xs text-muted-foreground">{item?.description}</div>
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 

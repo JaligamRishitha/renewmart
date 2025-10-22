@@ -31,7 +31,7 @@ const QuickActions = ({
           label: 'View Opportunities',
           icon: 'TrendingUp',
           variant: 'outline',
-          onClick: () => navigate('/investor-portal'),
+          onClick: () => navigate('/investor/portal'),
           roles: ['landowner']
         }
       ],

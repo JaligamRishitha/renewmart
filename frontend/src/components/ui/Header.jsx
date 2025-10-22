@@ -3,34 +3,36 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../AppIcon';
 import Button from './Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { getRoleNavigation } from '../../utils/navigation';
 
 const Header = ({ userRole = 'landowner', notifications = {} }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get role-based navigation
+  const roleNavigation = getRoleNavigation(user);
 
   const navigationItems = [
     {
       label: 'Dashboard',
-      path: userRole === 'admin' ? '/admin-dashboard' : '/landowner-dashboard',
+      path: roleNavigation.dashboard || '/dashboard',
       icon: 'LayoutDashboard',
-      roles: ['landowner', 'admin'],
+      roles: ['landowner', 'admin', 'reviewer', 'investor'],
       badge: notifications?.dashboard || 0
     },
     {
       label: 'Projects',
-      path: userRole === 'admin' ? '/document-review' : 
-            userRole === 'reviewer' ? '/reviewer-dashboard' :
-            '/landowner-project-status',
+      path: roleNavigation.projectStatus || roleNavigation.dashboard || '/dashboard',
       icon: 'FolderOpen',
       roles: ['landowner', 'admin', 'reviewer'],
       badge: notifications?.projects || 0
     },
     {
       label: 'Opportunities',
-      path: '/investor-portal',
+      path: roleNavigation.portal || '/investor/portal',
       icon: 'TrendingUp',
       roles: ['investor'],
       badge: notifications?.opportunities || 0
@@ -148,28 +150,31 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-1">
-            {filteredNavItems?.map((item) => (
-              <button
-                key={item?.path}
-                onClick={() => handleNavigation(item?.path)}
-                className={`
-                  relative flex items-center space-x-2 px-4 py-2 rounded-lg font-body font-medium text-sm
-                  transition-smooth hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring
-                  ${isActivePath(item?.path) 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-foreground hover:text-primary'
-                  }
-                `}
-              >
-                <Icon name={item?.icon} size={18} />
-                <span>{item?.label}</span>
-                {item?.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent text-accent-foreground text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                    {item?.badge > 99 ? '99+' : item?.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+            {filteredNavItems?.map((item) => {
+              const itemPath = item?.href || item?.path;
+              return (
+                <button
+                  key={itemPath}
+                  onClick={() => handleNavigation(itemPath)}
+                  className={`
+                    relative flex items-center space-x-2 px-4 py-2 rounded-lg font-body font-medium text-sm
+                    transition-smooth hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring
+                    ${isActivePath(itemPath) 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'text-foreground hover:text-primary'
+                    }
+                  `}
+                >
+                  <Icon name={item?.icon} size={18} />
+                  <span>{item?.label}</span>
+                  {item?.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-accent text-accent-foreground text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                      {item?.badge > 99 ? '99+' : item?.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
             {/* More Menu */}
             {filteredMoreItems?.length > 0 && (
@@ -184,18 +189,21 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
                 {isMoreMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-48 bg-popover border border-border rounded-lg shadow-elevation-2 py-2 animate-fade-in">
-                    {filteredMoreItems?.map((item, index) => (
-                      <button
-                        key={item?.path || index}
-                        onClick={() => handleNavigation(item?.path, item?.isLogout)}
+                    {filteredMoreItems?.map((item, index) => {
+                      const itemPath = item?.href || item?.path;
+                      return (
+                        <button
+                          key={itemPath || index}
+                          onClick={() => handleNavigation(itemPath, item?.isLogout)}
                         className={`w-full flex items-center space-x-3 px-4 py-2 text-sm font-body hover:bg-muted transition-smooth ${
                           item?.isLogout ? 'text-red-600 hover:text-red-700' : 'text-popover-foreground'
                         }`}
                       >
-                        <Icon name={item?.icon} size={16} />
-                        <span>{item?.label}</span>
-                      </button>
-                    ))}
+                          <Icon name={item?.icon} size={16} />
+                          <span>{item?.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -217,44 +225,50 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
           <div className="relative bg-card border-r border-border h-full w-80 max-w-[80vw] shadow-elevation-3 animate-slide-in">
             <nav className="p-4 space-y-2">
-              {filteredNavItems?.map((item) => (
-                <button
-                  key={item?.path}
-                  onClick={() => handleNavigation(item?.path)}
-                  className={`
-                    relative w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-body font-medium text-base
-                    transition-smooth focus:outline-none focus:ring-2 focus:ring-ring
-                    ${isActivePath(item?.path) 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'text-foreground hover:bg-muted hover:text-primary'
-                    }
-                  `}
-                >
-                  <Icon name={item?.icon} size={20} />
-                  <span className="flex-1 text-left">{item?.label}</span>
-                  {item?.badge > 0 && (
-                    <span className="bg-accent text-accent-foreground text-xs font-medium px-2 py-1 rounded-full min-w-[24px] text-center">
-                      {item?.badge > 99 ? '99+' : item?.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {filteredNavItems?.map((item) => {
+                const itemPath = item?.href || item?.path;
+                return (
+                  <button
+                    key={itemPath}
+                    onClick={() => handleNavigation(itemPath)}
+                    className={`
+                      relative w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-body font-medium text-base
+                      transition-smooth focus:outline-none focus:ring-2 focus:ring-ring
+                      ${isActivePath(itemPath) 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'text-foreground hover:bg-muted hover:text-primary'
+                      }
+                    `}
+                  >
+                    <Icon name={item?.icon} size={20} />
+                    <span className="flex-1 text-left">{item?.label}</span>
+                    {item?.badge > 0 && (
+                      <span className="bg-accent text-accent-foreground text-xs font-medium px-2 py-1 rounded-full min-w-[24px] text-center">
+                        {item?.badge > 99 ? '99+' : item?.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
 
               {filteredMoreItems?.length > 0 && (
                 <>
                   <div className="border-t border-border my-4" />
-                  {filteredMoreItems?.map((item, index) => (
-                    <button
-                      key={item?.path || index}
-                      onClick={() => handleNavigation(item?.path, item?.isLogout)}
+                  {filteredMoreItems?.map((item, index) => {
+                    const itemPath = item?.href || item?.path;
+                    return (
+                      <button
+                        key={itemPath || index}
+                        onClick={() => handleNavigation(itemPath, item?.isLogout)}
                       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-body font-medium text-base hover:bg-muted transition-smooth focus:outline-none focus:ring-2 focus:ring-ring ${
                         item?.isLogout ? 'text-red-600 hover:text-red-700' : 'text-foreground hover:text-primary'
                       }`}
                     >
-                      <Icon name={item?.icon} size={20} />
-                      <span className="flex-1 text-left">{item?.label}</span>
-                    </button>
-                  ))}
+                        <Icon name={item?.icon} size={20} />
+                        <span className="flex-1 text-left">{item?.label}</span>
+                      </button>
+                    );
+                  })}
                 </>
               )}
             </nav>

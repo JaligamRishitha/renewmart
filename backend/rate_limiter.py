@@ -41,16 +41,16 @@ def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         content={
             "detail": "Rate limit exceeded. Too many requests.",
             "type": "rate_limit_error",
-            "retry_after": exc.retry_after,
+            "retry_after": getattr(exc, 'retry_after', 60),
             "limit": str(exc.detail).split(" ")[0] if exc.detail else "unknown",
             "window": "per minute" if "minute" in str(exc.detail) else "per hour",
             "timestamp": request.state.__dict__.get('start_time', 0)
         },
         headers={
-            "Retry-After": str(exc.retry_after),
+            "Retry-After": str(getattr(exc, 'retry_after', 60)),
             "X-RateLimit-Limit": str(exc.detail).split(" ")[0] if exc.detail else "unknown",
             "X-RateLimit-Remaining": "0",
-            "X-RateLimit-Reset": str(exc.retry_after)
+            "X-RateLimit-Reset": str(getattr(exc, 'retry_after', 60))
         }
     )
     

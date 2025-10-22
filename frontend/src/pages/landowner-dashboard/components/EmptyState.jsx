@@ -54,7 +54,7 @@ const EmptyState = ({ hasFilters, onClearFilters }) => {
         <Button
           variant="outline"
           size="lg"
-          onClick={() => navigate('/investor-portal')}
+          onClick={() => navigate('/investor/portal')}
           iconName="TrendingUp"
           iconPosition="left"
         >

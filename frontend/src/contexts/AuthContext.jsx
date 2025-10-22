@@ -139,11 +139,21 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user };
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Login failed';
+      const errorStatus = error.response?.status;
+      
       dispatch({
         type: AUTH_ACTIONS.LOGIN_FAILURE,
         payload: errorMessage,
       });
-      return { success: false, error: errorMessage };
+      
+      // Return both error message and status code for better error handling in UI
+      return { 
+        success: false, 
+        error: { 
+          message: errorMessage,
+          status: errorStatus 
+        }
+      };
     }
   };
 
@@ -236,7 +246,56 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user is owner
   const isOwner = () => {
-    return hasRole('owner');
+    return hasRole('landowner');
+  };
+
+  // Check if user is investor
+  const isInvestor = () => {
+    return hasRole('investor');
+  };
+
+  // Check if user is project manager
+  const isProjectManager = () => {
+    return hasRole('project_manager');
+  };
+
+  // Check if user is RE Sales Advisor
+  const isSalesAdvisor = () => {
+    return hasRole('re_sales_advisor');
+  };
+
+  // Check if user is RE Analyst
+  const isAnalyst = () => {
+    return hasRole('re_analyst');
+  };
+
+  // Check if user is RE Governance Lead
+  const isGovernanceLead = () => {
+    return hasRole('re_governance_lead');
+  };
+
+  // Check if user has reviewer role (any type)
+  const isAnyReviewer = () => {
+    return hasAnyRole(['reviewer', 're_sales_advisor', 're_analyst', 're_governance_lead', 'project_manager']);
+  };
+
+  // Get user's primary role for navigation
+  const getPrimaryRole = () => {
+    if (!state.user?.roles) return 'guest';
+    
+    const roles = state.user.roles;
+    
+    // Priority order for role determination
+    if (roles.includes('administrator')) return 'administrator';
+    if (roles.includes('project_manager')) return 'project_manager';
+    if (roles.includes('re_sales_advisor')) return 're_sales_advisor';
+    if (roles.includes('re_analyst')) return 're_analyst';
+    if (roles.includes('re_governance_lead')) return 're_governance_lead';
+    if (roles.includes('reviewer')) return 'reviewer';
+    if (roles.includes('landowner')) return 'landowner';
+    if (roles.includes('investor')) return 'investor';
+    
+    return 'user';
   };
 
   const value = {
@@ -251,6 +310,13 @@ export const AuthProvider = ({ children }) => {
     isAdmin,
     isReviewer,
     isOwner,
+    isInvestor,
+    isProjectManager,
+    isSalesAdvisor,
+    isAnalyst,
+    isGovernanceLead,
+    isAnyReviewer,
+    getPrimaryRole,
   };
 
   return (

@@ -9,11 +9,11 @@ const WorkflowBreadcrumbs = ({ customBreadcrumbs = null }) => {
   const routeMap = {
     '/': { label: 'Home', icon: 'Home' },
     '/register': { label: 'Account Registration', icon: 'UserPlus' },
-    '/landowner-dashboard': { label: 'Landowner Dashboard', icon: 'LayoutDashboard' },
-    '/document-upload': { label: 'Document Upload', icon: 'Upload' },
-    '/admin-dashboard': { label: 'Admin Dashboard', icon: 'Shield' },
-    '/document-review': { label: 'Document Review', icon: 'FileCheck' },
-    '/investor-portal': { label: 'Investment Opportunities', icon: 'TrendingUp' },
+    '/landowner/dashboard': { label: 'Landowner Dashboard', icon: 'LayoutDashboard' },
+    '/landowner/document-upload': { label: 'Document Upload', icon: 'Upload' },
+    '/admin/dashboard': { label: 'Admin Dashboard', icon: 'Shield' },
+    '/admin/document-review': { label: 'Document Review', icon: 'FileCheck' },
+    '/investor/portal': { label: 'Investment Opportunities', icon: 'TrendingUp' },
     '/settings': { label: 'Settings', icon: 'Settings' },
     '/help': { label: 'Help Center', icon: 'HelpCircle' },
     '/admin': { label: 'Administration', icon: 'ShieldCheck' }

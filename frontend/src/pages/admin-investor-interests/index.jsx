@@ -128,7 +128,7 @@ const AdminInvestorInterests = () => {
               <div className="flex items-center space-x-3">
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/admin-dashboard')}
+                  onClick={() => navigate('/admin/dashboard')}
                   iconName="LayoutDashboard"
                   iconSize={18}
                 >

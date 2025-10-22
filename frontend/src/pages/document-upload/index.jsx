@@ -473,7 +473,7 @@ const DocumentUpload = () => {
       
       // Navigate to dashboard after a delay
       setTimeout(() => {
-        navigate('/landowner-dashboard');
+        navigate('/landowner/dashboard');
       }, 2000);
       
     } catch (error) {
@@ -570,7 +570,7 @@ const DocumentUpload = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/landowner-dashboard')}
+                onClick={() => navigate('/landowner/dashboard')}
                 iconName="ArrowLeft"
                 iconPosition="left"
               >

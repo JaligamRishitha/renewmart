@@ -98,7 +98,7 @@ const RoleBasedProjectsTable = () => {
           <p className="text-sm text-muted-foreground mt-1">Recent activity and performance</p>
         </div>
         {user?.roles?.includes('landowner') && (
-          <Button variant="outline" size="sm" iconName="ExternalLink" onClick={() => window.location.href = '/landowner-dashboard'}>
+          <Button variant="outline" size="sm" iconName="ExternalLink" onClick={() => window.location.href = '/landowner/dashboard'}>
             View All
           </Button>
         )}

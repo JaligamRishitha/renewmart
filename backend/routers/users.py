@@ -243,36 +243,6 @@ async def update_current_user_profile(
         updated_at=result.updated_at
     )
 
-@router.get("/", response_model=List[User])
-async def list_users(
-    skip: int = 0,
-    limit: int = 100,
-    current_user: dict = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    """List all users (admin only)."""
-    query = text("""
-        SELECT user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
-        FROM \"user\"
-        ORDER BY created_at DESC
-        OFFSET :skip LIMIT :limit
-    """)
-    
-    results = db.execute(query, {"skip": skip, "limit": limit}).fetchall()
-    
-    return [
-        User(
-            user_id=row.user_id,
-            email=row.email,
-            first_name=row.first_name,
-            last_name=row.last_name,
-            phone=row.phone,
-            is_active=row.is_active,
-            created_at=row.created_at,
-            updated_at=row.updated_at
-        )
-        for row in results
-    ]
 
 @router.get("/{user_id}", response_model=User)
 async def get_user(

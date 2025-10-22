@@ -115,23 +115,61 @@ export const OwnerRoute = ({ children, ...props }) => (
   </ProtectedRoute>
 );
 
-// Helper function to get role-based dashboard route
+// Investor-specific route
+export const InvestorRoute = ({ children, ...props }) => (
+  <ProtectedRoute requiredRoles={['investor', 'administrator']} {...props}>
+    {children}
+  </ProtectedRoute>
+);
+
+// Project Manager route
+export const ProjectManagerRoute = ({ children, ...props }) => (
+  <ProtectedRoute requiredRoles={['project_manager', 'administrator']} {...props}>
+    {children}
+  </ProtectedRoute>
+);
+
+// RE Sales Advisor specific route
+export const SalesAdvisorRoute = ({ children, ...props }) => (
+  <ProtectedRoute requiredRoles={['re_sales_advisor', 'administrator']} {...props}>
+    {children}
+  </ProtectedRoute>
+);
+
+// RE Analyst specific route
+export const AnalystRoute = ({ children, ...props }) => (
+  <ProtectedRoute requiredRoles={['re_analyst', 'administrator']} {...props}>
+    {children}
+  </ProtectedRoute>
+);
+
+// RE Governance Lead specific route
+export const GovernanceLeadRoute = ({ children, ...props }) => (
+  <ProtectedRoute requiredRoles={['re_governance_lead', 'administrator']} {...props}>
+    {children}
+  </ProtectedRoute>
+);
+
+// Helper function to get role-based dashboard route with hierarchical structure
 const getRoleDashboard = (user) => {
   const userRoles = user?.roles || [];
   
   if (userRoles.includes('administrator')) {
-    return '/admin-dashboard';
+    return '/admin/dashboard';
   } else if (userRoles.includes('landowner')) {
-    return '/landowner-dashboard';
+    return '/landowner/dashboard';
   } else if (userRoles.includes('investor')) {
-    return '/investor-portal';
-  } else if (userRoles.includes('re_sales_advisor') || 
-             userRoles.includes('re_analyst') || 
-             userRoles.includes('re_governance_lead')) {
-    return '/reviewer-dashboard';
-  } else if (userRoles.includes('reviewer') || 
-             userRoles.includes('project_manager')) {
-    return '/admin-dashboard';
+    return '/investor/portal';
+  } else if (userRoles.includes('re_sales_advisor')) {
+    return '/sales-advisor/dashboard';
+  } else if (userRoles.includes('re_analyst')) {
+    return '/analyst/dashboard';
+  } else if (userRoles.includes('re_governance_lead')) {
+    return '/governance/dashboard';
+  } else if (userRoles.includes('project_manager')) {
+    return '/project-manager/dashboard';
+  } else if (userRoles.includes('reviewer')) {
+    return '/reviewer/dashboard';
   } else {
     return '/dashboard';
   }

@@ -2,23 +2,26 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-// Helper function to get role-based dashboard route
+// Helper function to get role-based dashboard route with hierarchical structure
 const getRoleDashboard = (user) => {
   const userRoles = user?.roles || [];
   
   if (userRoles.includes('administrator')) {
-    return '/admin-dashboard';
+    return '/admin/dashboard';
   } else if (userRoles.includes('landowner')) {
-    return '/landowner-dashboard';
+    return '/landowner/dashboard';
   } else if (userRoles.includes('investor')) {
-    return '/investor-portal';
-  } else if (userRoles.includes('re_sales_advisor') || 
-             userRoles.includes('re_analyst') || 
-             userRoles.includes('re_governance_lead')) {
-    return '/reviewer-dashboard';
-  } else if (userRoles.includes('reviewer') || 
-             userRoles.includes('project_manager')) {
-    return '/admin-dashboard';
+    return '/investor/portal';
+  } else if (userRoles.includes('re_sales_advisor')) {
+    return '/sales-advisor/dashboard';
+  } else if (userRoles.includes('re_analyst')) {
+    return '/analyst/dashboard';
+  } else if (userRoles.includes('re_governance_lead')) {
+    return '/governance/dashboard';
+  } else if (userRoles.includes('project_manager')) {
+    return '/project-manager/dashboard';
+  } else if (userRoles.includes('reviewer')) {
+    return '/reviewer/dashboard';
   } else {
     return '/dashboard';
   }

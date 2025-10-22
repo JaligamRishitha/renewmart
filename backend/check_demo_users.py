@@ -6,6 +6,7 @@ def check_demo_users():
     conn = engine.connect()
     
     try:
+        # First check demo users
         result = conn.execute(text("""
             SELECT u.email, u.first_name, u.last_name, 
                    array_agg(ur.role_key) as roles
@@ -20,9 +21,26 @@ def check_demo_users():
         for row in result:
             roles = ', '.join(row[3]) if row[3] and row[3][0] else 'No roles'
             print(f"- {row[0]}: {row[1]} {row[2]} (Roles: {roles})")
+        
+        # Now check all landowner users
+        print("\nAll landowner users in database:")
+        result = conn.execute(text("""
+            SELECT u.email, u.first_name, u.last_name, u.is_active,
+                   array_agg(ur.role_key) as roles
+            FROM "user" u
+            JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE ur.role_key = 'landowner'
+            GROUP BY u.email, u.first_name, u.last_name, u.is_active
+            ORDER BY u.email
+        """))
+        
+        for row in result:
+            roles = ', '.join(row[4]) if row[4] and row[4][0] else 'No roles'
+            active_status = "Active" if row[3] else "Inactive"
+            print(f"- {row[0]}: {row[1]} {row[2]} ({active_status}, Roles: {roles})")
             
     except Exception as e:
-        print(f"Error checking demo users: {e}")
+        print(f"Error checking users: {e}")
     finally:
         conn.close()
 

@@ -9,7 +9,17 @@ import LoginPage from './pages/login';
 import Marketplace from './pages/Marketplace';
 import Dashboard from './pages/dashboard';
 import DocumentManagement from './pages/document-management';
-import ProtectedRoute, { PublicRoute, OwnerRoute, ReviewerRoute } from './components/ProtectedRoute';
+import ProtectedRoute, { 
+  PublicRoute, 
+  OwnerRoute, 
+  ReviewerRoute, 
+  AdminRoute, 
+  InvestorRoute,
+  ProjectManagerRoute,
+  SalesAdvisorRoute,
+  AnalystRoute,
+  GovernanceLeadRoute
+} from './components/ProtectedRoute';
 import RoleBasedRedirect from './components/RoleBasedRedirect';
 
 // Import new pages from landinvest_pro
@@ -17,15 +27,20 @@ import AdminDashboard from './pages/admin-dashboard';
 import AdminMarketplace from './pages/admin-marketplace';
 import AdminInvestorInterests from './pages/admin-investor-interests';
 import InvestorPortal from './pages/investor-portal';
+import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
 import AdminDocumentReview from './pages/document-review/AdminDocumentReview';
 import DocumentUpload from './pages/document-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
 import LandownerProjectStatus from './pages/landowner-project-status';
+import ProjectReviewPage from './pages/landowner-project-status/components/ProjectReviewPage';
 import ReviewerDashboard from './pages/reviewer-dashboard';
 import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
 import ProjectDetailsPage from './pages/project-details';
 import Register from './pages/register';
+import Unauthorized from './pages/Unauthorized';
+import RouteDebugger from './components/RouteDebugger';
+import RouteTest from './components/RouteTest';
 
 const Routes = () => {
   return (
@@ -50,10 +65,286 @@ const Routes = () => {
           </PublicRoute>
         } />
         
-        {/* Protected routes - Role-based routing */}
+        {/* Root redirect */}
         <Route path="/" element={
           <ProtectedRoute>
             <RoleBasedRedirect />
+          </ProtectedRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* ADMIN ROUTES - /admin/* */}
+        {/* ========================================== */}
+        <Route path="/admin/dashboard" element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        } />
+        <Route path="/admin/marketplace" element={
+          <AdminRoute>
+            <AdminMarketplace />
+          </AdminRoute>
+        } />
+        <Route path="/admin/investor-interests" element={
+          <AdminRoute>
+            <AdminInvestorInterests />
+          </AdminRoute>
+        } />
+        <Route path="/admin/document-review" element={
+          <AdminRoute>
+            <AdminDocumentReview />
+          </AdminRoute>
+        } />
+        <Route path="/admin/project-details/:landId" element={
+          <AdminRoute>
+            <ProjectDetailsPage />
+          </AdminRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* LANDOWNER ROUTES - /landowner/* */}
+        {/* ========================================== */}
+        <Route path="/landowner/dashboard" element={
+          <OwnerRoute>
+            <LandownerDashboard />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/project-status" element={
+          <OwnerRoute>
+            <LandownerProjectStatus />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/document-upload" element={
+          <OwnerRoute>
+            <DocumentUpload />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/project-management" element={
+          <OwnerRoute>
+            <ProjectManagement />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/marketplace" element={
+          <OwnerRoute>
+            <Marketplace />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/project-details/:landId" element={
+          <OwnerRoute>
+            <ProjectDetailsPage />
+          </OwnerRoute>
+        } />
+        <Route path="/landowner/project-review/:projectId" element={
+          <OwnerRoute>
+            <ProjectReviewPage />
+          </OwnerRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* REVIEWER ROUTES - /reviewer/* */}
+        {/* ========================================== */}
+        <Route path="/reviewer/dashboard" element={
+          <ReviewerRoute>
+            <ReviewerDashboard />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/project/:landId" element={
+          <ReviewerRoute>
+            <ProjectDetails />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/document-review" element={
+          <ReviewerRoute>
+            <DocumentReview />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/document-management" element={
+          <ReviewerRoute>
+            <DocumentManagement />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/marketplace" element={
+          <ReviewerRoute>
+            <Marketplace />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/project-details/:landId" element={
+          <ReviewerRoute>
+            <ProjectDetailsPage />
+          </ReviewerRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* INVESTOR ROUTES - /investor/* */}
+        {/* ========================================== */}
+        <Route path="/investor/dashboard" element={
+          <InvestorRoute>
+            <InvestorPortal />
+          </InvestorRoute>
+        } />
+        <Route path="/investor/portal" element={
+          <InvestorRoute>
+            <InvestorPortal />
+          </InvestorRoute>
+        } />
+        <Route path="/investor/browse-properties" element={
+          <InvestorRoute>
+            <BrowseProperties />
+          </InvestorRoute>
+        } />
+        <Route path="/investor/marketplace" element={
+          <InvestorRoute>
+            <Marketplace />
+          </InvestorRoute>
+        } />
+        <Route path="/investor/project-details/:landId" element={
+          <InvestorRoute>
+            <ProjectDetailsPage />
+          </InvestorRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* SALES ADVISOR ROUTES - /sales-advisor/* */}
+        {/* ========================================== */}
+        <Route path="/sales-advisor/dashboard" element={
+          <SalesAdvisorRoute>
+            <ReviewerDashboard />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/project/:landId" element={
+          <SalesAdvisorRoute>
+            <ProjectDetails />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/document-review" element={
+          <SalesAdvisorRoute>
+            <DocumentReview />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/document-management" element={
+          <SalesAdvisorRoute>
+            <DocumentManagement />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/marketplace" element={
+          <SalesAdvisorRoute>
+            <Marketplace />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/project-details/:landId" element={
+          <SalesAdvisorRoute>
+            <ProjectDetailsPage />
+          </SalesAdvisorRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* ANALYST ROUTES - /analyst/* */}
+        {/* ========================================== */}
+        <Route path="/analyst/dashboard" element={
+          <AnalystRoute>
+            <ReviewerDashboard />
+          </AnalystRoute>
+        } />
+        <Route path="/analyst/project/:landId" element={
+          <AnalystRoute>
+            <ProjectDetails />
+          </AnalystRoute>
+        } />
+        <Route path="/analyst/document-review" element={
+          <AnalystRoute>
+            <DocumentReview />
+          </AnalystRoute>
+        } />
+        <Route path="/analyst/document-management" element={
+          <AnalystRoute>
+            <DocumentManagement />
+          </AnalystRoute>
+        } />
+        <Route path="/analyst/marketplace" element={
+          <AnalystRoute>
+            <Marketplace />
+          </AnalystRoute>
+        } />
+        <Route path="/analyst/project-details/:landId" element={
+          <AnalystRoute>
+            <ProjectDetailsPage />
+          </AnalystRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* GOVERNANCE LEAD ROUTES - /governance/* */}
+        {/* ========================================== */}
+        <Route path="/governance/dashboard" element={
+          <GovernanceLeadRoute>
+            <ReviewerDashboard />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/governance/project/:landId" element={
+          <GovernanceLeadRoute>
+            <ProjectDetails />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/governance/document-review" element={
+          <GovernanceLeadRoute>
+            <DocumentReview />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/governance/document-management" element={
+          <GovernanceLeadRoute>
+            <DocumentManagement />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/governance/marketplace" element={
+          <GovernanceLeadRoute>
+            <Marketplace />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/governance/project-details/:landId" element={
+          <GovernanceLeadRoute>
+            <ProjectDetailsPage />
+          </GovernanceLeadRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* PROJECT MANAGER ROUTES - /project-manager/* */}
+        {/* ========================================== */}
+        <Route path="/project-manager/dashboard" element={
+          <ProjectManagerRoute>
+            <AdminDashboard />
+          </ProjectManagerRoute>
+        } />
+        <Route path="/project-manager/marketplace" element={
+          <ProjectManagerRoute>
+            <AdminMarketplace />
+          </ProjectManagerRoute>
+        } />
+        <Route path="/project-manager/investor-interests" element={
+          <ProjectManagerRoute>
+            <AdminInvestorInterests />
+          </ProjectManagerRoute>
+        } />
+        <Route path="/project-manager/document-review" element={
+          <ProjectManagerRoute>
+            <AdminDocumentReview />
+          </ProjectManagerRoute>
+        } />
+        <Route path="/project-manager/project-details/:landId" element={
+          <ProjectManagerRoute>
+            <ProjectDetailsPage />
+          </ProjectManagerRoute>
+        } />
+        
+        {/* ========================================== */}
+        {/* GENERAL PROTECTED ROUTES */}
+        {/* ========================================== */}
+        <Route path="/marketplace" element={
+          <ProtectedRoute>
+            <Marketplace />
+          </ProtectedRoute>
+        } />
+        <Route path="/project-details/:landId" element={
+          <ProtectedRoute>
+            <ProjectDetailsPage />
           </ProtectedRoute>
         } />
         <Route path="/dashboard" element={
@@ -61,41 +352,40 @@ const Routes = () => {
             <Dashboard />
           </ProtectedRoute>
         } />
-        <Route path="/marketplace" element={
-          <ProtectedRoute>
-            <Marketplace />
-          </ProtectedRoute>
-        } />
         
-        {/* Admin Dashboard */}
+        {/* ========================================== */}
+        {/* LEGACY ROUTES - For backward compatibility */}
+        {/* ========================================== */}
         <Route path="/admin-dashboard" element={
-          <ReviewerRoute>
+          <AdminRoute>
             <AdminDashboard />
-          </ReviewerRoute>
+          </AdminRoute>
         } />
-        
-        {/* Admin Marketplace */}
         <Route path="/admin-marketplace" element={
-          <ReviewerRoute>
+          <AdminRoute>
             <AdminMarketplace />
-          </ReviewerRoute>
+          </AdminRoute>
         } />
-        
-        {/* Admin Investor Interests */}
         <Route path="/admin-investor-interests" element={
-          <ReviewerRoute>
+          <AdminRoute>
             <AdminInvestorInterests />
-          </ReviewerRoute>
+          </AdminRoute>
         } />
-        
-        {/* Investor Portal */}
+        <Route path="/admin-document-review" element={
+          <AdminRoute>
+            <AdminDocumentReview />
+          </AdminRoute>
+        } />
         <Route path="/investor-portal" element={
-          <ProtectedRoute>
+          <InvestorRoute>
             <InvestorPortal />
-          </ProtectedRoute>
+          </InvestorRoute>
         } />
-        
-        {/* Document Management Routes */}
+        <Route path="/browse-properties" element={
+          <InvestorRoute>
+            <BrowseProperties />
+          </InvestorRoute>
+        } />
         <Route path="/document-upload" element={
           <OwnerRoute>
             <DocumentUpload />
@@ -106,27 +396,16 @@ const Routes = () => {
             <DocumentReview />
           </ReviewerRoute>
         } />
-        <Route path="/admin-document-review" element={
-          <ReviewerRoute>
-            <AdminDocumentReview />
-          </ReviewerRoute>
-        } />
-        
-        {/* Landowner Dashboard */}
         <Route path="/landowner-dashboard" element={
           <OwnerRoute>
             <LandownerDashboard />
           </OwnerRoute>
         } />
-        
-        {/* Landowner Project Status */}
         <Route path="/landowner-project-status" element={
           <OwnerRoute>
             <LandownerProjectStatus />
           </OwnerRoute>
         } />
-        
-        {/* Reviewer Dashboard (for RE Sales Advisor, RE Analyst, RE Governance Lead) */}
         <Route path="/reviewer-dashboard" element={
           <ReviewerRoute>
             <ReviewerDashboard />
@@ -137,28 +416,55 @@ const Routes = () => {
             <ProjectDetails />
           </ReviewerRoute>
         } />
-        
-        {/* Owner/Admin routes */}
         <Route path="/project-management" element={
           <OwnerRoute>
             <ProjectManagement />
           </OwnerRoute>
         } />
-        
-        {/* Reviewer/Admin routes */}
         <Route path="/document-management" element={
           <ReviewerRoute>
             <DocumentManagement />
           </ReviewerRoute>
         } />
+        <Route path="/sales-advisor-dashboard" element={
+          <SalesAdvisorRoute>
+            <ReviewerDashboard />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/analyst-dashboard" element={
+          <AnalystRoute>
+            <ReviewerDashboard />
+          </AnalystRoute>
+        } />
+        <Route path="/governance-dashboard" element={
+          <GovernanceLeadRoute>
+            <ReviewerDashboard />
+          </GovernanceLeadRoute>
+        } />
+        <Route path="/project-manager-dashboard" element={
+          <ProjectManagerRoute>
+            <AdminDashboard />
+          </ProjectManagerRoute>
+        } />
         
-        {/* Project Details Route */}
-        <Route path="/project-details/:landId" element={
+        {/* ========================================== */}
+        {/* DEBUG ROUTES */}
+        {/* ========================================== */}
+        <Route path="/debug/routes" element={
           <ProtectedRoute>
-            <ProjectDetailsPage />
+            <RouteDebugger />
+          </ProtectedRoute>
+        } />
+        <Route path="/test/routes" element={
+          <ProtectedRoute>
+            <RouteTest />
           </ProtectedRoute>
         } />
         
+        {/* ========================================== */}
+        {/* ERROR ROUTES */}
+        {/* ========================================== */}
+        <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="*" element={<NotFound />} />
       </RouterRoutes>
       </ErrorBoundary>

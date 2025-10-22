@@ -5,25 +5,21 @@ import Header from '../../components/ui/Header';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
-import ProjectTable from '../landowner-dashboard/components/ProjectTable';
-import LandownerReviewPanel from './components/LandownerReviewPanel';
 import { landsAPI, taskAPI, usersAPI } from '../../services/api';
 
 const LandownerProjectStatus = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [selectedProject, setSelectedProject] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchData();
-  }, [location.state?.projectId]);
+    fetchProjects();
+  }, []);
 
-  const fetchData = async () => {
+  const fetchProjects = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -31,84 +27,23 @@ const LandownerProjectStatus = () => {
       // Fetch all landowner projects
       const projectsResponse = await landsAPI.getDashboardProjects();
       setProjects(projectsResponse || []);
-
-      // If a specific project is selected, fetch its tasks
-      const projectId = location.state?.projectId;
-      if (projectId) {
-        const project = projectsResponse.find(p => p.id === projectId);
-        setSelectedProject(project);
-        await fetchProjectTasks(projectId);
-      } else if (projectsResponse && projectsResponse.length > 0) {
-        // Select first project by default
-        const firstProject = projectsResponse[0];
-        setSelectedProject(firstProject);
-        await fetchProjectTasks(firstProject.id);
-      }
     } catch (err) {
-      console.error('[Landowner Project Status] Error fetching data:', err);
-      setError('Failed to load project data. Please try again.');
+      console.error('[Landowner Project Status] Error fetching projects:', err);
+      setError('Failed to load projects. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchProjectTasks = async (landId) => {
-    try {
-      console.log('[Landowner Project Status] Fetching tasks for land:', landId);
-      
-      // Fetch all tasks for this land
-      const tasksResponse = await taskAPI.getTasks({ land_id: landId });
-      console.log('[Landowner Project Status] Tasks:', tasksResponse);
-
-      // Enrich tasks with reviewer details and subtasks
-      const enrichedTasks = await Promise.all(
-        (tasksResponse || []).map(async (task) => {
-          let reviewerName = 'Unassigned';
-          
-          // Fetch reviewer details if assigned
-          if (task.assigned_to) {
-            try {
-              const reviewer = await usersAPI.getUserById(task.assigned_to);
-              reviewerName = `${reviewer.first_name || ''} ${reviewer.last_name || ''}`.trim() || reviewer.email;
-            } catch (err) {
-              console.error('Failed to fetch reviewer:', err);
-            }
-          }
-
-          // Fetch subtasks
-          let subtasks = [];
-          try {
-            subtasks = await taskAPI.getSubtasks(task.task_id);
-          } catch (err) {
-            console.error('Failed to fetch subtasks:', err);
-          }
-
-          return {
-            ...task,
-            reviewer_name: reviewerName,
-            subtasks: subtasks || []
-          };
-        })
-      );
-
-      setTasks(enrichedTasks);
-    } catch (err) {
-      console.error('[Landowner Project Status] Error fetching tasks:', err);
-      setTasks([]);
-    }
-  };
-
-  const handleProjectSelect = async (project) => {
-    setSelectedProject(project);
-    await fetchProjectTasks(project.id);
+  const handleViewProject = (project) => {
+    // Navigate to project review page showing all reviewer roles
+    navigate(`/landowner/project-review/${project.id}`, { 
+      state: { project } 
+    });
   };
 
   const handleEditProject = (project) => {
     navigate('/document-upload', { state: { projectId: project?.id, mode: 'edit' } });
-  };
-
-  const handleViewProject = (project) => {
-    handleProjectSelect(project);
   };
 
   const handleContinueDraft = (project) => {
@@ -119,7 +54,7 @@ const LandownerProjectStatus = () => {
     try {
       await landsAPI.submitForReview(project.id);
       // Refresh data
-      await fetchData();
+      await fetchProjects();
     } catch (err) {
       console.error('Error submitting project:', err);
       setError('Failed to submit project for review.');
@@ -130,7 +65,7 @@ const LandownerProjectStatus = () => {
     try {
       await landsAPI.deleteLand(project.id);
       // Refresh data
-      await fetchData();
+      await fetchProjects();
     } catch (err) {
       console.error('Error deleting project:', err);
     }
@@ -161,28 +96,36 @@ const LandownerProjectStatus = () => {
       <WorkflowBreadcrumbs />
       
       <main className="pt-4 pb-20">
-        <div className="max-w-9xl mx-auto px-4 lg:px-6">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
               <div className="flex items-center space-x-3 mb-2">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate('/landowner-dashboard')}
+                  onClick={() => navigate('/landowner/dashboard')}
                   iconName="ArrowLeft"
                   iconSize={16}
                 >
                   Back to Dashboard
                 </Button>
               </div>
-              <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-                Project Status & Verification
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                My Projects
               </h1>
-              <p className="text-muted-foreground font-body">
-                Track your land verification progress and review status
+              <p className="text-muted-foreground">
+                View and manage your uploaded land projects
               </p>
             </div>
+            <Button
+              variant="default"
+              onClick={() => navigate('/document-upload')}
+              iconName="Plus"
+              iconPosition="left"
+            >
+              New Project
+            </Button>
           </div>
 
           {/* Error State */}
@@ -192,127 +135,129 @@ const LandownerProjectStatus = () => {
             </div>
           )}
 
-          {/* Main Layout: 60% Projects Table + 40% Review Panel */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-            {/* Left Section: Project Table (60%) */}
-            <div className="xl:col-span-3 space-y-6">
-              <div className="bg-card border border-border rounded-lg shadow-elevation-1 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="font-heading font-semibold text-xl text-foreground">
-                      Your Projects
-                    </h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {projects.length} {projects.length === 1 ? 'project' : 'projects'} submitted
-                    </p>
-                  </div>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => navigate('/document-upload')}
-                    iconName="Plus"
-                    iconPosition="left"
-                  >
-                    New Project
-                  </Button>
-                </div>
-
-                {projects.length > 0 ? (
-                  <ProjectTable
-                    projects={projects}
-                    onEdit={handleEditProject}
-                    onView={handleViewProject}
-                    onContinueDraft={handleContinueDraft}
-                    onSubmitForReview={handleSubmitForReview}
-                    onDelete={handleDeleteProject}
-                  />
-                ) : (
-                  <div className="py-12 text-center">
-                    <Icon name="FolderOpen" size={64} className="text-muted-foreground mx-auto mb-4" />
-                    <p className="text-lg font-medium text-foreground mb-2">No Projects Yet</p>
-                    <p className="text-sm text-muted-foreground mb-6">
-                      Start by uploading your first land details
-                    </p>
-                    <Button
-                      variant="default"
-                      onClick={() => navigate('/document-upload')}
-                      iconName="Plus"
-                      iconPosition="left"
-                    >
-                      Upload Land Details
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Selected Project Info */}
-              {selectedProject && (
-                <div className="bg-card border border-border rounded-lg shadow-elevation-1 p-6">
-                  <h3 className="font-heading font-semibold text-lg text-foreground mb-4">
-                    Project Details
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Project Name</p>
-                      <p className="text-base font-medium text-foreground mt-1">
-                        {selectedProject.name}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Location</p>
-                      <p className="text-base font-medium text-foreground mt-1">
-                        {selectedProject.location}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Project Type</p>
-                      <p className="text-base font-medium text-foreground mt-1 capitalize">
-                        {selectedProject.type}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Capacity</p>
-                      <p className="text-base font-medium text-foreground mt-1">
-                        {selectedProject.capacity} MW
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Project ID</p>
-                        <p className="text-sm font-mono text-foreground mt-1">
-                          {selectedProject.id}
+          {/* Projects Grid */}
+          {projects.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {projects.map((project) => (
+                <div key={project.id} className="bg-card border border-border rounded-lg shadow-elevation-1 overflow-hidden">
+                  {/* Project Header */}
+                  <div className="p-6 border-b border-border">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-foreground mb-1">
+                          {project.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {project.location}
                         </p>
+                        <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                          <span className="flex items-center">
+                            <Icon name="MapPin" size={14} className="mr-1" />
+                            {project.type}
+                          </span>
+                          <span className="flex items-center">
+                            <Icon name="Zap" size={14} className="mr-1" />
+                            {project.capacity} MW
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        project.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
+                        project.status === 'under_review' ? 'bg-yellow-100 text-yellow-800' :
+                        project.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        project.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {project.status?.replace('_', ' ') || 'Draft'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Project Details */}
+                  <div className="p-6">
+                    <div className="space-y-3 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Project ID</span>
+                        <span className="font-mono text-foreground">{project.id}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Created</span>
+                        <span className="text-foreground">
+                          {new Date(project.created_at || project.date_created).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col space-y-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleViewProject(project)}
+                        iconName="Eye"
+                        iconPosition="left"
+                        className="w-full"
+                      >
+                        View Review Status
+                      </Button>
+                      
+                      <div className="flex space-x-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleEditProject(selectedProject)}
+                          onClick={() => handleEditProject(project)}
                           iconName="Edit"
-                          iconPosition="left"
+                          className="flex-1"
                         >
-                          Edit Project
+                          Edit
                         </Button>
+                        
+                        {project.status === 'draft' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleContinueDraft(project)}
+                            iconName="Play"
+                            className="flex-1"
+                          >
+                            Continue
+                          </Button>
+                        )}
+                        
+                        {project.status === 'draft' && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleSubmitForReview(project)}
+                            iconName="Send"
+                            className="flex-1"
+                          >
+                            Submit
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
-
-            {/* Right Section: Review Panel (40%) */}
-            <div className="xl:col-span-2">
-              <div className="xl:sticky xl:top-6">
-                <LandownerReviewPanel 
-                  tasks={tasks} 
-                  projectData={selectedProject}
-                />
-              </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg p-12 text-center">
+              <Icon name="FolderOpen" size={64} className="text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Projects Yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Start by uploading your first land project
+              </p>
+              <Button
+                variant="default"
+                onClick={() => navigate('/document-upload')}
+                iconName="Plus"
+                iconPosition="left"
+              >
+                Upload Land Details
+              </Button>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>

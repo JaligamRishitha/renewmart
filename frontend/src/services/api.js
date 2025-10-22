@@ -367,6 +367,18 @@ export const documentsAPI = {
       responseType: 'blob'
     });
     return response.data;
+  },
+
+  getDocumentTypes: async () => {
+    const response = await api.get('/documents/types/list');
+    return response.data;
+  },
+
+  getDocumentsByType: async (landId, documentType) => {
+    const response = await api.get(`/documents/land/${landId}`, {
+      params: { document_type: documentType }
+    });
+    return response.data;
   }
 };
  
@@ -542,6 +554,80 @@ export const taskAPI = {
   // Submit subtasks status
   submitSubtasksStatus: async (taskId) => {
     const response = await api.post(`/tasks/${taskId}/subtasks/submit`);
+    return response.data;
+  },
+
+  // Get task status by project/land for investor view
+  getTaskStatusByProject: async (landId) => {
+    console.log('🔧 API: Fetching tasks for landId:', landId);
+    try {
+      // Try the new project review endpoint first
+      const response = await api.get(`/tasks/project/${landId}/review`);
+      console.log('🔧 API: Project review response:', response);
+      console.log('🔧 API: Response data:', response.data);
+      return response.data;
+    } catch (error) {
+      console.log('🔧 API: Project review endpoint failed, trying fallback:', error);
+      // Fallback to the original method
+      try {
+        // First, get all tasks for this land
+        const response = await api.get('/tasks', { 
+          params: { 
+            land_id: landId,
+            include_status: true,
+            status: 'all'
+          } 
+        });
+        console.log('🔧 API: Raw tasks response:', response);
+        
+        // If we have tasks, fetch subtasks for each task
+        if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+          const tasksWithSubtasks = await Promise.all(
+            response.data.map(async (task) => {
+              try {
+                // Fetch subtasks for this task
+                const subtasksResponse = await api.get(`/tasks/${task.task_id}/subtasks`);
+                console.log(`🔧 API: Subtasks for task ${task.task_id}:`, subtasksResponse.data);
+                
+                // Add subtasks to the task object
+                return {
+                  ...task,
+                  subtasks: subtasksResponse.data || [],
+                  assigned_role: task.assigned_role || task.role || task.reviewer_role
+                };
+              } catch (err) {
+                console.error(`🔧 API: Error fetching subtasks for task ${task.task_id}:`, err);
+                // Return task without subtasks if fetch fails
+                return {
+                  ...task,
+                  subtasks: [],
+                  assigned_role: task.assigned_role || task.role || task.reviewer_role
+                };
+              }
+            })
+          );
+          
+          console.log('🔧 API: Tasks with subtasks:', tasksWithSubtasks);
+          return tasksWithSubtasks;
+        }
+        
+        console.log('🔧 API: No tasks found or empty response');
+        return response.data || [];
+      } catch (fallbackError) {
+        console.error('🔧 API: Both endpoints failed:', fallbackError);
+        throw fallbackError;
+      }
+    }
+  },
+
+  // Get task progress summary for investor dashboard
+  getTaskProgressSummary: async (landId) => {
+    const response = await api.get('/tasks', { 
+      params: { 
+        land_id: landId,
+        summary_only: true
+      } 
+    });
     return response.data;
   }
 };

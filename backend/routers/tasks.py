@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 import uuid
+import logging
 
 from database import get_db
 from auth import get_current_user, require_admin
@@ -16,6 +17,9 @@ from models.schemas import (
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Helper functions
 async def create_default_subtasks_for_task(task_id: str, assigned_role: str, created_by: str, db: Session):
@@ -224,6 +228,9 @@ async def get_tasks(
     assigned_to: Optional[UUID] = None,
     status: Optional[str] = None,
     task_type: Optional[str] = None,
+    include_subtasks: Optional[bool] = None,
+    include_status: Optional[bool] = None,
+    summary_only: Optional[bool] = None,
     skip: int = 0,
     limit: int = 100,
     current_user: dict = Depends(get_current_user),
@@ -280,26 +287,191 @@ async def get_tasks(
     
     results = db.execute(text(base_query), params).fetchall()
     
-    return [
-        TaskResponse(
-            task_id=row.task_id,
-            land_id=row.land_id,
-            task_type=row.task_type,
-            description=row.description,
-            assigned_to=row.assigned_to,
-            assigned_by=row.assigned_by,
-            status=row.status,
-            priority=row.priority,
-            due_date=row.due_date,
-            completion_notes=row.completion_notes,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            land_title=row.land_title,
-            assigned_to_name=row.assigned_to_name,
-            assigned_by_name=row.assigned_by_name
+    # If include_subtasks is requested, fetch subtasks for each task
+    if include_subtasks:
+        task_responses = []
+        for row in results:
+            # Get subtasks for this task
+            subtasks_query = text("""
+                SELECT subtask_id, task_id, title, description, status, 
+                       assigned_to, created_at, updated_at
+                FROM subtasks 
+                WHERE task_id = :task_id
+                ORDER BY created_at ASC
+            """)
+            subtasks_result = db.execute(subtasks_query, {"task_id": str(row.task_id)}).fetchall()
+            
+            # Convert subtasks to dict format
+            subtasks = [
+                {
+                    "subtask_id": str(subtask.subtask_id),
+                    "task_id": str(subtask.task_id),
+                    "title": subtask.title,
+                    "description": subtask.description,
+                    "status": subtask.status,
+                    "assigned_to": str(subtask.assigned_to) if subtask.assigned_to else None,
+                    "created_at": subtask.created_at,
+                    "updated_at": subtask.updated_at
+                }
+                for subtask in subtasks_result
+            ]
+            
+            # Create task response with subtasks
+            task_response = {
+                "task_id": str(row.task_id),
+                "land_id": str(row.land_id),
+                "task_type": row.task_type,
+                "description": row.description,
+                "assigned_to": str(row.assigned_to) if row.assigned_to else None,
+                "assigned_by": str(row.assigned_by) if row.assigned_by else None,
+                "status": row.status,
+                "priority": row.priority,
+                "assigned_role": row.assigned_role,
+                "start_date": row.start_date,
+                "end_date": row.end_date,
+                "due_date": row.due_date,
+                "completion_notes": row.completion_notes,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "land_title": row.land_title,
+                "assigned_to_name": row.assigned_to_name,
+                "assigned_by_name": row.assigned_by_name,
+                "subtasks": subtasks
+            }
+            task_responses.append(task_response)
+        
+        return task_responses
+    else:
+        return [
+            TaskResponse(
+                task_id=row.task_id,
+                land_id=row.land_id,
+                task_type=row.task_type,
+                description=row.description,
+                assigned_to=row.assigned_to,
+                assigned_by=row.assigned_by,
+                status=row.status,
+                priority=row.priority,
+                due_date=row.due_date,
+                completion_notes=row.completion_notes,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                land_title=row.land_title,
+                assigned_to_name=row.assigned_to_name,
+                assigned_by_name=row.assigned_by_name
+            )
+            for row in results
+        ]
+
+@router.get("/project/{land_id}/review", response_model=List[Dict[str, Any]])
+async def get_project_review_tasks(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all tasks for a specific land/project with subtasks for landowner review."""
+    
+    # Check if user is landowner of this land or admin
+    land_check = text("""
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+    """)
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
         )
-        for row in results
-    ]
+    
+    user_roles = current_user.get("roles", [])
+    if ("administrator" not in user_roles and 
+        str(land_result.landowner_id) != current_user["user_id"]):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view tasks for this land"
+        )
+    
+    try:
+        # Get all tasks for this land
+        tasks_query = text("""
+            SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+                   t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
+                   t.assigned_role, t.start_date, t.end_date, t.due_date,
+                   t.completion_notes, t.created_at, t.updated_at,
+                   l.title as land_title, l.landowner_id,
+                   u1.first_name || ' ' || u1.last_name as assigned_to_name,
+                   u2.first_name || ' ' || u2.last_name as assigned_by_name
+            FROM tasks t
+            JOIN lands l ON t.land_id = l.land_id
+            LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+            LEFT JOIN "user" u2 ON t.created_by = u2.user_id
+            WHERE t.land_id = :land_id
+            ORDER BY t.created_at DESC
+        """)
+        
+        tasks_result = db.execute(tasks_query, {"land_id": str(land_id)}).fetchall()
+        
+        # Get subtasks for each task
+        tasks_with_subtasks = []
+        for task in tasks_result:
+            # Get subtasks for this task
+            subtasks_query = text("""
+                SELECT subtask_id, task_id, title, description, status, 
+                       assigned_to, created_at, updated_at
+                FROM subtasks 
+                WHERE task_id = :task_id
+                ORDER BY created_at ASC
+            """)
+            subtasks_result = db.execute(subtasks_query, {"task_id": str(task.task_id)}).fetchall()
+            
+            # Convert subtasks to dict format
+            subtasks = [
+                {
+                    "subtask_id": str(subtask.subtask_id),
+                    "task_id": str(subtask.task_id),
+                    "title": subtask.title,
+                    "description": subtask.description,
+                    "status": subtask.status,
+                    "assigned_to": str(subtask.assigned_to) if subtask.assigned_to else None,
+                    "created_at": subtask.created_at,
+                    "updated_at": subtask.updated_at
+                }
+                for subtask in subtasks_result
+            ]
+            
+            # Create task response with subtasks
+            task_response = {
+                "task_id": str(task.task_id),
+                "land_id": str(task.land_id),
+                "task_type": task.task_type,
+                "title": task.task_type,  # For compatibility
+                "description": task.description,
+                "assigned_to": str(task.assigned_to) if task.assigned_to else None,
+                "assigned_by": str(task.assigned_by) if task.assigned_by else None,
+                "status": task.status,
+                "priority": task.priority,
+                "assigned_role": task.assigned_role,
+                "start_date": task.start_date,
+                "end_date": task.end_date,
+                "due_date": task.due_date,
+                "completion_notes": task.completion_notes,
+                "created_at": task.created_at,
+                "updated_at": task.updated_at,
+                "land_title": task.land_title,
+                "assigned_to_name": task.assigned_to_name,
+                "assigned_by_name": task.assigned_by_name,
+                "subtasks": subtasks
+            }
+            tasks_with_subtasks.append(task_response)
+        
+        return tasks_with_subtasks
+        
+    except Exception as e:
+        logger.error(f"Error fetching project review tasks: {str(e)}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch project review tasks: {str(e)}"
+        )
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
