@@ -28,6 +28,10 @@ class Document(Base):
     approved_at = Column(DateTime(timezone=True), nullable=True)
     rejection_reason = Column(Text, nullable=True)
     admin_comments = Column(Text, nullable=True)
+    version_number = Column(Integer, default=1)
+    is_latest_version = Column(Boolean, default=True)
+    parent_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.document_id"), nullable=True)
+    version_notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships

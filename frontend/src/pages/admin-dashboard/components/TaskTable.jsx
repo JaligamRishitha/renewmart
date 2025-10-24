@@ -51,7 +51,7 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
 
   const handleViewDocuments = (task) => {
     // Navigate with land_id and task_id to document review
-    navigate('/document-review', { state: { landId: task.landId, taskId: task.taskId } });
+    navigate(`/document-review/${task.landId}`, { state: { landId: task.landId, taskId: task.taskId } });
   };
 
   const handleEditTask = (task) => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
+import RealTimeMessaging from './RealTimeMessaging';
 
 
 const CollaborationTools = ({ 
@@ -8,7 +9,9 @@ const CollaborationTools = ({
   onAddComment = () => {},
   onDeleteComment = () => {},
   reviewers = [],
-  onAssignReviewer = () => {}
+  onAssignReviewer = () => {},
+  taskId = null,
+  currentUser = null
 }) => {
   const [newComment, setNewComment] = useState('');
   const [isAddingComment, setIsAddingComment] = useState(false);
@@ -141,6 +144,29 @@ const CollaborationTools = ({
 
   return (
     <div className="space-y-6">
+      {/* Real-time Messaging Section */}
+      {currentUser && (
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="p-4 border-b border-border">
+            <h3 className="text-lg font-semibold text-foreground flex items-center space-x-2">
+              <Icon name="MessageCircle" size={20} className="text-primary" />
+              <span>Real-time Messaging</span>
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send messages to reviewers and team members
+            </p>
+          </div>
+          <div className="h-96">
+            <RealTimeMessaging 
+              taskId={taskId || 'general'} // Use general channel if no specific task
+              currentUser={currentUser}
+              onMessageSent={(message) => console.log('Message sent:', message)}
+              onMessageReceived={(message) => console.log('Message received:', message)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Comments Section */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border">

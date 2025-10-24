@@ -219,6 +219,8 @@ const DocumentReview = () => {
                       <CollaborationTools
                         onAddComment={(comment) => console.log('Add comment:', comment)}
                         onAssignReviewer={(reviewerId) => console.log('Assign reviewer:', reviewerId)}
+                        taskId={currentTask?.task_id}
+                        currentUser={user}
                       />
                     </div>
                   )}

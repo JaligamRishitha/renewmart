@@ -59,7 +59,7 @@ const QuickActions = ({
           label: 'Review Pending',
           icon: 'FileCheck',
           variant: 'default',
-          onClick: () => navigate('/document-review'),
+          onClick: () => navigate('/admin-document-review'),
           roles: ['admin']
         },
         {

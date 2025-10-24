@@ -40,6 +40,10 @@ class User(Base):
         back_populates="uploader"
     )
     investor_interests = relationship("InvestorInterest", back_populates="investor")
+    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
+    received_messages = relationship("Message", foreign_keys="Message.recipient_id", back_populates="recipient")
+    created_threads = relationship("MessageThread", back_populates="creator")
+    message_reactions = relationship("MessageReaction", back_populates="user")
 
 
 class UserRole(Base):

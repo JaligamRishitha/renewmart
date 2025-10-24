@@ -10,7 +10,9 @@ const DocumentAccordion = ({
   onFileUpload, 
   onFileRemove,
   expandedSections,
-  onSectionToggle 
+  onSectionToggle,
+  onViewVersions,
+  isEditMode = false
 }) => {
   const [draggedOver, setDraggedOver] = useState(null);
   const [downloading, setDownloading] = useState(null);
@@ -347,6 +349,16 @@ const DocumentAccordion = ({
                                 >
                                   <Icon name={downloading === file.id ? "Loader" : "Download"} size={16} />
                                 </Button>
+                                {isEditMode && onViewVersions && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onViewVersions(section.id)}
+                                    title="View Document Versions"
+                                  >
+                                    <Icon name="History" size={16} />
+                                  </Button>
+                                )}
                               </>
                             )}
                             <Button

@@ -4,11 +4,11 @@ from jose import JWTError, jwt
 import os
 os.environ.setdefault("PASSLIB_BCRYPT_DETECT_WRAPAROUND", "0")
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, WebSocket, WebSocketException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import get_db, DATABASE_URL
+from database import get_db, DATABASE_URL, get_user_by_id, get_user_roles
 from models.schemas import TokenData, User
 import os
 from uuid import UUID
@@ -107,7 +107,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[dict]:
             roles = list(result.roles)
         
     return {
-        "user_id": result.user_id,
+        "user_id": str(result.user_id),
         "email": result.email,
         "first_name": result.first_name,
         "last_name": result.last_name,
@@ -157,7 +157,7 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
         raise credentials_exception
         
     return {
-        "user_id": result.user_id,
+        "user_id": str(result.user_id),
         "email": result.email,
         "first_name": result.first_name,
         "last_name": result.last_name,
@@ -281,3 +281,41 @@ def check_task_assignment(task_id: UUID, current_user: dict, db: Session) -> boo
     user_roles = current_user.get("roles", [])
     return (result.assigned_to == current_user["user_id"] or 
             result.assigned_role in user_roles)
+
+
+async def get_current_user_websocket(token: str) -> dict:
+    """Get current user from WebSocket token"""
+    try:
+        # Extract token from query parameter or header
+        if not token:
+            raise WebSocketException(code=4001, reason="No token provided")
+        
+        # Verify token
+        token_data = verify_token(token)
+        if token_data is None:
+            raise WebSocketException(code=4001, reason="Invalid token")
+        
+        # Get user from database
+        db = next(get_db())
+        try:
+            user = get_user_by_id(db, token_data.user_id)
+            if not user:
+                raise WebSocketException(code=4001, reason="User not found")
+            
+            # Get user roles
+            roles = get_user_roles(db, token_data.user_id)
+            
+            return {
+                "user_id": str(user["user_id"]),
+                "email": user["email"],
+                "first_name": user["first_name"],
+                "last_name": user["last_name"],
+                "roles": roles
+            }
+        finally:
+            db.close()
+            
+    except WebSocketException:
+        raise
+    except Exception as e:
+        raise WebSocketException(code=4001, reason=f"Authentication error: {str(e)}")

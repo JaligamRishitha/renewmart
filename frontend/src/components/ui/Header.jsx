@@ -12,6 +12,20 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
+  // Function to get role display name
+  const getRoleDisplayName = (roles) => {
+    if (!roles || roles.length === 0) return 'Guest';
+    
+    // Priority order for role display
+    if (roles.includes('administrator')) return 'Admin Portal';
+    if (roles.includes('reviewer')) return 'Reviewer Portal';
+    if (roles.includes('investor')) return 'Investor Portal';
+    if (roles.includes('landowner')) return 'Landowner Portal';
+    
+    // Fallback to first role
+    return roles[0] ? `${roles[0].charAt(0).toUpperCase() + roles[0].slice(1)} Portal` : 'Guest';
+  };
+
   // Get role-based navigation
   const roleNavigation = getRoleNavigation(user);
 
@@ -41,7 +55,7 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       label: 'Account',
       path: '/register',
       icon: 'User',
-      roles: ['landowner', 'admin', 'investor', 'reviewer'],
+      roles: ['landowner', 'admin', 'investor'],
       badge: notifications?.account || 0
     }
   ];
@@ -139,10 +153,7 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
               </div>
               <div className="flex flex-col">
                 <span className="font-heading font-semibold text-lg text-foreground leading-tight">
-                  LandInvest
-                </span>
-                <span className="font-heading font-medium text-xs text-primary leading-tight">
-                  Pro
+                  RenewMart - {getRoleDisplayName(user?.roles || [])}
                 </span>
               </div>
             </div>

@@ -3,6 +3,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import { taskAPI, documentsAPI } from '../../../services/api';
 import { Checkbox } from '../../../components/ui/Checkbox';
+import ProjectMessaging from './ProjectMessaging';
 
 /**
  * ReviewPanel Component
@@ -135,6 +136,7 @@ const ReviewPanel = ({
   ];
 
   const [activeTab, setActiveTab] = useState("review");
+  const [showMessaging, setShowMessaging] = useState(false);
 
   // 🔹 Reload state from localStorage when user becomes available
   useEffect(() => {
@@ -630,6 +632,21 @@ const ReviewPanel = ({
             </div>
           </div>
           
+          {/* Messaging Button */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowMessaging(!showMessaging)}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                showMessaging
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+              }`}
+            >
+              <Icon name="MessageCircle" size={16} />
+              <span>Messaging</span>
+            </button>
+          </div>
+          
         </div>
      
       </div>
@@ -652,9 +669,20 @@ const ReviewPanel = ({
         ))}
       </div>
 
+      {/* Messaging Content */}
+      {showMessaging && (
+        <div className="flex-1 overflow-hidden">
+          <ProjectMessaging 
+            currentUser={currentUser}
+            onMessageSent={(message) => console.log('Message sent:', message)}
+            onMessageReceived={(message) => console.log('Message received:', message)}
+          />
+        </div>
+      )}
+
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden relative">
-        {activeTab === "review" && (
+        {!showMessaging && activeTab === "review" && (
           <div className="h-full overflow-y-auto">
             {hasNoTask ? (
               <div className="flex-1 flex items-center justify-center p-8">
@@ -1199,7 +1227,7 @@ const ReviewPanel = ({
           </div>
         )}
         
-        {activeTab === "task" && (
+        {!showMessaging && activeTab === "task" && (
           <div className="p-4 h-full overflow-y-auto">
             {hasNoTask ? (
               <div className="flex-1 flex items-center justify-center p-8">
@@ -1221,7 +1249,7 @@ const ReviewPanel = ({
           </div>
         )}
         
-        {activeTab === "collaboration" && (
+        {!showMessaging && activeTab === "collaboration" && (
           <div className="p-4 h-full overflow-y-auto">
             {hasNoTask ? (
               <div className="flex-1 flex items-center justify-center p-8">

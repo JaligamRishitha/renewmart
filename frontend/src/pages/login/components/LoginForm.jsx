@@ -64,7 +64,7 @@ const LoginForm = () => {
     setToast({ show: true, message, type });
     setTimeout(() => {
       setToast({ show: false, message: '', type: 'success' });
-    }, 3000);
+    }, type === 'success' ? 2000 : 5000); // Success toasts show for 2s, error toasts for 5s
   };
 
   const handleSubmit = async (e) => {
@@ -79,17 +79,20 @@ const LoginForm = () => {
     setErrors({});
 
     try {
+      console.log('Attempting login with:', { email: formData.email, role: formData.role });
       const result = await login({
         email: formData.email,
         password: formData.password,
         role: formData.role
       });
       
-      // Show success toast
-      showToast('Login successful! Redirecting...', 'success');
+      console.log('Login result:', result);
       
-      // Role-based navigation after successful login
+      // Check if login was successful
       if (result.success && result.user) {
+        // Show success toast
+        showToast('Login successful! Redirecting...', 'success');
+        
         const userRoles = result.user.roles || [];
         
         // Navigate to appropriate dashboard based on role (hierarchical routes)
@@ -114,31 +117,42 @@ const LoginForm = () => {
             navigate('/dashboard');
           }
         }, 1000); // Short delay to show the toast before redirecting
+      } else {
+        // Handle login failure - clear form and show error
+        const error = result.error;
+        console.log('Login error:', error); // Log the full error for debugging
+        
+        // Clear the form
+        setFormData({
+          email: '',
+          password: '',
+          role: '',
+          rememberMe: false
+        });
+        
+        // Show error toast
+        if (error?.status === 401) {
+          showToast('Incorrect email or password. Please try again.', 'error');
+        } else if (error?.message?.includes('role')) {
+          showToast('Selected role does not match your account.', 'error');
+        } else if (error?.message?.includes('email')) {
+          showToast('No account found with this email address.', 'error');
+        } else {
+          showToast('Login failed. Please check your credentials.', 'error');
+        }
       }
     } catch (error) {
-      console.log('Login error:', error); // Log the full error for debugging
+      console.log('Unexpected login error:', error); // Log unexpected errors
       
-      // Special handling for landowner role with 401 errors
-      if (error?.status === 401 && formData.role === 'landowner') {
-        showToast('Landowner login temporarily unavailable. Please contact support.', 'error');
-        setErrors({ 
-          general: 'Landowner login is currently being updated. Please try again later or contact support.' 
-        });
-      }
-      // Show more specific error toast based on error status
-      else if (error?.status === 401) {
-        showToast('Incorrect email or password. Please try again.', 'error');
-        setErrors({ password: 'Invalid email or password' });
-      } else if (error?.message?.includes('role')) {
-        showToast('Selected role does not match your account.', 'error');
-        setErrors({ role: 'Selected role does not match your account' });
-      } else if (error?.message?.includes('email')) {
-        showToast('No account found with this email address.', 'error');
-        setErrors({ email: 'No account found with this email address' });
-      } else {
-        showToast('Login failed. Please check your credentials.', 'error');
-        setErrors({ general: error?.message || 'Login failed. Please try again.' });
-      }
+      // Clear the form on unexpected error
+      setFormData({
+        email: '',
+        password: '',
+        role: '',
+        rememberMe: false
+      });
+      
+      showToast('An unexpected error occurred. Please try again.', 'error');
     }
   };
 
@@ -146,18 +160,23 @@ const LoginForm = () => {
     <div className="w-full max-w-md mx-auto">
       {/* Toast Notification */}
       {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 transform ${
+        <div className={`fixed top-4 right-4 z-[9999] flex items-center gap-3 px-6 py-4 rounded-lg shadow-xl border-2 transition-all duration-300 transform max-w-sm ${
           toast.type === 'success' 
             ? 'bg-green-500 text-white border-green-600' 
             : 'bg-red-500 text-white border-red-600'
-        }`} style={{ animation: 'slideInRight 0.3s ease-out' }}>
-          <Icon name={toast.type === 'success' ? 'CheckCircle' : 'AlertCircle'} size={20} />
-          <span className="font-medium">{toast.message}</span>
+        }`} style={{ 
+          animation: 'slideInRight 0.3s ease-out',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+        }}>
+          <Icon name={toast.type === 'success' ? 'CheckCircle' : 'AlertCircle'} size={24} />
+          <div className="flex-1">
+            <span className="font-semibold text-sm block">{toast.message}</span>
+          </div>
           <button 
             onClick={() => setToast({ ...toast, show: false })}
-            className="ml-2 hover:opacity-80 transition-opacity"
+            className="ml-3 hover:opacity-80 transition-opacity p-1 rounded-full hover:bg-white/20"
           >
-            <Icon name="X" size={18} />
+            <Icon name="X" size={20} />
           </button>
         </div>
       )}
@@ -253,8 +272,9 @@ const LoginForm = () => {
           size="lg"
           fullWidth
           loading={loading}
-          iconName="LogIn"
+          iconName={loading ? "Loader2" : "LogIn"}
           iconPosition="right"
+          disabled={loading}
         >
           {loading ? 'Signing In...' : 'Sign In'}
         </Button>

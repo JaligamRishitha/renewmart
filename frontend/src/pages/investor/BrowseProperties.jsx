@@ -25,8 +25,37 @@ const BrowseProperties = () => {
   const [taskStatusData, setTaskStatusData] = useState({});
   const [loadingTaskData, setLoadingTaskData] = useState(false);
 
+  // Clear task data for a specific land ID (useful for refreshing)
+  const clearTaskData = (landId) => {
+    console.log('🔄 Clearing task data for land:', landId);
+    setTaskStatusData(prev => {
+      const newData = { ...prev };
+      delete newData[landId];
+      return newData;
+    });
+  };
+
+  // Force refresh task data for a specific land ID
+  const refreshTaskData = async (landId) => {
+    console.log('🔄 Force refreshing task data for land:', landId);
+    clearTaskData(landId);
+    await fetchTaskStatus(landId);
+  };
+
   // Fetch task status data for a specific property from admin review panel
   const fetchTaskStatus = async (landId) => {
+    // Check if we already have data for this landId
+    if (taskStatusData[landId] && Object.keys(taskStatusData[landId]).length > 0) {
+      console.log('🔄 Task data already exists for land:', landId, 'skipping fetch');
+      return;
+    }
+    
+    // Prevent multiple simultaneous calls for the same landId
+    if (loadingTaskData) {
+      console.log('🔄 Already loading task data, skipping duplicate request');
+      return;
+    }
+    
     setLoadingTaskData(true);
     try {
       console.log('🔄 Fetching task status from admin review panel for land:', landId);
@@ -83,6 +112,8 @@ const BrowseProperties = () => {
   // Process tasks to create role-based structure
   const processTasksForRoles = (tasks) => {
     console.log('🔧 Processing tasks for roles:', tasks);
+    console.log('🔧 Total tasks to process:', tasks.length);
+    
     const roleData = {};
     
     // Define reviewer roles
@@ -102,19 +133,40 @@ const BrowseProperties = () => {
       };
     });
 
+    // Track processed task IDs to prevent duplicates
+    const processedTaskIds = new Set();
+    const processedTaskNames = new Set();
+
     // Process each task
     tasks.forEach((task, index) => {
-      console.log(`🔧 Processing task ${index}:`, task);
+      console.log(`🔧 Processing task ${index + 1}/${tasks.length}:`, task);
       console.log(`🔧 Task keys:`, Object.keys(task));
       console.log(`🔧 Task assigned_role:`, task.assigned_role);
       console.log(`🔧 Task role:`, task.role);
       console.log(`🔧 Task status:`, task.status);
       console.log(`🔧 Task title:`, task.title);
-        console.log(`🔧 Task task_name:`, task.task_name);
-        console.log(`🔧 Task subtasks:`, task.subtasks);
-        
-        const roleId = task.assigned_role || task.role || task.role_id;
+      console.log(`🔧 Task task_name:`, task.task_name);
+      console.log(`🔧 Task subtasks:`, task.subtasks);
+      
+      const roleId = task.assigned_role || task.role || task.role_id;
+      const taskId = task.task_id || task.id;
+      const taskName = task.title || task.task_name || task.name || 'Untitled Task';
+      
       console.log(`🔧 Resolved roleId:`, roleId);
+      console.log(`🔧 Task ID:`, taskId);
+      console.log(`🔧 Task Name:`, taskName);
+      
+      // Check if we've already processed this task ID
+      if (taskId && processedTaskIds.has(taskId)) {
+        console.warn(`🔧 DUPLICATE TASK ID DETECTED: Task ID ${taskId} already processed, skipping`);
+        return;
+      }
+      
+      // Check if we've already processed this task name
+      if (processedTaskNames.has(taskName)) {
+        console.warn(`🔧 DUPLICATE TASK NAME DETECTED: Task name "${taskName}" already processed, skipping`);
+        return;
+      }
       
       if (roleId && roleData[roleId]) {
         console.log(`🔧 Adding task to role:`, roleId);
@@ -124,8 +176,8 @@ const BrowseProperties = () => {
         }
         
         // Add task to role's task list with subtasks
-        const taskName = task.title || task.task_name || task.name || 'Untitled Task';
         const taskData = {
+          id: taskId,
           name: taskName,
           completed: task.status === 'completed'
         };
@@ -140,7 +192,27 @@ const BrowseProperties = () => {
           console.log(`🔧 Processed subtasks:`, taskData.subtasks);
         }
         
+        // Check for duplicate tasks before adding (by task ID if available, otherwise by name)
+        const existingTaskById = taskId ? roleData[roleId].tasks.find(t => t.id === taskId) : null;
+        const existingTaskByName = roleData[roleId].tasks.find(t => t.name === taskName);
+        
+        if (existingTaskById || existingTaskByName) {
+          console.warn(`🔧 DUPLICATE TASK DETECTED: "${taskName}" already exists in role ${roleId}`);
+          console.warn(`🔧 Existing task by ID:`, existingTaskById);
+          console.warn(`🔧 Existing task by name:`, existingTaskByName);
+          console.warn(`🔧 New task:`, taskData);
+          console.warn(`🔧 Task ID:`, taskId);
+          // Don't add duplicate
+          return;
+        }
+        
         roleData[roleId].tasks.push(taskData);
+        
+        // Mark this task ID and name as processed
+        if (taskId) {
+          processedTaskIds.add(taskId);
+        }
+        processedTaskNames.add(taskName);
 
         // Update role status
         if (task.status === 'completed') {
@@ -150,6 +222,7 @@ const BrowseProperties = () => {
         }
         
         console.log(`🔧 Updated role data for ${roleId}:`, roleData[roleId]);
+        console.log(`🔧 Total tasks in ${roleId}:`, roleData[roleId].tasks.length);
       } else {
         console.warn(`🔧 No matching role found for task:`, task);
         console.warn(`🔧 Available roles:`, Object.keys(roleData));
@@ -157,6 +230,14 @@ const BrowseProperties = () => {
     });
 
     console.log('🔧 Final processed role data:', roleData);
+    console.log('🔧 Processed task IDs:', Array.from(processedTaskIds));
+    console.log('🔧 Processed task names:', Array.from(processedTaskNames));
+    
+    // Log final counts for each role
+    Object.keys(roleData).forEach(roleId => {
+      console.log(`🔧 Final count for ${roleId}: ${roleData[roleId].tasks.length} tasks`);
+    });
+    
     return roleData;
   };
 
@@ -608,17 +689,39 @@ const BrowseProperties = () => {
                   <h2 className="text-xl font-semibold text-foreground">{selectedProperty.name}</h2>
                   <p className="text-sm text-muted-foreground">Task Status Overview</p>
                 </div>
-                <button
-                  onClick={() => setShowTaskModal(false)}
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
-                >
-                  <Icon name="X" size={20} className="text-muted-foreground" />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => selectedProperty.landId && refreshTaskData(selectedProperty.landId)}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                    title="Refresh task data"
+                  >
+                    <Icon name="RefreshCw" size={20} className="text-muted-foreground" />
+                  </button>
+                  <button
+                    onClick={() => setShowTaskModal(false)}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <Icon name="X" size={20} className="text-muted-foreground" />
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Debug Info */}
+              {selectedProperty.landId && taskStatusData[selectedProperty.landId] && (
+                <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                  <h4 className="text-sm font-semibold text-foreground mb-2">Debug Info:</h4>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div>Land ID: {selectedProperty.landId}</div>
+                    <div>RE Sales Advisor Tasks: {taskStatusData[selectedProperty.landId]?.re_sales_advisor?.tasks?.length || 0}</div>
+                    <div>RE Analyst Tasks: {taskStatusData[selectedProperty.landId]?.re_analyst?.tasks?.length || 0}</div>
+                    <div>RE Governance Lead Tasks: {taskStatusData[selectedProperty.landId]?.re_governance_lead?.tasks?.length || 0}</div>
+                  </div>
+                </div>
+              )}
+              
               {loadingTaskData ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -632,7 +735,10 @@ const BrowseProperties = () => {
                       ? taskStatusData[selectedProperty.landId] 
                       : selectedProperty.taskStatus;
                     
-                    return taskData && Object.keys(taskData).length > 0 ? Object.entries(taskData).map(([role, status]) => (
+                    return taskData && Object.keys(taskData).length > 0 ? Object.entries(taskData).map(([role, status]) => {
+                      // Debug: Log the tasks for this role
+                      console.log(`🔍 Displaying tasks for role ${role}:`, status.tasks);
+                      return (
                   <div key={role} className="border border-border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-2">
@@ -764,7 +870,8 @@ const BrowseProperties = () => {
                       )}
                     </div>
                   </div>
-                    )) : (
+                    );
+                    }) : (
                       <div className="text-center py-8">
                         <Icon name="AlertCircle" size={48} className="text-muted-foreground mx-auto mb-4" />
                         <h3 className="text-lg font-semibold text-foreground mb-2">No Task Data Available</h3>

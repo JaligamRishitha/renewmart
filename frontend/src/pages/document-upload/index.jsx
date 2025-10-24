@@ -8,6 +8,7 @@ import DocumentAccordion from './components/DocumentAccordion';
 import ProgressSidebar from './components/ProgressSidebar';
 import ProjectDetailsForm from './components/ProjectDetailsForm';
 import SubmissionPreview from './components/SubmissionPreview';
+import DocumentVersions from '../../components/DocumentVersions';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import { landsAPI, documentsAPI } from '../../services/api';
@@ -26,6 +27,8 @@ const DocumentUpload = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
+  const [showDocumentVersions, setShowDocumentVersions] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState(null);
 
   const documentSections = [
     {
@@ -521,6 +524,12 @@ const DocumentUpload = () => {
     setProjectDetails(details);
   };
 
+  // Handle viewing document versions
+  const handleViewDocumentVersions = (documentType) => {
+    setSelectedDocumentType(documentType);
+    setShowDocumentVersions(true);
+  };
+
   // Auto-save functionality
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
@@ -583,8 +592,8 @@ const DocumentUpload = () => {
               <Icon name={isEditMode ? "Edit" : "Upload"} size={24} color="white" />
             </div>
             <div>
-              <h1 className="font-heading font-bold text-3xl text-foreground">
-                {isEditMode ? "Edit Project" : "Document Upload"}
+              <h1 className="font-heading font-bold text-2xl text-foreground">
+                {isEditMode ? "Edit Land Details" : "Document Upload"}
               </h1>
               <p className="font-body text-lg text-muted-foreground">
                 {isEditMode 
@@ -598,9 +607,9 @@ const DocumentUpload = () => {
               <div className="flex items-start space-x-3">
                 <Icon name="Info" size={20} className="text-blue-600 mt-0.5" />
                 <div>
-                  <p className="text-sm text-blue-900 font-medium">Editing Existing Project</p>
+                  <p className="text-sm text-blue-900 font-medium">Editing Existing Land Details</p>
                   <p className="text-sm text-blue-700 mt-1">
-                    You can update project details and add more documents. Existing documents will be preserved.
+                    You can update land details and add more documents. Existing documents will be preserved.
                   </p>
                 </div>
               </div>
@@ -658,6 +667,8 @@ const DocumentUpload = () => {
                 onFileRemove={handleFileRemove}
                 expandedSections={expandedSections}
                 onSectionToggle={handleSectionToggle}
+                onViewVersions={handleViewDocumentVersions}
+                isEditMode={isEditMode}
               />
             </div>
 
@@ -769,6 +780,18 @@ const DocumentUpload = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Document Versions Modal */}
+      {showDocumentVersions && editingProjectId && selectedDocumentType && (
+        <DocumentVersions
+          landId={editingProjectId}
+          documentType={selectedDocumentType}
+          onClose={() => {
+            setShowDocumentVersions(false);
+            setSelectedDocumentType(null);
+          }}
+        />
       )}
     </div>
   );

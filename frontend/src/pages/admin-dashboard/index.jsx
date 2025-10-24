@@ -608,7 +608,7 @@ const AdminDashboard = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/document-review')}
+                  onClick={() => navigate('/admin-document-review')}
                   iconName="FileCheck"
                   iconSize={18}
                 >

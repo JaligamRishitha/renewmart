@@ -31,10 +31,12 @@ import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
 import AdminDocumentReview from './pages/document-review/AdminDocumentReview';
 import DocumentUpload from './pages/document-upload';
+import DocumentVersionUpload from './pages/document-version-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
 import LandownerProjectStatus from './pages/landowner-project-status';
 import ProjectReviewPage from './pages/landowner-project-status/components/ProjectReviewPage';
 import ReviewerDashboard from './pages/reviewer-dashboard';
+import ReviewerProjects from './pages/reviewer-projects';
 import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
 import ProjectDetailsPage from './pages/project-details';
 import Register from './pages/register';
@@ -148,12 +150,22 @@ const Routes = () => {
             <ReviewerDashboard />
           </ReviewerRoute>
         } />
+        <Route path="/reviewer/projects" element={
+          <ReviewerRoute>
+            <ReviewerProjects />
+          </ReviewerRoute>
+        } />
+        <Route path="/reviewer/dashboard/project/:landId" element={
+          <ReviewerRoute>
+            <ProjectDetails />
+          </ReviewerRoute>
+        } />
         <Route path="/reviewer/project/:landId" element={
           <ReviewerRoute>
             <ProjectDetails />
           </ReviewerRoute>
         } />
-        <Route path="/reviewer/document-review" element={
+        <Route path="/reviewer/document-review/:projectId" element={
           <ReviewerRoute>
             <DocumentReview />
           </ReviewerRoute>
@@ -216,7 +228,7 @@ const Routes = () => {
             <ProjectDetails />
           </SalesAdvisorRoute>
         } />
-        <Route path="/sales-advisor/document-review" element={
+        <Route path="/sales-advisor/document-review/:projectId" element={
           <SalesAdvisorRoute>
             <DocumentReview />
           </SalesAdvisorRoute>
@@ -250,7 +262,7 @@ const Routes = () => {
             <ProjectDetails />
           </AnalystRoute>
         } />
-        <Route path="/analyst/document-review" element={
+        <Route path="/analyst/document-review/:projectId" element={
           <AnalystRoute>
             <DocumentReview />
           </AnalystRoute>
@@ -284,7 +296,7 @@ const Routes = () => {
             <ProjectDetails />
           </GovernanceLeadRoute>
         } />
-        <Route path="/governance/document-review" element={
+        <Route path="/governance/document-review/:projectId" element={
           <GovernanceLeadRoute>
             <DocumentReview />
           </GovernanceLeadRoute>
@@ -323,7 +335,7 @@ const Routes = () => {
             <AdminInvestorInterests />
           </ProjectManagerRoute>
         } />
-        <Route path="/project-manager/document-review" element={
+        <Route path="/project-manager/document-review/:projectId" element={
           <ProjectManagerRoute>
             <AdminDocumentReview />
           </ProjectManagerRoute>
@@ -391,7 +403,12 @@ const Routes = () => {
             <DocumentUpload />
           </OwnerRoute>
         } />
-        <Route path="/document-review" element={
+        <Route path="/document-version-upload" element={
+          <OwnerRoute>
+            <DocumentVersionUpload />
+          </OwnerRoute>
+        } />
+        <Route path="/document-review/:projectId" element={
           <ReviewerRoute>
             <DocumentReview />
           </ReviewerRoute>

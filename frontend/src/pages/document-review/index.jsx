@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import Header from "../../components/ui/Header";
 import WorkflowBreadcrumbs from "../../components/ui/WorkflowBreadcrumbs";
@@ -17,6 +17,7 @@ import { taskAPI, documentsAPI, landsAPI, reviewsAPI } from "../../services/api"
 const DocumentReview = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { projectId } = useParams();
   const { user } = useAuth();
 
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -196,9 +197,9 @@ const DocumentReview = () => {
       setError(null);
 
       const taskId = location.state?.taskId || new URLSearchParams(location.search).get("taskId");
-      const landId = location.state?.landId || new URLSearchParams(location.search).get("landId");
+      const landId = projectId || location.state?.landId || new URLSearchParams(location.search).get("landId");
 
-      console.log("[DocumentReview] Fetching Data:", { taskId, landId });
+      console.log("[DocumentReview] Fetching Data:", { taskId, landId, projectId });
 
       let task = null;
       let land = null;

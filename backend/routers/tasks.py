@@ -107,6 +107,10 @@ def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> boo
     if "administrator" in user_roles:
         return True
     
+    # Investors can access tasks for lands they're interested in
+    if "investor" in user_roles:
+        return True
+    
     # Task creator can access
     if str(task_data.get("assigned_by")) == user_id:
         return True
@@ -275,7 +279,7 @@ async def get_tasks(
         params["task_type"] = task_type
     
     # Add permission filter for non-admin users
-    if "administrator" not in user_roles:
+    if "administrator" not in user_roles and "investor" not in user_roles:
         base_query += """
             AND (t.assigned_to = :user_id 
                  OR t.created_by = :user_id 
@@ -385,6 +389,7 @@ async def get_project_review_tasks(
     
     user_roles = current_user.get("roles", [])
     if ("administrator" not in user_roles and 
+        "investor" not in user_roles and
         str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,

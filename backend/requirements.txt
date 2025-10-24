@@ -45,3 +45,6 @@ pytest
 pytest-asyncio
 httpx
 pytest-cov
+
+# WebSocket support
+websockets

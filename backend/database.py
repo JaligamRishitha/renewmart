@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from config import settings
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 import os
 
@@ -38,6 +38,62 @@ def get_db():
         db.close()
 
 # Helper function to get user by email (for auth compatibility)
+def get_user_by_id(db: Session, user_id: str) -> Optional[dict]:
+    """Get user by user ID."""
+    # Use SQLite-compatible aggregation when running against SQLite
+    is_sqlite = DATABASE_URL.lower().startswith("sqlite")
+    if is_sqlite:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   GROUP_CONCAT(ur.role_key) AS roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.user_id = :user_id
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   STRING_AGG(ur.role_key, ',') AS roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.user_id = :user_id
+            GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
+                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+            """
+        )
+    
+    result = db.execute(query, {"user_id": user_id}).fetchone()
+    if not result:
+        return None
+    
+    # Convert to dict and parse roles
+    user_dict = dict(result._mapping)
+    if user_dict.get("roles"):
+        user_dict["roles"] = [role.strip() for role in user_dict["roles"].split(",") if role.strip()]
+    else:
+        user_dict["roles"] = []
+    
+    return user_dict
+
+def get_user_roles(db: Session, user_id: str) -> List[str]:
+    """Get user roles by user ID."""
+    query = text("""
+        SELECT role_key
+        FROM user_roles
+        WHERE user_id = :user_id
+        ORDER BY assigned_at
+    """)
+    
+    results = db.execute(query, {"user_id": user_id}).fetchall()
+    return [row.role_key for row in results]
+
 def get_user_by_email(db: Session, email: str) -> Optional[dict]:
     """Get user by email address."""
     # Use SQLite-compatible aggregation when running against SQLite

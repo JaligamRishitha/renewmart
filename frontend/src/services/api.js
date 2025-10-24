@@ -43,13 +43,26 @@ api.interceptors.response.use(
 // Authentication API
 export const authAPI = {
   login: async (credentials) => {
-    // Backend expects only email and password (role is in user data)
-    const loginData = {
-      email: credentials.email,
-      password: credentials.password
-    };
-    const response = await api.post('/users/login', loginData);
-    return response.data;
+    try {
+      console.log('API: Attempting login with:', { email: credentials.email });
+      
+      // Backend expects OAuth2PasswordRequestForm format
+      const formData = new FormData();
+      formData.append('username', credentials.email);
+      formData.append('password', credentials.password);
+      
+      const response = await api.post('/auth/token', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
+      console.log('API: Login response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Login error:', error);
+      throw error;
+    }
   },
   
   register: async (userData) => {
@@ -325,6 +338,14 @@ export const documentsAPI = {
     return response.data;
   },
 
+  // Document version operations
+  getDocumentVersions: async (landId, documentType) => {
+    console.log('API: Getting document versions for:', { landId, documentType });
+    const response = await api.get(`/documents/land/${landId}/versions/${documentType}`);
+    console.log('API: Document versions response:', response);
+    return response.data;
+  },
+
   approveDocument: async (documentId, adminComments = '') => {
     const formData = new FormData();
     if (adminComments) formData.append('admin_comments', adminComments);
@@ -356,7 +377,7 @@ export const documentsAPI = {
   },
  
   viewDocument: async (documentId) => {
-    const response = await api.get(`/documents/view/${documentId}`, {
+    const response = await api.get(`/documents/download/${documentId}`, {
       responseType: 'blob'
     });
     return response.data;
@@ -378,6 +399,12 @@ export const documentsAPI = {
     const response = await api.get(`/documents/land/${landId}`, {
       params: { document_type: documentType }
     });
+    return response.data;
+  },
+
+  // Admin endpoints
+  getAllDocuments: async (params = {}) => {
+    const response = await api.get('/documents/admin/all', { params });
     return response.data;
   }
 };

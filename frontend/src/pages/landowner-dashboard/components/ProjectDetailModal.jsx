@@ -35,7 +35,7 @@ const ProjectDetailModal = ({ project, onClose }) => {
               Project Details
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Complete information about your project
+              Complete information about your land
             </p>
           </div>
           <button
@@ -163,9 +163,9 @@ const ProjectDetailModal = ({ project, onClose }) => {
               <div className="flex items-start space-x-3">
                 <Icon name="AlertCircle" size={20} className="text-yellow-600 mt-0.5" />
                 <div>
-                  <h5 className="font-body font-semibold text-yellow-900 mb-1">Draft Project</h5>
+                  <h5 className="font-body font-semibold text-yellow-900 mb-1">Draft Land</h5>
                   <p className="text-sm text-yellow-700">
-                    This project is saved as a draft. Complete all required information and submit it for admin review to proceed.
+                    This Land is saved as a draft. Complete all required information and submit it for admin review to proceed.
                   </p>
                 </div>
               </div>
@@ -179,7 +179,7 @@ const ProjectDetailModal = ({ project, onClose }) => {
                 <div>
                   <h5 className="font-body font-semibold text-blue-900 mb-1">Under Review</h5>
                   <p className="text-sm text-blue-700">
-                    Your project has been submitted and is currently under admin review. You'll be notified once the review is complete.
+                    Your land details has been submitted and is currently under admin review. You'll be notified once the review is complete.
                   </p>
                 </div>
               </div>
@@ -193,7 +193,7 @@ const ProjectDetailModal = ({ project, onClose }) => {
                 <div>
                   <h5 className="font-body font-semibold text-green-900 mb-1">Published</h5>
                   <p className="text-sm text-green-700">
-                    Your project is now live and visible to potential investors on the marketplace.
+                    Your land is now live and visible to potential investors on the marketplace.
                   </p>
                 </div>
               </div>

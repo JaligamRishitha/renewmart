@@ -133,6 +133,28 @@ const DocumentViewer = ({
     }
   };
 
+  // Handle document view
+  const handleView = async (document) => {
+    try {
+      const response = await documentsAPI.downloadDocument(document.document_id);
+      const blob = new Blob([response.data]);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      // Clean up the URL after a delay
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error('View failed:', error);
+    }
+  };
+
+  // Handle viewing document versions
+  const handleViewVersions = (doc) => {
+    // This will be handled by the parent component
+    console.log('View versions for document:', doc);
+    // For now, we'll just show an alert
+    alert(`Viewing versions for ${doc?.file_name} (${doc?.document_type})`);
+  };
+
   // Format file size
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -142,16 +164,6 @@ const DocumentViewer = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Get status color
-  const getStatusColor = (status) => {
-    const colors = {
-      'approved': 'bg-green-100 text-green-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'under_review': 'bg-blue-100 text-blue-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
 
   return (
     <div className="flex flex-col  bg-card border border-border rounded-lg overflow-hidden">
@@ -224,13 +236,40 @@ const DocumentViewer = ({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {formatFileSize(doc?.file_size)} • {doc?.document_type?.replace('_', ' ').toUpperCase()}
+                      {doc?.version_number && (
+                        <span className="ml-2 px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded">
+                          v{doc.version_number}
+                          {doc?.is_latest_version && ' (Latest)'}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 flex-shrink-0">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(doc?.status)}`}>
-                    {doc?.status || 'pending'}
-                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e?.stopPropagation();
+                      handleViewVersions(doc);
+                    }}
+                    className="w-8 h-8"
+                    title="View Document Versions"
+                  >
+                    <Icon name="History" size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e?.stopPropagation();
+                      handleView(doc);
+                    }}
+                    className="w-8 h-8"
+                    title="View Document"
+                  >
+                    <Icon name="Eye" size={16} />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

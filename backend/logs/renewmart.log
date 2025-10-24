@@ -1052,3 +1052,321 @@
 2025-10-22 01:46:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
 2025-10-22 01:46:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
 2025-10-22 01:46:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:40:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:40:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:50:06 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:50:06 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:50:17 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:50:17 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:50:28 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:50:28 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:50:50 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:50:50 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:52:04 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:52:04 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:52:15 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:52:15 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:52:32 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:52:32 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:52:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:52:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:52:53 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:52:53 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 21:53:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 21:53:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:09:25 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:09:25 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:09:38 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:09:38 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:09:51 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:09:51 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:10:01 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:10:01 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:10:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:10:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:10:30 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:10:30 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:10:40 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:10:40 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:10:55 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:10:55 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:06 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:06 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:12 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:12 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:33 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:33 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:44 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:44 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:11:54 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:11:54 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:00 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:00 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:00 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:00 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:05 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:05 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:16 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:16 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:25 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:25 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:33 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:33 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-22 22:12:33 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-22 22:12:33 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:09:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:09:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:13:21 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:13:21 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:13:31 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:13:31 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:13:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:13:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:13:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:13:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:14:02 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:14:02 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:14:13 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:14:13 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:15:22 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:15:22 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:15:32 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:15:32 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:15:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:15:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:15:53 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:15:53 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 14:19:25 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 14:19:25 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:05:41 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:05:41 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:13:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:13:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:13:45 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:13:45 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:13:56 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:13:56 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:14:06 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:14:06 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:14:55 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:14:55 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:15:05 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:15:05 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:15:16 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:15:16 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:15:26 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:15:26 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:15:36 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:15:36 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:15:47 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:15:47 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:20:55 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:20:55 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:21:06 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:21:06 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:21:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:21:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 15:21:47 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 15:21:47 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:16:02 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:16:02 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:17:38 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:17:38 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:18:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:18:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:18:29 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:18:29 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:18:39 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:18:39 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 16:19:20 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 16:19:20 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 18:19:39 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 18:19:39 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 18:33:37 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 18:33:37 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 18:33:49 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 18:33:49 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 18:39:40 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 18:39:40 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 18:39:51 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 18:39:51 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:15:23 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:15:23 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:15:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:15:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:18:50 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:18:50 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:22:36 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:22:36 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:22:50 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:22:50 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:23:04 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:23:04 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:23:15 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:23:15 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:24:40 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:24:40 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:25:04 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:25:04 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:26:55 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:26:55 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:283 - RenewMart API Server Starting...
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:284 - Environment: development
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:285 - Debug mode: True
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:286 - Python version: 3.11.7 (tags/v3.11.7:fa7a6f2, Dec  4 2023, 19:24:49) [MSC v.1937 64 bit (AMD64)]
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:287 - Working directory: C:\Users\jalig\Downloads\RENEW\renewmart\backend
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:161 - Effective DATABASE_URL: sqlite:///./renewmart.db
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:163 - Starting RenewMart API v1.0.0...
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:164 - Environment: development
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:165 - Debug mode: True
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:166 - Server configuration: {'app': 'main:app', 'host': '127.0.0.1', 'port': 8000, 'reload': False, 'log_level': 'debug', 'access_log': True, 'use_colors': True, 'workers': 1}
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:177 - Server starting on http://127.0.0.1:8000
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:178 - API documentation available at http://127.0.0.1:8000/docs
+2025-10-23 19:38:15 - renewmart.server - INFO - server.py:179 - Alternative API docs at http://127.0.0.1:8000/redoc
+2025-10-23 19:38:26 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:38:26 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:38:26 - renewmart.server - INFO - server.py:193 - Server shutdown complete
+2025-10-23 19:39:46 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:39:46 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 19:39:58 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 19:39:58 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:09:45 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:09:45 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:14:38 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:14:38 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:15:19 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:15:19 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:21:17 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:21:17 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:21:27 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:21:27 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:23:46 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:23:46 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-23 23:24:26 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-23 23:24:26 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:06:21 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:06:21 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:19:05 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:19:05 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:19:41 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:19:41 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:21:44 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:21:44 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:23:04 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:23:04 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:27:18 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:27:18 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:27:29 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:27:29 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:27:40 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:27:40 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:27:51 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:27:51 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:02 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:02 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:13 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:13 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:24 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:24 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:34 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:34 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:45 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:45 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:28:56 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:28:56 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:29:20 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:29:20 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:40:13 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:40:13 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:40:24 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:40:24 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:40:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:40:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:42:46 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:42:46 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:42:57 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:42:57 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:43:09 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:43:09 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:43:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:43:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 00:48:51 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 00:48:51 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:01:00 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:01:00 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:01:14 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:01:14 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:05:25 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:05:25 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:09:20 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:09:20 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:09:30 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:09:30 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:09:41 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:09:41 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:09:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:09:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:03 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:03 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:14 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:14 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:24 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:24 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:35 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:35 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:45 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:45 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:10:56 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:10:56 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 01:11:34 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 01:11:34 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:17:26 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:17:26 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:46:31 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:46:31 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:46:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:46:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:46:53 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:46:53 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:47:03 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:47:03 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:47:42 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:47:42 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:47:53 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:47:53 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:50:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:50:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:51:03 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:51:03 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 12:51:26 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 12:51:26 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 13:22:58 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 13:22:58 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 13:23:10 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 13:23:10 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 13:30:45 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 13:30:45 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:14:17 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:14:17 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:23:07 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:23:07 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:23:28 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:23:28 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:24:10 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:24:10 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:24:58 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:24:58 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:26:52 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:26:52 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:27:04 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:27:04 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:36:06 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:36:06 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:37:01 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:37:01 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:37:12 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:37:12 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs
+2025-10-24 18:37:29 - renewmart.startup - INFO - logs.py:208 - Request logging middleware initialized
+2025-10-24 18:37:29 - renewmart.startup - INFO - logs.py:209 - Log files will be stored in: C:\Users\jalig\Downloads\RENEW\renewmart\backend\logs

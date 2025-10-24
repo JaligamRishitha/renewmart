@@ -44,7 +44,7 @@ const DeadlineAlerts = ({ alerts }) => {
   };
 
   const handleViewTask = (alert) => {
-    navigate('/document-review', { state: { landId: alert.landId, taskId: alert.taskId } });
+    navigate(`/document-review/${alert.landId}`, { state: { landId: alert.landId, taskId: alert.taskId } });
   };
 
   return (

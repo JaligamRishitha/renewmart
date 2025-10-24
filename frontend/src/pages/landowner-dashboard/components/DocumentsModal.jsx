@@ -16,7 +16,7 @@ const DocumentsModal = ({ project, onClose }) => {
 
   const fetchDocuments = async () => {
     if (!project?.id) {
-      setError('No project selected');
+      setError('No land selected');
       setLoading(false);
       return;
     }
@@ -167,7 +167,7 @@ const DocumentsModal = ({ project, onClose }) => {
             </div>
             <div>
               <h2 className="font-heading font-bold text-xl text-foreground">
-                Project Documents
+                Land Documents
               </h2>
               <p className="text-sm text-muted-foreground">
                 {project?.name}
@@ -219,7 +219,7 @@ const DocumentsModal = ({ project, onClose }) => {
                 </div>
                 <p className="text-foreground font-medium mb-2">No Documents Yet</p>
                 <p className="text-sm text-muted-foreground">
-                  No documents have been uploaded for this project.
+                  No documents have been uploaded for this land.
                 </p>
               </div>
             </div>
@@ -261,6 +261,15 @@ const DocumentsModal = ({ project, onClose }) => {
                           <span className="flex items-center space-x-1">
                             <Icon name="Tag" size={12} />
                             <span>{doc.document_type}</span>
+                          </span>
+                        )}
+                        {doc.version_number && (
+                          <span className="flex items-center space-x-1">
+                            <Icon name="Hash" size={12} />
+                            <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                              v{doc.version_number}
+                              {doc.is_latest_version && ' (Latest)'}
+                            </span>
                           </span>
                         )}
                         <span className="flex items-center space-x-1">

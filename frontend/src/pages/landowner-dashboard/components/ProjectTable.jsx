@@ -37,7 +37,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
         onDelete(project);
         break;
       case 'upload': 
-        navigate('/document-upload', { state: { projectId: project?.id } });
+        navigate('/document-version-upload', { state: { projectId: project?.id } });
         break;
       default:
         break;
@@ -150,13 +150,24 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                       iconName="Eye"
                       title="View Details"
                     />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAction('edit', project)}
-                      iconName="Edit"
-                      title="Edit & Upload Documents"
-                    />
+                    {project?.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAction('edit', project)}
+                        iconName="Edit"
+                        title="Edit & Upload Documents"
+                      />
+                    )}
+                    {project?.status !== 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAction('upload', project)}
+                        iconName="Upload"
+                        title="Upload New Document Versions"
+                      />
+                    )}
                     {project?.status === 'draft' && (
                       <Button
                         variant="ghost"
@@ -264,15 +275,28 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 >
                   View
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleAction('edit', project)}
-                  iconName="Edit"
-                  fullWidth
-                >
-                  Edit
-                </Button>
+                {project?.status === 'draft' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAction('edit', project)}
+                    iconName="Edit"
+                    fullWidth
+                  >
+                    Edit
+                  </Button>
+                )}
+                {project?.status !== 'draft' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAction('upload', project)}
+                    iconName="Upload"
+                    fullWidth
+                  >
+                    Upload Versions
+                  </Button>
+                )}
                 {project?.status === 'draft' && (
                   <Button
                     variant="ghost"

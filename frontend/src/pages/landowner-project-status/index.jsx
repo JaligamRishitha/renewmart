@@ -254,7 +254,7 @@ const LandownerProjectStatus = () => {
                 iconName="Plus"
                 iconPosition="left"
               >
-                Upload Land Details
+                New Land Details
               </Button>
             </div>
           )}

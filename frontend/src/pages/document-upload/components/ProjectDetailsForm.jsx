@@ -47,7 +47,7 @@ const ProjectDetailsForm = ({
         </div>
         <div>
           <h3 className="font-heading font-semibold text-lg text-foreground">
-            Project Details
+            Land Details
           </h3>
           <p className="font-body text-sm text-muted-foreground">
             Basic information about your renewable energy project

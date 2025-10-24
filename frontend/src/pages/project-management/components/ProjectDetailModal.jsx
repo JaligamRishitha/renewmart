@@ -381,7 +381,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose }) => {
             Close
           </Button>
           <Button variant="default" iconName="Edit">
-            Edit Project
+            Edit Land Details
           </Button>
         </div>
       </div>

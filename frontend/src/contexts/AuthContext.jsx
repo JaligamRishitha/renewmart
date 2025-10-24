@@ -124,8 +124,15 @@ export const AuthProvider = ({ children }) => {
     try {
       dispatch({ type: AUTH_ACTIONS.LOGIN_START });
       
+      console.log('AuthContext: Attempting login with credentials:', { email: credentials.email });
       const response = await authAPI.login(credentials);
+      console.log('AuthContext: Login response:', response);
+      
       const { access_token, user } = response;
+
+      if (!access_token || !user) {
+        throw new Error('Invalid response from server');
+      }
 
       // Store in localStorage
       localStorage.setItem('authToken', access_token);
@@ -138,7 +145,8 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true, user };
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 'Login failed';
+      console.error('AuthContext: Login error:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Login failed';
       const errorStatus = error.response?.status;
       
       dispatch({

@@ -459,7 +459,7 @@ const AdminMarketplace = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate(`/document-review?landId=${project.land_id}`)}
+                          onClick={() => navigate(`/document-review/${project.land_id}`)}
                           iconName="Eye"
                           iconSize={16}
                         >

@@ -13,10 +13,10 @@ const EmptyState = ({ hasFilters, onClearFilters }) => {
           <Icon name="Search" size={32} className="text-muted-foreground" />
         </div>
         <h3 className="text-lg font-heading font-semibold text-foreground mb-2">
-          No projects match your filters
+          No land match your filters
         </h3>
         <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Try adjusting your search criteria or clearing filters to see all projects.
+          Try adjusting your search criteria or clearing filters to see all lands.
         </p>
         <Button
           variant="outline"
@@ -49,7 +49,7 @@ const EmptyState = ({ hasFilters, onClearFilters }) => {
           iconName="Plus"
           iconPosition="left"
         >
-          Add New Project
+          Add New Land
         </Button>
         <Button
           variant="outline"

@@ -497,6 +497,10 @@ class DocumentBase(BaseSchema):
     approved_at: Optional[datetime] = Field(None, description="When the document was approved/rejected")
     rejection_reason: Optional[str] = Field(None, description="Reason for rejection")
     admin_comments: Optional[str] = Field(None, description="Admin comments")
+    version_number: Optional[int] = Field(1, ge=1, description="Version number of the document")
+    is_latest_version: Optional[bool] = Field(True, description="Whether this is the latest version")
+    parent_document_id: Optional[UUID] = Field(None, description="Reference to parent document for version tracking")
+    version_notes: Optional[str] = Field(None, description="Notes about this version")
 
     @validator('file_name')
     def validate_file_name(cls, v):
@@ -539,6 +543,7 @@ class Document(DocumentBase):
     task_id: Optional[UUID] = None
     subtask_id: Optional[UUID] = None
     uploaded_by: Optional[UUID] = None
+    parent_document_id: Optional[UUID] = None
     created_at: datetime
 
 # ============================================================================

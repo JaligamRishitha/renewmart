@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/AppIcon';
+import Button from '../../components/ui/Button';
 import { taskAPI, documentsAPI, landsAPI, usersAPI } from '../../services/api';
 
 const AdminDocumentReview = () => {
@@ -14,6 +15,7 @@ const AdminDocumentReview = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [downloading, setDownloading] = useState(null);
 
   const reviewerRoles = [
     { id: 'all', label: 'All Roles', icon: 'Users', color: 'text-purple-500' },
@@ -66,13 +68,13 @@ const AdminDocumentReview = () => {
               })
             );
 
-            // Fetch documents
-            const documents = await documentsAPI.getDocuments(land.land_id);
+            // Fetch documents for this specific land (now includes version info)
+            const landDocuments = await documentsAPI.getDocuments(land.land_id);
 
             return {
               ...land,
               tasks: tasksWithSubtasks,
-              documents: documents || [],
+              documents: landDocuments || [],
               stats: calculateProjectStats(tasksWithSubtasks)
             };
           } catch (err) {
@@ -133,6 +135,84 @@ const AdminDocumentReview = () => {
     setSelectedTask(task);
     setSelectedProject(project);
     setShowTaskModal(true);
+  };
+
+  const handleViewDocument = async (doc) => {
+    try {
+      console.log('Attempting to view document:', doc.document_id, doc.file_name);
+      
+      const blob = await documentsAPI.viewDocument(doc.document_id);
+      console.log('Blob received:', blob);
+      console.log('Blob size:', blob?.size, 'Blob type:', blob?.type);
+      
+      if (!blob || blob.size === 0) {
+        throw new Error('Document has no data. It may not have been stored in the database yet.');
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      console.log('Created blob URL:', url);
+      
+      // Open in new tab
+      const newWindow = window.open(url, '_blank');
+      
+      if (!newWindow) {
+        alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+      
+      // Clean up after a delay to allow the tab to load
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 2000);
+    } catch (err) {
+      console.error('Error viewing document:', err);
+      console.error('Error response:', err.response);
+      
+      let errorMessage = 'Failed to view document. ';
+      
+      if (err.response?.status === 404) {
+        errorMessage += 'Document not found in database.';
+      } else if (err.response?.status === 403) {
+        errorMessage += 'You do not have permission to view this document.';
+      } else if (err.message?.includes('no data')) {
+        errorMessage += err.message;
+      } else if (err.response?.data?.detail) {
+        errorMessage += err.response.data.detail;
+      } else {
+        errorMessage += 'Please check console for details.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const handleDownloadDocument = async (doc) => {
+    try {
+      setDownloading(doc.document_id);
+      const blob = await documentsAPI.downloadDocument(doc.document_id);
+      
+      if (!blob) {
+        throw new Error('No data received from server');
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const linkElement = window.document.createElement('a');
+      linkElement.href = url;
+      linkElement.download = doc.file_name;
+      window.document.body.appendChild(linkElement);
+      linkElement.click();
+      window.document.body.removeChild(linkElement);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      console.error('Error details:', err.response?.data);
+      const errorMsg = err.response?.data?.detail || err.message || 'Failed to download document';
+      alert(errorMsg + '. Please try again.');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -322,6 +402,72 @@ const AdminDocumentReview = () => {
                       <div className="text-xs text-muted-foreground">Documents</div>
                     </div>
                   </div>
+
+                  {/* Documents */}
+                  {project.documents && project.documents.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                        <Icon name="FileText" size={20} />
+                        Documents ({project.documents.length})
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {project.documents.map((doc) => (
+                          <div
+                            key={doc.document_id}
+                            className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors bg-muted/30"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                <Icon 
+                                  name={doc.mime_type?.includes('pdf') ? 'FileText' : 'Image'} 
+                                  size={16} 
+                                  className="text-primary flex-shrink-0" 
+                                />
+                                <span className="font-medium text-sm text-foreground truncate">
+                                  {doc.file_name}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewDocument(doc)}
+                                  iconName="Eye"
+                                  title="View Document"
+                                  className="w-8 h-8"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDownloadDocument(doc)}
+                                  iconName={downloading === doc.document_id ? "Loader" : "Download"}
+                                  title="Download Document"
+                                  disabled={downloading === doc.document_id}
+                                  className="w-8 h-8"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                {doc.document_type?.replace(/_/g, ' ').toUpperCase()}
+                              </p>
+                              {doc.version_number && (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded">
+                                    v{doc.version_number}
+                                    {doc.is_latest_version && ' (Latest)'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(doc.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Tasks */}
                   <div>

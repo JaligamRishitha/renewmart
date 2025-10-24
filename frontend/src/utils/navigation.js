@@ -42,6 +42,7 @@ export const getRoleNavigation = (user) => {
   if (userRoles.includes('re_sales_advisor')) {
     return {
       dashboard: '/sales-advisor/dashboard',
+      projectStatus: '/reviewer/projects',
       projectDetails: '/sales-advisor/project',
       basePath: '/sales-advisor'
     };
@@ -51,6 +52,7 @@ export const getRoleNavigation = (user) => {
   if (userRoles.includes('re_analyst')) {
     return {
       dashboard: '/analyst/dashboard',
+      projectStatus: '/reviewer/projects',
       projectDetails: '/analyst/project',
       basePath: '/analyst'
     };
@@ -60,6 +62,7 @@ export const getRoleNavigation = (user) => {
   if (userRoles.includes('re_governance_lead')) {
     return {
       dashboard: '/governance/dashboard',
+      projectStatus: '/reviewer/projects',
       projectDetails: '/governance/project',
       basePath: '/governance'
     };
@@ -77,6 +80,7 @@ export const getRoleNavigation = (user) => {
   if (userRoles.includes('reviewer')) {
     return {
       dashboard: '/reviewer/dashboard',
+      projectStatus: '/reviewer/projects',
       documentReview: '/reviewer/document-review',
       documentManagement: '/reviewer/document-management',
       projectDetails: '/reviewer/project',

@@ -415,7 +415,7 @@ const ProjectDetailsModal = ({ isOpen, onClose, projectData }) => {
           <Button
             variant="default"
             onClick={() => {
-              window.open(`/document-review?landId=${projectData.landId}`, '_blank');
+              window.open(`/document-review/${projectData.landId}`, '_blank');
             }}
             iconName="ExternalLink"
             iconSize={16}

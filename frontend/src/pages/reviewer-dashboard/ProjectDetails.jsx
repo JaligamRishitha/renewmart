@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
+import Header from '../../components/ui/Header';
 import { taskAPI, documentsAPI, landsAPI, usersAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SubtaskManager from './SubtaskManager';
 import ReviewPanelCompact from './ReviewPanelCompact';
 import TaskPanel from './TaskPanel';
+import TeamsStyleMessaging from './components/TeamsStyleMessaging';
 
 const ProjectDetails = () => {
   const { landId } = useParams();
@@ -31,7 +33,8 @@ const ProjectDetails = () => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'LayoutGrid' },
     { id: 'all-tasks', label: 'All Tasks & Reviewers', icon: 'Users' },
-    { id: 'documents', label: 'Documents', icon: 'FileText' }
+    { id: 'documents', label: 'Documents', icon: 'FileText' },
+    { id: 'messaging', label: 'Messaging', icon: 'MessageSquare' }
   ];
 
   useEffect(() => {
@@ -248,16 +251,19 @@ const ProjectDetails = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors"
-          >
-            <Icon name="ArrowLeft" size={20} />
-            Back to Dashboard
-          </button>
+      <Header />
+      
+      {/* Project Header */}
+      <div className="pt-16">
+        <div className="bg-card border-b border-border">
+          <div className="max-w-7xl mx-auto px-6 py-8">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors"
+            >
+              <Icon name="ArrowLeft" size={20} />
+              Back to Dashboard
+            </button>
           
           <div className="flex items-center justify-between">
             <div>
@@ -295,6 +301,7 @@ const ProjectDetails = () => {
             ))}
           </div>
         </div>
+      </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -453,6 +460,17 @@ const ProjectDetails = () => {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Messaging Tab */}
+        {activeTab === 'messaging' && (
+          <div className="bg-card border border-border rounded-lg overflow-hidden h-[600px]">
+            <TeamsStyleMessaging 
+              currentUser={user}
+              onMessageSent={(message) => console.log('Message sent:', message)}
+              onMessageReceived={(message) => console.log('Message received:', message)}
+            />
           </div>
         )}
       </div>
