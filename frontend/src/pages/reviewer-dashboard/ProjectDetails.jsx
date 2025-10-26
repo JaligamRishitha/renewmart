@@ -59,7 +59,7 @@ const ProjectDetails = () => {
             if ((!subtasks || subtasks.length === 0) && task.assigned_role) {
               console.log(`No subtasks found. Creating default subtasks for role: ${task.assigned_role}`);
               try {
-                const templates = await taskAPI.getSubtaskTemplates(task.assigned_role);
+                const templates = await taskAPI.getSubtaskTemplates(task.assigned_role, task.task_type);
                 console.log(`Got ${templates.templates?.length || 0} templates`);
                 
                 // Create default subtasks

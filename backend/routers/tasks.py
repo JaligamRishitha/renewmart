@@ -276,11 +276,21 @@ async def get_tasks(
     
     # Add permission filter for non-admin users
     if "administrator" not in user_roles:
-        base_query += """
-            AND (t.assigned_to = :user_id 
-                 OR t.created_by = :user_id 
-                 OR l.landowner_id = :user_id)
-        """
+        if "investor" in user_roles:
+            # Investors can see tasks for published lands
+            base_query += """
+                AND (t.assigned_to = :user_id 
+                     OR t.created_by = :user_id 
+                     OR l.landowner_id = :user_id
+                     OR l.status = 'published')
+            """
+        else:
+            # Other users (reviewers, landowners) see their assigned/created tasks
+            base_query += """
+                AND (t.assigned_to = :user_id 
+                     OR t.created_by = :user_id 
+                     OR l.landowner_id = :user_id)
+            """
         params["user_id"] = current_user["user_id"]
     
     base_query += " ORDER BY t.created_at DESC OFFSET :skip LIMIT :limit"
@@ -1485,11 +1495,97 @@ async def submit_subtasks_status(
 @router.get("/subtask-templates/{role}")
 async def get_default_subtask_templates(
     role: str,
+    task_type: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get default subtask templates for a reviewer role."""
+    """Get subtask templates for a role, optionally filtered by task type."""
     
+    # Task-type specific subtask templates
+    task_specific_subtasks = {
+        "re_sales_advisor": {
+            "market_evaluation": [
+                {"title": "Location accessibility and infrastructure", "section": "Market Viability", "order": 0},
+                {"title": "Proximity to transmission lines", "section": "Market Viability", "order": 1},
+                {"title": "Local energy demand assessment", "section": "Market Viability", "order": 2},
+                {"title": "Competition analysis in the region", "section": "Market Viability", "order": 3},
+                {"title": "Market price competitiveness", "section": "Market Viability", "order": 4},
+                {"title": "Revenue projection accuracy", "section": "Commercial Feasibility", "order": 5},
+                {"title": "Contract terms evaluation", "section": "Commercial Feasibility", "order": 6},
+                {"title": "Risk assessment completeness", "section": "Commercial Feasibility", "order": 7},
+                {"title": "ROI calculations verification", "section": "Commercial Feasibility", "order": 8},
+                {"title": "Market timing considerations", "section": "Commercial Feasibility", "order": 9}
+            ],
+            "site_assessment": [
+                {"title": "Site accessibility evaluation", "section": "Site Accessibility", "order": 0},
+                {"title": "Transportation infrastructure", "section": "Site Accessibility", "order": 1},
+                {"title": "Utility connections assessment", "section": "Site Accessibility", "order": 2},
+                {"title": "Environmental impact evaluation", "section": "Environmental Assessment", "order": 3},
+                {"title": "Wildlife and habitat considerations", "section": "Environmental Assessment", "order": 4},
+                {"title": "Soil condition analysis", "section": "Environmental Assessment", "order": 5},
+                {"title": "Water resource availability", "section": "Environmental Assessment", "order": 6},
+                {"title": "Local community impact", "section": "Social Impact", "order": 7},
+                {"title": "Economic benefits to region", "section": "Social Impact", "order": 8},
+                {"title": "Stakeholder engagement plan", "section": "Social Impact", "order": 9}
+            ]
+        },
+        "re_analyst": {
+            "technical_analysis": [
+                {"title": "Site topography analysis", "section": "Technical Analysis", "order": 0},
+                {"title": "Wind/solar resource assessment", "section": "Technical Analysis", "order": 1},
+                {"title": "Grid connection feasibility", "section": "Technical Analysis", "order": 2},
+                {"title": "Technology selection validation", "section": "Technical Analysis", "order": 3},
+                {"title": "Performance ratio calculations", "section": "Technical Analysis", "order": 4},
+                {"title": "Energy yield estimation", "section": "Technical Analysis", "order": 5}
+            ],
+            "financial_analysis": [
+                {"title": "O&M cost projections", "section": "Financial Analysis", "order": 0},
+                {"title": "CAPEX breakdown validation", "section": "Financial Analysis", "order": 1},
+                {"title": "LCOE calculations", "section": "Financial Analysis", "order": 2},
+                {"title": "Sensitivity analysis", "section": "Financial Analysis", "order": 3},
+                {"title": "Cash flow projections", "section": "Financial Analysis", "order": 4},
+                {"title": "ROI and payback period", "section": "Financial Analysis", "order": 5},
+                {"title": "Risk-adjusted returns", "section": "Financial Analysis", "order": 6},
+                {"title": "Tax implications analysis", "section": "Financial Analysis", "order": 7}
+            ],
+            "document_verification": [
+                {"title": "Technical specification review", "section": "Document Review", "order": 0},
+                {"title": "Engineering drawings validation", "section": "Document Review", "order": 1},
+                {"title": "Equipment specifications check", "section": "Document Review", "order": 2},
+                {"title": "Compliance documentation", "section": "Document Review", "order": 3},
+                {"title": "Quality assurance standards", "section": "Document Review", "order": 4},
+                {"title": "Safety protocol verification", "section": "Document Review", "order": 5}
+            ]
+        },
+        "re_governance_lead": {
+            "compliance_review": [
+                {"title": "Land ownership documentation", "section": "Legal Compliance", "order": 0},
+                {"title": "Zoning and permits verification", "section": "Legal Compliance", "order": 1},
+                {"title": "Environmental clearances", "section": "Legal Compliance", "order": 2},
+                {"title": "Government NOC validation", "section": "Legal Compliance", "order": 3},
+                {"title": "Legal title verification", "section": "Legal Compliance", "order": 4}
+            ],
+            "regulatory_approval": [
+                {"title": "Industry standards compliance", "section": "Regulatory Requirements", "order": 0},
+                {"title": "Safety regulations adherence", "section": "Regulatory Requirements", "order": 1},
+                {"title": "Environmental regulations", "section": "Regulatory Requirements", "order": 2},
+                {"title": "Local authority approvals", "section": "Regulatory Requirements", "order": 3},
+                {"title": "Regulatory timeline compliance", "section": "Regulatory Requirements", "order": 4},
+                {"title": "Permit application review", "section": "Regulatory Requirements", "order": 5},
+                {"title": "Public hearing requirements", "section": "Regulatory Requirements", "order": 6}
+            ],
+            "environmental_review": [
+                {"title": "Environmental impact assessment", "section": "Environmental Review", "order": 0},
+                {"title": "Wildlife protection measures", "section": "Environmental Review", "order": 1},
+                {"title": "Water resource impact", "section": "Environmental Review", "order": 2},
+                {"title": "Air quality considerations", "section": "Environmental Review", "order": 3},
+                {"title": "Noise level assessments", "section": "Environmental Review", "order": 4},
+                {"title": "Mitigation measures planning", "section": "Environmental Review", "order": 5}
+            ]
+        }
+    }
+    
+    # Fallback to role-based templates if task_type not found
     default_subtasks = {
         "re_sales_advisor": [
             {"title": "Location accessibility and infrastructure", "section": "Market Viability", "order": 0},
@@ -1529,10 +1625,15 @@ async def get_default_subtask_templates(
         ]
     }
     
-    templates = default_subtasks.get(role, [])
+    # Get templates based on task_type if provided, otherwise use role-based defaults
+    if task_type and role in task_specific_subtasks and task_type in task_specific_subtasks[role]:
+        templates = task_specific_subtasks[role][task_type]
+    else:
+        templates = default_subtasks.get(role, [])
     
     return {
         "role": role,
+        "task_type": task_type,
         "templates": templates,
         "count": len(templates)
     }

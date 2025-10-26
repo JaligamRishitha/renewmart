@@ -472,31 +472,52 @@ const ProjectDetailsPage = () => {
                                 </div>
                               </div>
 
-                              {/* Subtasks */}
+                              {/* Detailed Subtasks */}
                               {detailedTask.subtasks && detailedTask.subtasks.length > 0 && (
                                 <div className="mb-3">
-                                  <div className="flex items-center space-x-2 mb-2">
+                                  <div className="flex items-center space-x-2 mb-3">
                                     <Icon name="List" size={14} className="text-muted-foreground" />
                                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                       Subtasks ({detailedTask.subtasks.length})
                                     </span>
                                   </div>
-                                  <div className="space-y-1">
-                                    {detailedTask.subtasks.slice(0, 3).map((subtask, subIndex) => (
-                                      <div key={subIndex} className="flex items-center space-x-2 text-xs">
-                                        <Icon 
-                                          name={subtask.status === 'completed' ? 'CheckCircle' : 'Circle'} 
-                                          size={12} 
-                                          className={subtask.status === 'completed' ? 'text-green-600' : 'text-gray-400'} 
-                                        />
-                                        <span className="text-muted-foreground">{subtask.title}</span>
+                                  <div className="space-y-2">
+                                    {detailedTask.subtasks.map((subtask, subIndex) => (
+                                      <div key={subIndex} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                        <div className="flex items-start justify-between mb-2">
+                                          <div className="flex items-center space-x-2">
+                                            <Icon 
+                                              name={subtask.status === 'completed' ? 'CheckCircle' : 'Circle'} 
+                                              size={14} 
+                                              className={subtask.status === 'completed' ? 'text-green-600' : 'text-gray-400'} 
+                                            />
+                                            <span className="text-sm font-medium text-foreground">
+                                              {subtask.title}
+                                            </span>
+                                          </div>
+                                          <span className={`text-xs px-2 py-1 rounded-full ${
+                                            subtask.status === 'completed' 
+                                              ? 'bg-green-100 text-green-800' 
+                                              : subtask.status === 'in_progress'
+                                              ? 'bg-blue-100 text-blue-800'
+                                              : 'bg-gray-100 text-gray-800'
+                                          }`}>
+                                            {subtask.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
+                                          </span>
+                                        </div>
+                                        {subtask.description && (
+                                          <p className="text-xs text-muted-foreground mb-2 ml-6">
+                                            {subtask.description}
+                                          </p>
+                                        )}
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground ml-6">
+                                          <span>Order: {subtask.order_index || subIndex + 1}</span>
+                                          {subtask.updated_at && (
+                                            <span>Updated: {formatDate(subtask.updated_at)}</span>
+                                          )}
+                                        </div>
                                       </div>
                                     ))}
-                                    {detailedTask.subtasks.length > 3 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        +{detailedTask.subtasks.length - 3} more subtasks
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
                               )}

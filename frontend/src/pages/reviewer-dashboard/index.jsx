@@ -157,7 +157,7 @@ const ReviewerDashboard = () => {
   };
 
   const handleViewProject = (project) => {
-    navigate(`/reviewer/dashboard/project/${project.land_id}`, { state: { project } });
+    navigate(`/reviewer/project/${project.land_id}`, { state: { project } });
   };
 
   const handleLogout = async () => {

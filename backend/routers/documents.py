@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import Response, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pathlib import Path
 import io
@@ -263,6 +263,143 @@ async def get_land_documents(
         for row in results
     ]
 
+
+@router.get("/land/{land_id}/reviewer", response_model=List[Dict[str, Any]])
+async def get_land_reviewer_documents(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all reviewer documents for a land, grouped by main subtasks."""
+    # Check if land exists and user has permission
+    land_check = text("""
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions - convert to strings for comparison
+    user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
+    landowner_id_str = str(land_result.landowner_id)
+    
+    is_admin = "administrator" in user_roles
+    is_owner = landowner_id_str == user_id_str
+    is_published = land_result.status == "published"
+    
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to view reviewer documents for this land"
+        )
+    
+    # Get reviewer documents with subtask and task information
+    query = text("""
+        SELECT 
+            d.document_id, d.land_id, d.task_id, d.subtask_id, d.document_type, 
+            d.file_name, d.file_path, d.file_size, d.uploaded_by, d.created_at,
+            d.mime_type, d.is_draft,
+            u.first_name || ' ' || u.last_name as uploader_name,
+            t.assigned_role as task_role,
+            s.title as subtask_title,
+            s.description as subtask_description,
+            s.status as subtask_status,
+            s.created_at as subtask_created_at,
+            s.updated_at as subtask_updated_at,
+            s.completed_at as subtask_completed_at
+        FROM documents d
+        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN tasks t ON d.task_id = t.task_id
+        LEFT JOIN subtasks s ON d.subtask_id = s.subtask_id
+        WHERE d.land_id = :land_id 
+        AND d.subtask_id IS NOT NULL
+        AND d.uploaded_by != :landowner_id
+        ORDER BY t.assigned_role, s.title, d.created_at
+    """)
+    
+    results = db.execute(query, {
+        "land_id": str(land_id),
+        "landowner_id": landowner_id_str
+    }).fetchall()
+    
+    # Group documents by main subtask (task role)
+    grouped_docs = {}
+    for row in results:
+        task_role = row.task_role or 'Unknown'
+        if task_role not in grouped_docs:
+            grouped_docs[task_role] = {
+                'main_subtask': task_role,
+                'subtasks': {}
+            }
+        
+        subtask_id = str(row.subtask_id) if row.subtask_id else 'unknown'
+        if subtask_id not in grouped_docs[task_role]['subtasks']:
+            grouped_docs[task_role]['subtasks'][subtask_id] = {
+                'subtask_id': subtask_id,
+                'title': row.subtask_title or 'Untitled Subtask',
+                'description': row.subtask_description or '',
+                'status': row.subtask_status or 'pending',
+                'start_date': row.subtask_created_at,
+                'completion_date': row.subtask_completed_at,
+                'documents': []
+            }
+        
+        grouped_docs[task_role]['subtasks'][subtask_id]['documents'].append({
+            'document_id': str(row.document_id),
+            'file_name': row.file_name,
+            'file_size': row.file_size,
+            'mime_type': row.mime_type,
+            'uploaded_by': str(row.uploaded_by),
+            'uploader_name': row.uploader_name,
+            'created_at': row.created_at,
+            'document_type': row.document_type
+        })
+    
+    # Convert to list format for frontend
+    result_list = []
+    for main_subtask, data in grouped_docs.items():
+        subtasks_list = []
+        for subtask_id, subtask_data in data['subtasks'].items():
+            subtasks_list.append({
+                'subtask_id': subtask_id,
+                'title': subtask_data['title'],
+                'description': subtask_data['description'],
+                'status': subtask_data['status'],
+                'start_date': subtask_data['start_date'].isoformat() if subtask_data['start_date'] else None,
+                'completion_date': subtask_data['completion_date'].isoformat() if subtask_data['completion_date'] else None,
+                'documents': subtask_data['documents']
+            })
+        
+        result_list.append({
+            'main_subtask': main_subtask,
+            'subtasks': subtasks_list
+        })
+    
+    return result_list
+
+
 @router.get("/{document_id}", response_model=Document)
 async def get_document(
     document_id: UUID,
@@ -296,7 +433,24 @@ async def get_document(
     is_owner = result.landowner_id and str(result.landowner_id) == user_id_str
     is_published = result.status == "published"
     
-    if result.landowner_id and not (is_admin or is_owner or is_published):
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        # Check if user has a task assigned for this land
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(result.land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this document"
@@ -436,7 +590,7 @@ async def download_document(
     """Download document file from database or file system (legacy)."""
     # Check if document exists and user has permission
     doc_check = text("""
-        SELECT d.file_data, d.file_path, d.file_name, d.mime_type, l.landowner_id, l.status
+        SELECT d.file_data, d.file_path, d.file_name, d.mime_type, d.land_id, l.landowner_id, l.status
         FROM documents d
         LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
@@ -458,7 +612,24 @@ async def download_document(
     is_owner = doc_result.landowner_id and str(doc_result.landowner_id) == user_id_str
     is_published = doc_result.status == "published"
     
-    if doc_result.landowner_id and not (is_admin or is_owner or is_published):
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        # Check if user has a task assigned for this land
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(doc_result.land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to download this document"

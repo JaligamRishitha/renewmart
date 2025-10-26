@@ -277,7 +277,7 @@ const ReviewPanel = ({
     const fetchTemplates = async () => {
       try {
         console.log('📥 ReviewPanel: Fetching templates based on parent role prop:', reviewerRole);
-        const templates = await taskAPI.getSubtaskTemplates(reviewerRole);
+        const templates = await taskAPI.getSubtaskTemplates(reviewerRole, currentTask?.task_type);
         console.log('📦 ReviewPanel: Received templates for', reviewerRole, ':', templates);
         
         const sections = {};

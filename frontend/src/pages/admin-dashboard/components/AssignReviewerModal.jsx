@@ -5,7 +5,7 @@ import Select from '../../../components/ui/Select';
 import Input from '../../../components/ui/Input';
 import { usersAPI } from '../../../services/api';
 
-const AssignReviewerModal = ({ project, onClose, onAssign }) => {
+const AssignReviewerModal = ({ project, onClose, onAssign, existingTasks = [] }) => {
   const [formData, setFormData] = useState({
     reviewerRole: '',
     assignedTo: '',
@@ -97,12 +97,26 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     if (error) setError('');
   };
 
+  // Check for duplicate assignments
+  const isDuplicateTaskAssignment = (taskType, reviewerId) => {
+    return existingTasks.some(task => 
+      task.task_type === taskType && 
+      task.assigned_to === reviewerId
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Validation
     if (!formData.reviewerRole || !formData.assignedTo || !formData.taskType) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Check for duplicate task assignment (same task type, reviewer, and role)
+    if (isDuplicateTaskAssignment(formData.taskType, formData.assignedTo, formData.reviewerRole)) {
+      setError('This task type is already assigned to this reviewer with the same role');
       return;
     }
 

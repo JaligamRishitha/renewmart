@@ -250,14 +250,15 @@ async def get_user(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user by ID. Admins can view anyone, users can view themselves, and reviewers can view users on same projects."""
+    """Get user by ID. Admins can view anyone, users can view themselves, reviewers can view users on same projects, and landowners can view reviewers assigned to their projects."""
     user_roles = current_user.get("roles", [])
     is_admin = "administrator" in user_roles
     is_self = str(current_user["user_id"]) == str(user_id)
+    is_landowner = "landowner" in user_roles
     
     # Admins and viewing own profile is always allowed
     if not (is_admin or is_self):
-        # Check if the requesting user and target user share any projects
+        # Check if the requesting user and target user share any projects (for reviewers)
         shared_project_query = text("""
             SELECT COUNT(*) as count
             FROM tasks t1
@@ -271,11 +272,33 @@ async def get_user(
             "target_user_id": str(user_id)
         }).fetchone()
         
+        # If not shared projects, check if landowner can view reviewers assigned to their projects
         if not shared_result or shared_result.count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to view this user's information"
-            )
+            if is_landowner:
+                # Check if the target user is assigned to any tasks on lands owned by the current user
+                landowner_reviewer_query = text("""
+                    SELECT COUNT(*) as count
+                    FROM tasks t
+                    JOIN lands l ON t.land_id = l.land_id
+                    WHERE l.landowner_id = CAST(:current_user_id AS uuid)
+                      AND t.assigned_to = CAST(:target_user_id AS uuid)
+                """)
+                
+                landowner_result = db.execute(landowner_reviewer_query, {
+                    "current_user_id": str(current_user["user_id"]),
+                    "target_user_id": str(user_id)
+                }).fetchone()
+                
+                if not landowner_result or landowner_result.count == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to view this user's information"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to view this user's information"
+                )
     
     query = text("""
         SELECT user_id, email, first_name, last_name, phone, is_active, created_at, updated_at

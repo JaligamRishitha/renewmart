@@ -181,24 +181,72 @@ const LandownerReviewPanel = ({ tasks, projectData }) => {
                     )}
                   </div>
 
-                  {/* Subtasks Progress (if available) */}
+                  {/* Detailed Subtasks (if available) */}
                   {task.subtasks && task.subtasks.length > 0 && (
-                    <div className="ml-6 pt-2 border-t border-border">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs text-muted-foreground">
-                          Subtasks Progress
+                    <div className="ml-6 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-medium text-foreground">
+                          Subtasks ({task.subtasks.length})
                         </p>
-                        <p className="text-xs font-medium text-foreground">
-                          {task.subtasks.filter(st => st.status === 'completed').length} / {task.subtasks.length}
+                        <p className="text-xs text-muted-foreground">
+                          {task.subtasks.filter(st => st.status === 'completed').length} / {task.subtasks.length} completed
                         </p>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-primary rounded-full h-2 transition-all"
-                          style={{ 
-                            width: `${(task.subtasks.filter(st => st.status === 'completed').length / task.subtasks.length) * 100}%` 
-                          }}
-                        />
+                      <div className="space-y-2">
+                        {task.subtasks.map((subtask, subIndex) => (
+                          <div key={subtask.subtask_id || subIndex} className="bg-muted/30 rounded-lg p-3 border border-border">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                                  subtask.status === 'completed' ? 'bg-green-100' : 'bg-muted'
+                                }`}>
+                                  {subtask.status === 'completed' && (
+                                    <Icon name="Check" size={10} className="text-green-600" />
+                                  )}
+                                </div>
+                                <span className="text-sm font-medium text-foreground">
+                                  {subtask.title || subtask.name}
+                                </span>
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                subtask.status === 'completed' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : subtask.status === 'in_progress'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {subtask.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
+                              </span>
+                            </div>
+                            {subtask.description && (
+                              <p className="text-xs text-muted-foreground mb-2 ml-6">
+                                {subtask.description}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground ml-6">
+                              <span>Order: {subtask.order_index || subIndex + 1}</span>
+                              {subtask.updated_at && (
+                                <span>Updated: {new Date(subtask.updated_at).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Overall Progress Bar */}
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                          <span>Overall Progress</span>
+                          <span>{Math.round((task.subtasks.filter(st => st.status === 'completed').length / task.subtasks.length) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div 
+                            className="bg-primary rounded-full h-2 transition-all duration-300"
+                            style={{ 
+                              width: `${(task.subtasks.filter(st => st.status === 'completed').length / task.subtasks.length) * 100}%` 
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}

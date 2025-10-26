@@ -10,15 +10,20 @@ const ProjectFilters = ({ filters, onFilterChange, onSearch }) => {
     { value: 'wind', label: 'Wind' },
     { value: 'hydroelectric', label: 'Hydroelectric' },
     { value: 'biomass', label: 'Biomass' },
-    { value: 'geothermal', label: 'Geothermal' }
+    { value: 'geothermal', label: 'Geothermal' },
+    { value: 'renewable', label: 'Renewable' }
   ];
 
   const statusOptions = [
     { value: 'all', label: 'All Statuses' },
     { value: 'draft', label: 'Draft' },
-    { value: 'under-review', label: 'Under Review' },
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'under_review', label: 'Under Review' },
     { value: 'approved', label: 'Approved' },
-    { value: 'published', label: 'Published' }
+    { value: 'published', label: 'Published' },
+    { value: 'rtb', label: 'Ready to Buy' },
+    { value: 'interest_locked', label: 'Interest Locked' },
+    { value: 'rejected', label: 'Rejected' }
   ];
 
   const timelineOptions = [

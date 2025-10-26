@@ -19,6 +19,7 @@ import secrets
 import string
 from logs import log_security_event
 from email_service import send_verification_email_async
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter(
     tags=["authentication"],
@@ -435,7 +436,7 @@ async def register_with_verification(
             log_security_event("verification_email_failed", {"email": user_data.email, "error": str(e)})
         
         data = {
-            "user_id": str(db_user.user_id),
+            "user_id": db_user.user_id,
             "email": db_user.email,
             "ttl_seconds": ttl,
             "message": "Please check your email for the verification code"
@@ -446,7 +447,7 @@ async def register_with_verification(
         
         return SuccessResponse(
             message="Registration successful. Verification code sent to your email.",
-            data=data
+            data=jsonable_encoder(data)
         )
     except HTTPException:
         raise

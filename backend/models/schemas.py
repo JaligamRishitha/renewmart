@@ -222,7 +222,7 @@ class User(UserBase):
     updated_at: datetime
 
 class UserResponse(BaseSchema):
-    user_id: str = Field(
+    user_id: UUID = Field(
         ..., 
         description="Unique user identifier (UUID format)",
         example="123e4567-e89b-12d3-a456-426614174000"

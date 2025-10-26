@@ -17,7 +17,21 @@ const DocumentUpload = () => {
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState(['project-details']);
   const [uploadedFiles, setUploadedFiles] = useState({});
-  const [projectDetails, setProjectDetails] = useState({});
+  const [projectDetails, setProjectDetails] = useState({
+    projectName: '',
+    location: '',
+    landArea: '',
+    projectType: '',
+    capacity: '',
+    pricePerMWh: '',
+    estimatedBudget: '',
+    timeline: '',
+    contractDuration: '',
+    partners: '',
+    description: '',
+    additionalNotes: '',
+    detailsConfirmed: false
+  });
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -337,18 +351,28 @@ const DocumentUpload = () => {
         title: projectDetails.projectName || 'Untitled Project',
         location_text: projectDetails.location || '',
         coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
-        area_acres: parseFloat(projectDetails.totalArea) || 0,
-        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
+        area_acres: parseFloat(projectDetails.landArea || projectDetails.totalArea) || 0,
+        energy_key: projectDetails.projectType || projectDetails.energyType?.toLowerCase() || 'solar',
         capacity_mw: parseFloat(projectDetails.capacity) || 0,
         price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
         timeline_text: projectDetails.timeline || '',
         land_type: projectDetails.landType || '',
-        contract_term_years: parseInt(projectDetails.contractTerm) || null,
-        developer_name: projectDetails.developerName || null
+        contract_term_years: parseInt(projectDetails.contractDuration || projectDetails.contractTerm) || null,
+        developer_name: projectDetails.partners || projectDetails.developerName || null
       };
       
-      const createdLand = await landsAPI.createLand(landData);
-      const landId = createdLand.land_id;
+      let landId;
+      if (isEditMode && editingProjectId) {
+        // Update existing project
+        const updatedLand = await landsAPI.updateLand(editingProjectId, landData);
+        landId = editingProjectId;
+        console.log('[Document Upload] Updated existing project:', updatedLand);
+      } else {
+        // Create new project
+        const createdLand = await landsAPI.createLand(landData);
+        landId = createdLand.land_id;
+        console.log('[Document Upload] Created new project:', createdLand);
+      }
       
       // Upload any documents that are already added
       if (Object.keys(uploadedFiles).length > 0) {
@@ -427,18 +451,28 @@ const DocumentUpload = () => {
         title: projectDetails.projectName || 'Untitled Project',
         location_text: projectDetails.location || '',
         coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
-        area_acres: parseFloat(projectDetails.totalArea) || 0,
-        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
+        area_acres: parseFloat(projectDetails.landArea || projectDetails.totalArea) || 0,
+        energy_key: projectDetails.projectType || projectDetails.energyType?.toLowerCase() || 'solar',
         capacity_mw: parseFloat(projectDetails.capacity) || 0,
         price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
         timeline_text: projectDetails.timeline || '',
         land_type: projectDetails.landType || '',
-        contract_term_years: parseInt(projectDetails.contractTerm) || null,
-        developer_name: projectDetails.developerName || null
+        contract_term_years: parseInt(projectDetails.contractDuration || projectDetails.contractTerm) || null,
+        developer_name: projectDetails.partners || projectDetails.developerName || null
       };
       
-      const createdLand = await landsAPI.createLand(landData);
-      const landId = createdLand.land_id;
+      let landId;
+      if (isEditMode && editingProjectId) {
+        // Update existing project
+        const updatedLand = await landsAPI.updateLand(editingProjectId, landData);
+        landId = editingProjectId;
+        console.log('[Document Upload] Updated existing project for submission:', updatedLand);
+      } else {
+        // Create new project
+        const createdLand = await landsAPI.createLand(landData);
+        landId = createdLand.land_id;
+        console.log('[Document Upload] Created new project for submission:', createdLand);
+      }
       
       // Step 2: Upload all documents
       const uploadPromises = [];

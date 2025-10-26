@@ -93,9 +93,12 @@ async def get_admin_projects(
             "landownerEmail": row.landowner_email,
             "landownerPhone": row.phone,
             "location": row.location_text or "Not specified",
+            "location_text": row.location_text or "Not specified",
             "projectType": row.land_type or "Not specified",
             "energyType": row.energy_key or "Not specified",
+            "energy_key": row.energy_key or "Not specified",
             "capacity": f"{row.capacity_mw} MW" if row.capacity_mw else "Not specified",
+            "capacity_mw": row.capacity_mw,
             "pricePerMWh": float(row.price_per_mwh) if row.price_per_mwh else 0,
             "areaAcres": float(row.area_acres) if row.area_acres else 0,
             "status": row.status or "unknown",
@@ -106,14 +109,132 @@ async def get_admin_projects(
             "project_priority": row.project_priority,
             "project_due_date": row.project_due_date.isoformat() if row.project_due_date else None,
             "submittedDate": row.created_at.isoformat() if row.created_at else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
             "lastUpdated": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "publishedAt": row.published_at.isoformat() if row.published_at else None,
+            "published_at": row.published_at.isoformat() if row.published_at else None,
             "title": row.title or f"{row.land_type} Project",
             "investorInterestCount": int(row.investor_interest_count) if row.investor_interest_count else 0
         }
         projects.append(project)
     
     return projects
+
+
+@router.get("/admin/projects/{project_id}/details", response_model=Dict[str, Any])
+async def get_project_details_with_tasks(
+    project_id: UUID,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get project details with existing tasks for reviewer assignment (admin only)."""
+    
+    # Get project details
+    project_query = text("""
+        SELECT 
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        WHERE l.land_id = :project_id
+    """)
+    
+    project_result = db.execute(project_query, {"project_id": str(project_id)}).fetchone()
+    
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get existing tasks for this project
+    tasks_query = text("""
+        SELECT 
+            t.task_id,
+            t.land_id,
+            t.title as task_type,
+            t.description,
+            t.assigned_to,
+            t.assigned_role,
+            t.status,
+            t.priority,
+            t.due_date,
+            t.created_at,
+            t.updated_at,
+            u.first_name || ' ' || u.last_name as assigned_to_name
+        FROM tasks t
+        LEFT JOIN "user" u ON t.assigned_to = u.user_id
+        WHERE t.land_id = :project_id
+        ORDER BY t.created_at DESC
+    """)
+    
+    tasks_result = db.execute(tasks_query, {"project_id": str(project_id)}).fetchall()
+    
+    # Format project data
+    landowner_name = f"{project_result.first_name or ''} {project_result.last_name or ''}".strip() or project_result.landowner_email
+    
+    project_data = {
+        "id": str(project_result.land_id),
+        "title": project_result.title,
+        "location_text": project_result.location_text,
+        "land_type": project_result.land_type,
+        "energy_key": project_result.energy_key,
+        "capacity_mw": project_result.capacity_mw,
+        "price_per_mwh": float(project_result.price_per_mwh) if project_result.price_per_mwh else 0,
+        "area_acres": float(project_result.area_acres) if project_result.area_acres else 0,
+        "status": project_result.status,
+        "timeline_text": project_result.timeline_text,
+        "contract_term_years": project_result.contract_term_years,
+        "developer_name": project_result.developer_name,
+        "admin_notes": project_result.admin_notes,
+        "project_priority": project_result.project_priority,
+        "project_due_date": project_result.project_due_date.isoformat() if project_result.project_due_date else None,
+        "created_at": project_result.created_at.isoformat() if project_result.created_at else None,
+        "updated_at": project_result.updated_at.isoformat() if project_result.updated_at else None,
+        "published_at": project_result.published_at.isoformat() if project_result.published_at else None,
+        "landownerName": landowner_name,
+        "landownerEmail": project_result.landowner_email,
+        "landownerPhone": project_result.phone,
+        "tasks": []
+    }
+    
+    # Format tasks data
+    for task in tasks_result:
+        task_data = {
+            "task_id": str(task.task_id),
+            "land_id": str(task.land_id),
+            "task_type": task.task_type,
+            "description": task.description,
+            "assigned_to": str(task.assigned_to) if task.assigned_to else None,
+            "assigned_role": task.assigned_role,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            "assigned_to_name": task.assigned_to_name
+        }
+        project_data["tasks"].append(task_data)
+    
+    return project_data
 
 
 @router.get("/admin/summary", response_model=Dict[str, Any])
@@ -527,9 +648,11 @@ async def get_land(
     
     is_admin = "administrator" in user_roles
     is_owner = user_id_str == landowner_id_str
+    is_investor = "investor" in user_roles
     is_published = result.status == "published"
     
-    if not (is_admin or is_owner or is_published):
+    # Allow access if: admin, owner, or (investor and published)
+    if not (is_admin or is_owner or (is_investor and is_published)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this land"
@@ -616,7 +739,19 @@ async def update_land(
         # JSON fields
         elif field == "coordinates":
             update_fields.append(f"{field} = :{field}")
-            params[field] = str(value) if value is not None else None
+            # Handle coordinates as proper JSON
+            if value is not None:
+                if isinstance(value, str):
+                    try:
+                        import json
+                        params[field] = json.loads(value)
+                    except json.JSONDecodeError:
+                        # If it's already a dict-like string, try to parse it
+                        params[field] = value
+                else:
+                    params[field] = value
+            else:
+                params[field] = None
         # Date/time fields
         elif field == "project_due_date":
             update_fields.append(f"{field} = :{field}")
@@ -692,7 +827,7 @@ async def submit_land_for_review(
     """Submit land for review (owner only)."""
     # First check if land exists and belongs to user
     check_query = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+        SELECT landowner_id, status, created_at FROM lands WHERE land_id = :land_id
     """)
     
     land_result = db.execute(check_query, {"land_id": str(land_id)}).fetchone()
@@ -713,10 +848,34 @@ async def submit_land_for_review(
             detail="Not authorized to submit this land"
         )
     
+    # Check if the project is already submitted or in a later stage
     if land_result.status != 'draft':
+        # If already submitted or in a later stage, prevent resubmission
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Can only submit draft lands. Current status: {land_result.status}"
+            detail=f"This project has already been submitted. Current status: {land_result.status}"
+        )
+    
+    # Check if the project has all required fields before submission
+    validation_query = text("""
+        SELECT 
+            CASE 
+                WHEN title IS NULL OR title = '' THEN FALSE
+                WHEN location_text IS NULL OR location_text = '' THEN FALSE
+                WHEN energy_key IS NULL THEN FALSE
+                WHEN capacity_mw IS NULL OR capacity_mw <= 0 THEN FALSE
+                ELSE TRUE
+            END as is_valid
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    validation_result = db.execute(validation_query, {"land_id": str(land_id)}).fetchone()
+    
+    if not validation_result or not validation_result.is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project is missing required fields. Please complete all required information before submission."
         )
     
     # Try to use stored procedure first, fallback to direct update
@@ -739,16 +898,26 @@ async def submit_land_for_review(
             update_query = text("""
                 UPDATE lands 
                 SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                WHERE land_id = :land_id AND landowner_id = :owner_id
+                WHERE land_id = :land_id AND landowner_id = :owner_id AND status = 'draft'
             """)
             
-            db.execute(update_query, {
+            result = db.execute(update_query, {
                 "land_id": str(land_id),
                 "owner_id": current_user["user_id"]
             })
             
+            if result.rowcount == 0:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to submit project. It may have already been submitted."
+                )
+            
             db.commit()
             return MessageResponse(message="Land submitted for review successfully")
+        except HTTPException as he:
+            db.rollback()
+            raise he
         except Exception as e:
             db.rollback()
             raise HTTPException(
@@ -763,25 +932,87 @@ async def publish_land(
     db: Session = Depends(get_db)
 ):
     """Publish land (admin only)."""
-    query = text("SELECT sp_publish_land(:land_id) as success")
+    # First check if land exists and get current status
+    land_check = text("SELECT status FROM lands WHERE land_id = :land_id")
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
     
-    try:
-        result = db.execute(query, {"land_id": str(land_id)}).fetchone()
-        db.commit()
-        
-        if result and result.success:
-            return MessageResponse(message="Land published successfully")
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to publish land"
-            )
-    except Exception as e:
-        db.rollback()
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check if land is in a publishable state
+    if land_result.status not in ['approved', 'investor_ready']:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error publishing land: {str(e)}"
+            detail=f"Land must be approved before publishing. Current status: {land_result.status}"
         )
+    
+    # Check if land has required fields for publishing
+    check_fields_query = text("""
+        SELECT 
+            title IS NOT NULL AND
+            location_text IS NOT NULL AND
+            energy_key IS NOT NULL AND
+            capacity_mw IS NOT NULL AND
+            price_per_mwh IS NOT NULL AND
+            timeline_text IS NOT NULL AND
+            contract_term_years IS NOT NULL AND
+            developer_name IS NOT NULL as has_required_fields
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    fields_check = db.execute(check_fields_query, {"land_id": str(land_id)}).fetchone()
+    
+    if not fields_check or not fields_check.has_required_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Land is missing required fields for publishing"
+        )
+    
+    # Try stored procedure first, fallback to direct update
+    try:
+        # Call stored procedure with both parameters
+        sp_query = text("SELECT sp_publish_land(:land_id, :admin_id) as success")
+        result = db.execute(sp_query, {
+            "land_id": str(land_id),
+            "admin_id": str(current_user["user_id"])
+        }).fetchone()
+        
+        if result and result.success:
+            db.commit()
+            return MessageResponse(message="Land published successfully")
+    except Exception as sp_error:
+        # Stored procedure failed, use direct update
+        print(f"Stored procedure failed, using direct update: {sp_error}")
+        db.rollback()
+        
+        try:
+            # Direct update to published status
+            update_query = text("""
+                UPDATE lands 
+                SET status = 'published', published_at = NOW(), updated_at = NOW()
+                WHERE land_id = :land_id 
+                AND status IN ('approved', 'investor_ready')
+            """)
+            
+            result = db.execute(update_query, {"land_id": str(land_id)})
+            db.commit()
+            
+            if result.rowcount > 0:
+                return MessageResponse(message="Land published successfully")
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to publish land - status may not be publishable"
+                )
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error publishing land: {str(e)}"
+            )
 
 @router.post("/{land_id}/mark-rtb", response_model=MessageResponse)
 async def mark_land_ready_to_buy(

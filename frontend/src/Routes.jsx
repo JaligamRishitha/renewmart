@@ -26,6 +26,7 @@ import RoleBasedRedirect from './components/RoleBasedRedirect';
 import AdminDashboard from './pages/admin-dashboard';
 import AdminMarketplace from './pages/admin-marketplace';
 import AdminInvestorInterests from './pages/admin-investor-interests';
+import ProjectReviewersPage from './pages/admin-dashboard/project-reviewers';
 import InvestorPortal from './pages/investor-portal';
 import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
@@ -34,6 +35,7 @@ import DocumentUpload from './pages/document-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
 import LandownerProjectStatus from './pages/landowner-project-status';
 import ProjectReviewPage from './pages/landowner-project-status/components/ProjectReviewPage';
+import LandownerProjectReview from './pages/landowner-project-status/components/LandownerProjectReview';
 import ReviewerDashboard from './pages/reviewer-dashboard';
 import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
 import ProjectDetailsPage from './pages/project-details';
@@ -100,6 +102,11 @@ const Routes = () => {
             <ProjectDetailsPage />
           </AdminRoute>
         } />
+        <Route path="/admin/projects/:projectId/reviewers" element={
+          <AdminRoute>
+            <ProjectReviewersPage />
+          </AdminRoute>
+        } />
         
         {/* ========================================== */}
         {/* LANDOWNER ROUTES - /landowner/* */}
@@ -136,7 +143,7 @@ const Routes = () => {
         } />
         <Route path="/landowner/project-review/:projectId" element={
           <OwnerRoute>
-            <ProjectReviewPage />
+            <LandownerProjectReview />
           </OwnerRoute>
         } />
         
