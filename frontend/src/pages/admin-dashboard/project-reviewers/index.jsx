@@ -19,6 +19,8 @@ const ProjectReviewersPage = () => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showProjectEditModal, setShowProjectEditModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Single state to track open/closed status for all role accordions
+  const [openAccordions, setOpenAccordions] = useState({});
 
   useEffect(() => {
     fetchProjectData();
@@ -150,6 +152,14 @@ const ProjectReviewersPage = () => {
       color: 'purple'
     }
   ];
+
+  // Toggle accordion state for a specific role
+  const toggleAccordion = (roleId) => {
+    setOpenAccordions((prev) => ({
+      ...prev,
+      [roleId]: !prev[roleId]
+    }));
+  };
 
   if (loading) {
     return (
@@ -297,7 +307,7 @@ const ProjectReviewersPage = () => {
             <h3 className="font-heading font-semibold text-lg text-foreground">
               Current Assignments ({tasks.length})
             </h3>
-            
+
             {Object.keys(groupedTasks).length === 0 ? (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
                 <Icon name="Users" size={48} className="mx-auto text-muted-foreground mb-4" />
@@ -315,97 +325,109 @@ const ProjectReviewersPage = () => {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {reviewerRoles.map((role) => {
                   const roleTasks = groupedTasks[role.id] || [];
-                  if (roleTasks.length === 0) return null;
 
                   return (
-                    <div key={role.id} className="bg-card border border-border rounded-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
+                    <div key={role.id} className="bg-card border border-border rounded-lg">
+                      {/* Accordion Header */}
+                      <button
+                        onClick={() => toggleAccordion(role.id)}
+                        className="w-full flex items-center justify-between p-6 focus:outline-none"
+                        aria-expanded={!!openAccordions[role.id]}
+                        aria-controls={`accordion-content-${role.id}`}
+                      >
                         <div className="flex items-center space-x-3">
                           <div className={`w-10 h-10 bg-${role.color}-100 rounded-lg flex items-center justify-center`}>
                             <Icon name="User" size={20} className={`text-${role.color}-600`} />
                           </div>
-                          <div>
+                          <div className="text-left">
                             <h4 className="font-heading font-semibold text-lg text-foreground">
                               {role.label}
                             </h4>
                             <p className="font-body text-sm text-muted-foreground">
-                              {role.description}
+                              {role.description} {roleTasks.length > 0 && `(${roleTasks.length} tasks)`}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Tasks</div>
-                          <div className="font-body font-medium text-foreground">
-                            {roleTasks.length}
-                          </div>
+                        <div className="flex items-center space-x-4">
+                          {roleTasks.length > 0 && (
+                            <div className="text-right">
+                              <div className="text-sm text-muted-foreground">Tasks</div>
+                              <div className="font-body font-medium text-foreground">
+                                {roleTasks.length}
+                              </div>
+                            </div>
+                          )}
+                          <Icon
+                            name={openAccordions[role.id] ? 'ChevronUp' : 'ChevronDown'}
+                            size={20}
+                            className="text-muted-foreground"
+                          />
                         </div>
-                      </div>
+                      </button>
 
-                      <div className="space-y-3">
-                        {roleTasks.map((task, index) => (
-                          <div key={task.task_id} className="bg-muted/30 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                                  <Icon name="FileText" size={16} className="text-primary" />
+                      {/* Accordion Content */}
+                      {openAccordions[role.id] && roleTasks.length > 0 && (
+                        <div id={`accordion-content-${role.id}`} className="px-6 pb-6 space-y-3">
+                          {roleTasks.map((task) => (
+                            <div key={task.task_id} className="bg-muted/30 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <Icon name="FileText" size={16} className="text-primary" />
+                                  </div>
+                                  <div>
+                                    <div className="font-body font-medium text-sm text-foreground">
+                                      {task.title || task.task_type?.replace(/_/g, ' ')}
+                                    </div>
+                                    <div className="font-body text-xs text-muted-foreground">
+                                      Assigned to: {task.assigned_to_name || 'Unknown'}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <div className="font-body font-medium text-sm text-foreground">
-                                    {task.title || task.task_type?.replace(/_/g, ' ')}
+                                <div className="flex items-center space-x-2">
+                                  <div className="text-right">
+                                    <div className="text-xs text-muted-foreground">Status</div>
+                                    <div className="font-body text-sm text-foreground">
+                                      {getStatusLabel(task.status)}
+                                    </div>
                                   </div>
-                                  <div className="font-body text-xs text-muted-foreground">
-                                    Assigned to: {task.assigned_to_name || 'Unknown'}
-                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      navigate('/document-review', {
+                                        state: {
+                                          landId: projectId,
+                                          reviewerRole: role.id,
+                                          taskId: task.task_id,
+                                        },
+                                      });
+                                    }}
+                                    iconName="Eye"
+                                    iconSize={16}
+                                    title={`View ${role.label} Documents`}
+                                    className="text-muted-foreground hover:text-primary"
+                                  />
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <div className="text-right">
-                                  <div className="text-xs text-muted-foreground">Status</div>
-                                  <div className="font-body text-sm text-foreground">
-                                    {getStatusLabel(task.status)}
-                                  </div>
+
+                              {task.description && (
+                                <div className="text-sm text-muted-foreground mb-2">
+                                  {task.description}
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    // Navigate to document review page with specific role
-                                    navigate('/document-review', { 
-                                      state: { 
-                                        landId: projectId,
-                                        reviewerRole: role.id,
-                                        taskId: task.task_id
-                                      } 
-                                    });
-                                  }}
-                                  iconName="Eye"
-                                  iconSize={16}
-                                  title={`View ${role.label} Documents`}
-                                  className="text-muted-foreground hover:text-primary"
-                                />
+                              )}
+
+                              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <div>Due: {formatDate(task.due_date)}</div>
+                                <div>Priority: {task.priority || 'Not set'}</div>
                               </div>
                             </div>
-                            
-                            {task.description && (
-                              <div className="text-sm text-muted-foreground mb-2">
-                                {task.description}
-                              </div>
-                            )}
-                            
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <div>
-                                Due: {formatDate(task.due_date)}
-                              </div>
-                              <div>
-                                Priority: {task.priority || 'Not set'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

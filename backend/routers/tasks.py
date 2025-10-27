@@ -3,10 +3,14 @@ from fastapi import status as http_status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.exc import IntegrityError
+from psycopg2.errors import UniqueViolation
 from datetime import datetime
 import uuid
 import logging
+from http import HTTPStatus
+from sqlalchemy.sql import text
 
 from database import get_db
 from auth import get_current_user, require_admin
@@ -149,12 +153,11 @@ async def create_task(
     land_check = text("""
         SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
-    
     land_result = db.execute(land_check, {"land_id": str(task_data.land_id)}).fetchone()
     
     if not land_result:
         raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
+            status_code=HTTPStatus.NOT_FOUND,  # Corrected from HTTP_404_NOT_FOUND
             detail="Land not found"
         )
     
@@ -162,7 +165,7 @@ async def create_task(
     if ("administrator" not in user_roles and 
         str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN,
+            status_code=HTTPStatus.FORBIDDEN,  # Corrected from HTTP_403_FORBIDDEN
             detail="Not enough permissions to create tasks for this land"
         )
     
@@ -173,15 +176,40 @@ async def create_task(
         
         if not user_result:
             raise HTTPException(
-                status_code=http_status.HTTP_404_NOT_FOUND,
+                status_code=HTTPStatus.NOT_FOUND,  # Corrected from HTTP_404_NOT_FOUND
                 detail="Assigned user not found"
             )
     
+    # Step 1: Validate for existing pending task
+    if task_data.assigned_to:
+        existing_task_check = text("""
+            SELECT 1
+            FROM tasks
+            WHERE land_id = :land_id
+              AND title = :title
+              AND assigned_to = :assigned_to
+              AND status = 'pending'
+        """)
+        existing_task = db.execute(
+            existing_task_check,
+            {
+                "land_id": str(task_data.land_id),
+                "title": task_data.task_type.replace('_', ' ').title(),
+                "assigned_to": str(task_data.assigned_to)
+            }
+        ).fetchone()
+
+        if existing_task:
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,  # Corrected from HTTP_400_BAD_REQUEST
+                detail="This Same task is already assigned to this user."
+            )
+
+    # Step 2: Insert the task
     try:
         # Generate new task ID
-        task_id = str(uuid.uuid4())
+        task_id = str(uuid4())
         
-        # Direct INSERT into tasks table (matching actual schema)
         insert_query = text("""
             INSERT INTO tasks (
                 task_id, land_id, title, description,
@@ -197,7 +225,7 @@ async def create_task(
         db.execute(insert_query, {
             "task_id": task_id,
             "land_id": str(task_data.land_id),
-            "title": task_data.task_type.replace('_', ' ').title(),  # Convert task_type to title
+            "title": task_data.task_type.replace('_', ' ').title(),
             "description": task_data.description,
             "assigned_to": str(task_data.assigned_to) if task_data.assigned_to else None,
             "assigned_role": task_data.assigned_role,
@@ -215,10 +243,21 @@ async def create_task(
         # Fetch the created task
         return await get_task(UUID(task_id), current_user, db)
         
+    except IntegrityError as e:
+        db.rollback()
+        if isinstance(e.orig, UniqueViolation) and "idx_unique_task_assignment" in str(e):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,  # Corrected from HTTP_400_BAD_REQUEST
+                detail="This task is already assigned to the user and is pending."
+            )
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,  # Corrected from HTTP_500_INTERNAL_SERVER_ERROR
+            detail=f"Failed to create task: {str(e)}"
+        )
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,  # Corrected from HTTP_500_INTERNAL_SERVER_ERROR
             detail=f"Failed to create task: {str(e)}"
         )
 
