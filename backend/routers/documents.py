@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import Response, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pathlib import Path
 import io
@@ -10,7 +10,7 @@ import os
 import uuid
 from datetime import datetime
 
-from database import get_db, reset_session
+from database import get_db
 from auth import get_current_user, require_admin
 from models.schemas import (
     DocumentCreate, DocumentUpdate, Document,
@@ -56,7 +56,6 @@ async def upload_document(
     land_id: UUID,
     document_type: str = Form(...),
     file: UploadFile = File(...),
-    doc_slot: str = Form("D1"),  # Add doc_slot parameter with default D1
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -103,71 +102,19 @@ async def upload_document(
         # Determine MIME type
         mime_type = file.content_type or 'application/octet-stream'
         
-        # Calculate version number and handle versioning per doc_slot (independent D1/D2)
-        version_query = text("""
-            SELECT COALESCE(MAX(COALESCE(version_number, 1)), 0) + 1 as next_version
-            FROM documents 
-            WHERE land_id = :land_id AND document_type = :document_type AND doc_slot = :doc_slot
+        # Create document record with binary data
+        document_id = str(uuid.uuid4())
+        insert_query = text("""
+            INSERT INTO documents (
+                document_id, land_id, document_type, file_name, 
+                file_data, file_size, uploaded_by, mime_type, is_draft
+            ) VALUES (
+                :document_id, :land_id, :document_type, :file_name,
+                :file_data, :file_size, :uploaded_by, :mime_type, :is_draft
+            )
         """)
         
-        version_result = db.execute(version_query, {
-            "land_id": str(land_id),
-            "document_type": document_type,
-            "doc_slot": doc_slot
-        }).fetchone()
-        
-        next_version = version_result.next_version if version_result else 1
-        latest_document_id = None  # Simplified - we'll get this later if needed
-        
-        # Mark previous versions as not latest for this specific doc_slot
-        try:
-            update_previous_query = text("""
-                UPDATE documents 
-                SET is_latest_version = FALSE
-                WHERE land_id = :land_id AND document_type = :document_type AND doc_slot = :doc_slot
-                AND is_latest_version = TRUE
-            """)
-            db.execute(update_previous_query, {
-                "land_id": str(land_id),
-                "document_type": document_type,
-                "doc_slot": doc_slot
-            })
-        except Exception as e:
-            # If versioning columns don't exist, skip this step
-            print(f"Versioning update skipped: {e}")
-        
-        # Create document record with basic fields first
-        document_id = str(uuid.uuid4())
-        
-        # Try to insert with versioning fields, fallback to basic insert
-        try:
-            insert_query = text("""
-                INSERT INTO documents (
-                    document_id, land_id, document_type, file_name, 
-                    file_data, file_size, uploaded_by, mime_type, is_draft,
-                    version_number, is_latest_version, parent_document_id,
-                    version_status, version_change_reason, doc_slot
-                ) VALUES (
-                    :document_id, :land_id, :document_type, :file_name,
-                    :file_data, :file_size, :uploaded_by, :mime_type, :is_draft,
-                    :version_number, :is_latest_version, :parent_document_id,
-                    :version_status, :version_change_reason, :doc_slot
-                )
-            """)
-        except Exception:
-            # Fallback to basic insert without versioning fields
-            insert_query = text("""
-                INSERT INTO documents (
-                    document_id, land_id, document_type, file_name, 
-                    file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot
-                ) VALUES (
-                    :document_id, :land_id, :document_type, :file_name,
-                    :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot
-                )
-            """)
-        
-        # Prepare parameters for insert
-        insert_params = {
+        db.execute(insert_query, {
             "document_id": document_id,
             "land_id": str(land_id),
             "document_type": document_type,
@@ -176,145 +123,20 @@ async def upload_document(
             "file_size": file_size,
             "uploaded_by": current_user["user_id"],
             "mime_type": mime_type,
-            "is_draft": True,
-            "doc_slot": doc_slot
-        }
-        
-        # Add versioning parameters if available
-        try:
-            insert_params.update({
-                "version_number": next_version,
-                "is_latest_version": True,
-                "parent_document_id": latest_document_id,
-                "version_status": "active",
-                "version_change_reason": f"New version uploaded by {current_user.get('email', 'user')}"
-            })
-        except Exception:
-            # Versioning not available, use basic parameters only
-            pass
-        
-        db.execute(insert_query, insert_params)
+            "is_draft": True
+        })
         
         db.commit()
         
-        # Send notification for new document version upload
-        try:
-            from notification_service import NotificationService
-            notification_service = NotificationService(db)
-            notification_service.notify_version_upload(
-                str(land_id),
-                document_type,
-                next_version,
-                str(current_user["user_id"]),
-                f"New version uploaded: {file.filename}"
-            )
-        except Exception as e:
-            # Don't fail the upload if notification fails
-            print(f"Notification failed: {e}")
-        
-        print(f"Document uploaded: {file.filename} for land {land_id}")
-        
-        # Return the created document directly without additional query
-        return Document(
-            document_id=UUID(document_id),
-            land_id=land_id,
-            document_type=document_type,
-            file_name=file.filename,
-            file_path=None,  # Using binary storage
-            file_size=file_size,
-            uploaded_by=current_user["user_id"],
-            created_at=datetime.utcnow(),  # Set current timestamp
-            mime_type=mime_type,
-            is_draft=True
-        )
+        # Fetch the created document
+        return await get_document(UUID(document_id), current_user, db)
         
     except Exception as e:
-        try:
-            db.rollback()
-        except Exception:
-            # If rollback fails, the session is already in an aborted state
-            pass
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload document: {str(e)}"
         )
-
-@router.get("/land/{land_id}/versions/{document_type}", response_model=List[Document])
-async def get_document_versions(
-    land_id: UUID,
-    document_type: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all versions of a specific document type for a land"""
-    
-    # Check permissions
-    user_roles = current_user.get("roles", [])
-    user_id_str = str(current_user["user_id"])
-    
-    # Get land info to check ownership
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
-    
-    if not land_result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Land not found"
-        )
-    
-    is_admin = "administrator" in user_roles
-    is_owner = user_id_str == str(land_result.landowner_id)
-    
-    if not (is_admin or is_owner):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to view document versions"
-        )
-    
-    # Get all documents of this type (treating each as a version)
-    query = text("""
-        SELECT d.*, u.first_name, u.last_name, u.email as uploader_email
-        FROM documents d
-        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
-        WHERE d.land_id = :land_id AND d.document_type = :document_type
-        ORDER BY d.doc_slot, d.created_at DESC
-    """)
-    
-    result = db.execute(query, {
-        "land_id": str(land_id),
-        "document_type": document_type
-    }).fetchall()
-    
-    documents = []
-    for i, row in enumerate(result):
-        doc_dict = dict(row._mapping)
-        # Convert to Document schema format with safe defaults for missing columns
-        # Assign version numbers based on creation order (newest = version 1)
-        version_number = len(result) - i
-        
-        documents.append({
-            "document_id": doc_dict["document_id"],
-            "land_id": doc_dict["land_id"],
-            "document_type": doc_dict["document_type"],
-            "file_name": doc_dict["file_name"],
-            "file_size": doc_dict["file_size"],
-            "mime_type": doc_dict["mime_type"],
-            "is_draft": doc_dict.get("is_draft", True),
-            "status": doc_dict.get("status", "pending"),
-            "version_number": doc_dict.get("version_number", version_number),
-            "is_latest_version": doc_dict.get("is_latest_version", i == 0),  # First (newest) is latest
-            "version_status": doc_dict.get("version_status", "active"),
-            "version_notes": doc_dict.get("version_notes"),
-            "version_change_reason": doc_dict.get("version_change_reason"),
-            "review_locked_at": doc_dict.get("review_locked_at"),
-            "created_at": doc_dict["created_at"],
-            "doc_slot": doc_dict.get("doc_slot", "D1"),
-            "uploader_name": f"{doc_dict.get('first_name', '')} {doc_dict.get('last_name', '')}".strip() or doc_dict.get('uploader_email', 'Unknown')
-        })
-    
-    return documents
 
 @router.get("/land/{land_id}", response_model=List[Document])
 async def get_land_documents(
@@ -324,34 +146,12 @@ async def get_land_documents(
     db: Session = Depends(get_db)
 ):
     """Get all documents for a land."""
-    try:
-        # Check if land exists and user has permission
-        land_check = text("""
-            SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-        """)
-        
-        land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
-    except Exception as e:
-        # If we get a transaction error, reset the session and retry once
-        if "InFailedSqlTransaction" in str(e) or "aborted" in str(e).lower():
-            reset_session(db)
-            # Create a new session for retry
-            from database import SessionLocal
-            new_db = SessionLocal()
-            try:
-                land_result = new_db.execute(land_check, {"land_id": str(land_id)}).fetchone()
-                db = new_db  # Use the new session
-            except Exception as retry_error:
-                new_db.close()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Database transaction error: {str(retry_error)}"
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database error: {str(e)}"
-            )
+    # Check if land exists and user has permission
+    land_check = text("""
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -397,18 +197,13 @@ async def get_land_documents(
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
-               d.mime_type, d.is_draft, d.status, d.approved_by, d.approved_at,
-               d.rejection_reason, d.admin_comments, d.version_number,
-               d.is_latest_version, d.parent_document_id, d.version_notes,
-               d.version_status, d.review_locked_at, d.review_locked_by, d.version_change_reason,
-               d.doc_slot,
+               d.mime_type, d.is_draft,
                u.first_name || ' ' || u.last_name as uploader_name,
                l.title as land_title
         FROM documents d
         LEFT JOIN "user" u ON d.uploaded_by = u.user_id
         LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.land_id = :land_id
-        AND d.subtask_id IS NULL
     """
     
     params = {"land_id": str(land_id)}
@@ -463,24 +258,147 @@ async def get_land_documents(
             uploaded_by=row.uploaded_by,
             created_at=row.created_at,
             mime_type=row.mime_type,
-            is_draft=row.is_draft,
-            status=row.status,
-            approved_by=row.approved_by,
-            approved_at=row.approved_at,
-            rejection_reason=row.rejection_reason,
-            admin_comments=row.admin_comments,
-            version_number=row.version_number,
-            is_latest_version=row.is_latest_version,
-            parent_document_id=row.parent_document_id,
-            version_notes=row.version_notes,
-            version_status=getattr(row, 'version_status', 'active'),
-            review_locked_at=getattr(row, 'review_locked_at', None),
-            review_locked_by=getattr(row, 'review_locked_by', None),
-            version_change_reason=getattr(row, 'version_change_reason', None),
-            doc_slot=getattr(row, 'doc_slot', 'D1')
+            is_draft=row.is_draft
         )
         for row in results
     ]
+
+
+@router.get("/land/{land_id}/reviewer", response_model=List[Dict[str, Any]])
+async def get_land_reviewer_documents(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all reviewer documents for a land, grouped by main subtasks."""
+    # Check if land exists and user has permission
+    land_check = text("""
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions - convert to strings for comparison
+    user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
+    landowner_id_str = str(land_result.landowner_id)
+    
+    is_admin = "administrator" in user_roles
+    is_owner = landowner_id_str == user_id_str
+    is_published = land_result.status == "published"
+    
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to view reviewer documents for this land"
+        )
+    
+    # Get reviewer documents with subtask and task information
+    query = text("""
+        SELECT 
+            d.document_id, d.land_id, d.task_id, d.subtask_id, d.document_type, 
+            d.file_name, d.file_path, d.file_size, d.uploaded_by, d.created_at,
+            d.mime_type, d.is_draft,
+            u.first_name || ' ' || u.last_name as uploader_name,
+            t.assigned_role as task_role,
+            s.title as subtask_title,
+            s.description as subtask_description,
+            s.status as subtask_status,
+            s.created_at as subtask_created_at,
+            s.updated_at as subtask_updated_at,
+            s.completed_at as subtask_completed_at
+        FROM documents d
+        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN tasks t ON d.task_id = t.task_id
+        LEFT JOIN subtasks s ON d.subtask_id = s.subtask_id
+        WHERE d.land_id = :land_id 
+        AND d.subtask_id IS NOT NULL
+        AND d.uploaded_by != :landowner_id
+        ORDER BY t.assigned_role, s.title, d.created_at
+    """)
+    
+    results = db.execute(query, {
+        "land_id": str(land_id),
+        "landowner_id": landowner_id_str
+    }).fetchall()
+    
+    # Group documents by main subtask (task role)
+    grouped_docs = {}
+    for row in results:
+        task_role = row.task_role or 'Unknown'
+        if task_role not in grouped_docs:
+            grouped_docs[task_role] = {
+                'main_subtask': task_role,
+                'subtasks': {}
+            }
+        
+        subtask_id = str(row.subtask_id) if row.subtask_id else 'unknown'
+        if subtask_id not in grouped_docs[task_role]['subtasks']:
+            grouped_docs[task_role]['subtasks'][subtask_id] = {
+                'subtask_id': subtask_id,
+                'title': row.subtask_title or 'Untitled Subtask',
+                'description': row.subtask_description or '',
+                'status': row.subtask_status or 'pending',
+                'start_date': row.subtask_created_at,
+                'completion_date': row.subtask_completed_at,
+                'documents': []
+            }
+        
+        grouped_docs[task_role]['subtasks'][subtask_id]['documents'].append({
+            'document_id': str(row.document_id),
+            'file_name': row.file_name,
+            'file_size': row.file_size,
+            'mime_type': row.mime_type,
+            'uploaded_by': str(row.uploaded_by),
+            'uploader_name': row.uploader_name,
+            'created_at': row.created_at,
+            'document_type': row.document_type
+        })
+    
+    # Convert to list format for frontend
+    result_list = []
+    for main_subtask, data in grouped_docs.items():
+        subtasks_list = []
+        for subtask_id, subtask_data in data['subtasks'].items():
+            subtasks_list.append({
+                'subtask_id': subtask_id,
+                'title': subtask_data['title'],
+                'description': subtask_data['description'],
+                'status': subtask_data['status'],
+                'start_date': subtask_data['start_date'].isoformat() if subtask_data['start_date'] else None,
+                'completion_date': subtask_data['completion_date'].isoformat() if subtask_data['completion_date'] else None,
+                'documents': subtask_data['documents']
+            })
+        
+        result_list.append({
+            'main_subtask': main_subtask,
+            'subtasks': subtasks_list
+        })
+    
+    return result_list
+
 
 @router.get("/{document_id}", response_model=Document)
 async def get_document(
@@ -489,39 +407,17 @@ async def get_document(
     db: Session = Depends(get_db)
 ):
     """Get document by ID."""
-    try:
-        query = text("""
-            SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-                   d.file_path, d.file_size, d.uploaded_by, d.created_at,
-                   d.mime_type, d.is_draft,
-                   l.landowner_id, l.status
-            FROM documents d
-            LEFT JOIN lands l ON d.land_id = l.land_id
-            WHERE d.document_id = :document_id
-        """)
-        
-        result = db.execute(query, {"document_id": str(document_id)}).fetchone()
-    except Exception as e:
-        # If we get a transaction error, reset the session and retry once
-        if "InFailedSqlTransaction" in str(e) or "aborted" in str(e).lower():
-            reset_session(db)
-            # Create a new session for retry
-            from database import SessionLocal
-            new_db = SessionLocal()
-            try:
-                result = new_db.execute(query, {"document_id": str(document_id)}).fetchone()
-                db = new_db  # Use the new session
-            except Exception as retry_error:
-                new_db.close()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Database transaction error: {str(retry_error)}"
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database error: {str(e)}"
-            )
+    query = text("""
+        SELECT d.document_id, d.land_id, d.document_type, d.file_name,
+               d.file_path, d.file_size, d.uploaded_by, d.created_at,
+               d.mime_type, d.is_draft,
+               l.landowner_id, l.status
+        FROM documents d
+        LEFT JOIN lands l ON d.land_id = l.land_id
+        WHERE d.document_id = :document_id
+    """)
+    
+    result = db.execute(query, {"document_id": str(document_id)}).fetchone()
     
     if not result:
         raise HTTPException(
@@ -537,7 +433,24 @@ async def get_document(
     is_owner = result.landowner_id and str(result.landowner_id) == user_id_str
     is_published = result.status == "published"
     
-    if result.landowner_id and not (is_admin or is_owner or is_published):
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        # Check if user has a task assigned for this land
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(result.land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this document"
@@ -662,11 +575,7 @@ async def delete_document(
         return MessageResponse(message="Document deleted successfully")
         
     except Exception as e:
-        try:
-            db.rollback()
-        except Exception:
-            # If rollback fails, the session is already in an aborted state
-            pass
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}"
@@ -681,7 +590,7 @@ async def download_document(
     """Download document file from database or file system (legacy)."""
     # Check if document exists and user has permission
     doc_check = text("""
-        SELECT d.file_data, d.file_path, d.file_name, d.mime_type, l.landowner_id, l.status
+        SELECT d.file_data, d.file_path, d.file_name, d.mime_type, d.land_id, l.landowner_id, l.status
         FROM documents d
         LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.document_id = :document_id
@@ -703,7 +612,24 @@ async def download_document(
     is_owner = doc_result.landowner_id and str(doc_result.landowner_id) == user_id_str
     is_published = doc_result.status == "published"
     
-    if doc_result.landowner_id and not (is_admin or is_owner or is_published):
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
+    if not (is_admin or is_owner or is_published):
+        # Check if user has a task assigned for this land
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(doc_result.land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to download this document"
@@ -756,14 +682,13 @@ async def get_my_uploads(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all documents uploaded by the current user (exclude subtask documents)."""
+    """Get all documents uploaded by the current user."""
     query = text("""
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
                d.mime_type, d.is_draft
         FROM documents d
         WHERE d.uploaded_by = :user_id
-        AND d.subtask_id IS NULL
         ORDER BY d.created_at DESC
     """)
     
@@ -794,16 +719,13 @@ async def get_all_documents(
     current_user: dict = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get all documents (admin only) - only latest versions, exclude subtask documents."""
+    """Get all documents (admin only)."""
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
-               d.mime_type, d.is_draft, d.status, d.approved_by, d.approved_at,
-               d.rejection_reason, d.admin_comments, d.version_number,
-               d.is_latest_version, d.parent_document_id, d.version_notes
+               d.mime_type, d.is_draft
         FROM documents d
-        WHERE d.is_latest_version = TRUE
-        AND d.subtask_id IS NULL
+        WHERE 1=1
     """
     
     params = {"skip": skip, "limit": limit}
@@ -827,16 +749,7 @@ async def get_all_documents(
             uploaded_by=row.uploaded_by,
             created_at=row.created_at,
             mime_type=row.mime_type,
-            is_draft=row.is_draft,
-            status=row.status,
-            approved_by=row.approved_by,
-            approved_at=row.approved_at,
-            rejection_reason=row.rejection_reason,
-            admin_comments=row.admin_comments,
-            version_number=row.version_number,
-            is_latest_version=row.is_latest_version,
-            parent_document_id=row.parent_document_id,
-            version_notes=row.version_notes
+            is_draft=row.is_draft
         )
         for row in results
     ]
@@ -894,51 +807,18 @@ async def upload_task_document(
         # Read file bytes
         file_data, file_size = read_file_bytes(file)
         
-        # Calculate version number and handle versioning for task documents
-        version_query = text("""
-            SELECT COALESCE(MAX(version_number), 0) + 1 as next_version,
-                   (SELECT document_id FROM documents 
-                    WHERE land_id = :land_id AND document_type = :document_type 
-                    ORDER BY created_at DESC LIMIT 1) as latest_document_id
-            FROM documents 
-            WHERE land_id = :land_id AND document_type = :document_type
-        """)
-        
-        version_result = db.execute(version_query, {
-            "land_id": str(task_result.land_id),
-            "document_type": document_type
-        }).fetchone()
-        
-        next_version = version_result.next_version if version_result else 1
-        latest_document_id = version_result.latest_document_id if version_result else None
-        
-        # Mark previous versions as not latest
-        if latest_document_id:
-            update_previous_query = text("""
-                UPDATE documents 
-                SET is_latest_version = FALSE 
-                WHERE land_id = :land_id AND document_type = :document_type
-            """)
-            db.execute(update_previous_query, {
-                "land_id": str(task_result.land_id),
-                "document_type": document_type
-            })
-        
-        # Insert document with task_id and version control
+        # Insert document with task_id
         insert_query = text("""
             INSERT INTO documents (
                 document_id, land_id, task_id, uploaded_by, document_type, 
-                file_name, file_data, file_size, mime_type, is_draft, status, created_at,
-                version_number, is_latest_version, parent_document_id
+                file_name, file_data, file_size, mime_type, is_draft, status, created_at
             )
             VALUES (
                 :document_id, :land_id, :task_id, :uploaded_by, :document_type, 
-                :file_name, :file_data, :file_size, :mime_type, :is_draft, :status, :created_at,
-                :version_number, :is_latest_version, :parent_document_id
+                :file_name, :file_data, :file_size, :mime_type, :is_draft, :status, :created_at
             )
             RETURNING document_id, land_id, task_id, uploaded_by, document_type, 
-                      file_name, file_path, file_size, mime_type, is_draft, status, created_at,
-                      version_number, is_latest_version, parent_document_id
+                      file_name, file_path, file_size, mime_type, is_draft, status, created_at
         """)
         
         document_id = uuid.uuid4()
@@ -955,10 +835,7 @@ async def upload_task_document(
             "mime_type": file.content_type or "application/octet-stream",
             "is_draft": False,  # Task documents are not drafts
             "status": "pending",  # Pending admin approval
-            "created_at": datetime.utcnow(),
-            "version_number": next_version,
-            "is_latest_version": True,
-            "parent_document_id": latest_document_id
+            "created_at": datetime.utcnow()
         })
         
         db.commit()
@@ -980,11 +857,7 @@ async def upload_task_document(
         )
         
     except Exception as e:
-        try:
-            db.rollback()
-        except Exception:
-            # If rollback fails, the session is already in an aborted state
-            pass
+        db.rollback()
         print(f"Upload error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1271,11 +1144,7 @@ async def upload_subtask_document(
         )
         
     except Exception as e:
-        try:
-            db.rollback()
-        except Exception:
-            # If rollback fails, the session is already in an aborted state
-            pass
+        db.rollback()
         print(f"Upload error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1335,85 +1204,6 @@ async def get_subtask_documents(
             approved_at=row.approved_at,
             rejection_reason=row.rejection_reason,
             admin_comments=row.admin_comments
-        )
-        for row in results
-    ]
-
-@router.get("/land/{land_id}/versions/{document_type}", response_model=List[Document])
-async def get_document_versions(
-    land_id: UUID,
-    document_type: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all versions of a specific document type for a land."""
-    # Check if land exists and user has permission
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
-    
-    if not land_result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Land not found"
-        )
-    
-    # Check permissions
-    user_roles = current_user.get("roles", [])
-    user_id_str = str(current_user["user_id"])
-    landowner_id_str = str(land_result.landowner_id)
-    
-    is_admin = "administrator" in user_roles
-    is_owner = user_id_str == landowner_id_str
-    
-    if not (is_admin or is_owner):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to view documents for this land"
-        )
-    
-    # Get all versions of the document type
-    query = text("""
-        SELECT d.document_id, d.land_id, d.document_type, d.file_name, 
-               d.file_path, d.file_size, d.uploaded_by, d.created_at, d.mime_type, 
-               d.is_draft, d.status, d.approved_by, d.approved_at, 
-               d.rejection_reason, d.admin_comments, d.version_number, 
-               d.is_latest_version, d.parent_document_id, d.version_notes,
-               d.doc_slot
-        FROM documents d
-        WHERE d.land_id = :land_id AND d.document_type = :document_type
-        ORDER BY d.doc_slot, d.version_number DESC
-    """)
-    
-    results = db.execute(query, {
-        "land_id": str(land_id),
-        "document_type": document_type
-    }).fetchall()
-    
-    return [
-        Document(
-            document_id=row.document_id,
-            land_id=row.land_id,
-            document_type=row.document_type,
-            file_name=row.file_name,
-            file_path=row.file_path,
-            file_size=row.file_size,
-            uploaded_by=row.uploaded_by,
-            created_at=row.created_at,
-            mime_type=row.mime_type,
-            is_draft=row.is_draft,
-            status=row.status,
-            approved_by=row.approved_by,
-            approved_at=row.approved_at,
-            rejection_reason=row.rejection_reason,
-            admin_comments=row.admin_comments,
-            version_number=row.version_number,
-            is_latest_version=row.is_latest_version,
-            parent_document_id=row.parent_document_id,
-            version_notes=row.version_notes,
-            doc_slot=row.doc_slot
         )
         for row in results
     ]
