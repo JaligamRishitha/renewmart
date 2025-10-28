@@ -4,3 +4,8 @@ backend/logs/renewmart_access.log
 # Ignore all log files
 *.log
 backend/logs/
+
+# Ignore local virtual envs and system files
+.venv/
+*.env
+.DS_Store
