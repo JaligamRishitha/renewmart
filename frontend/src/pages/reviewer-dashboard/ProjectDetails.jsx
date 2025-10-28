@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
 import Header from '../../components/ui/Header';
-import { taskAPI, documentsAPI, landsAPI, usersAPI } from '../../services/api';
+import { taskAPI, documentsAPI, landsAPI, usersAPI, reviewerAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SubtaskManager from './SubtaskManager';
 import ReviewPanelCompact from './ReviewPanelCompact';
 import TaskPanel from './TaskPanel';
 import TeamsStyleMessaging from './components/TeamsStyleMessaging';
+import toast from 'react-hot-toast';
 
 const ProjectDetails = () => {
   const { landId } = useParams();
@@ -24,11 +25,22 @@ const ProjectDetails = () => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [reviewers, setReviewers] = useState({});
+  const [selectedDocumentType, setSelectedDocumentType] = useState(null);
+  const [forceUpdate, setForceUpdate] = useState(0);
+  const [slotStatusSummary, setSlotStatusSummary] = useState({});
+  const [isProcessingSlot, setIsProcessingSlot] = useState(false);
+  const [expandedAccordions, setExpandedAccordions] = useState({});
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Get user's reviewer role
   const reviewerRole = user?.roles?.find(role => 
     ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
   );
+
+  // Debug: Log user roles
+  console.log('Current user:', user);
+  console.log('User roles:', user?.roles);
+  console.log('Reviewer role found:', reviewerRole);
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'LayoutGrid' },
@@ -40,6 +52,16 @@ const ProjectDetails = () => {
   useEffect(() => {
     fetchProjectDetails();
   }, [landId]);
+
+  // Debug: Log document changes
+  useEffect(() => {
+    console.log('Documents state changed:', documents.map(d => ({
+      file_name: d.file_name,
+      status: d.status,
+      version_status: d.version_status,
+      document_type: d.document_type
+    })));
+  }, [documents]);
 
   const fetchProjectDetails = async () => {
     try {
@@ -85,7 +107,13 @@ const ProjectDetails = () => {
               }
             }
             
-            return { ...task, subtasks: subtasks || [] };
+            // Filter out "Document type" subtasks
+            const filteredSubtasks = (subtasks || []).filter(subtask => 
+              subtask.title !== 'Document type' && 
+              subtask.title !== 'document type' &&
+              !subtask.title.toLowerCase().includes('document type')
+            );
+            return { ...task, subtasks: filteredSubtasks };
           } catch (err) {
             console.error(`Failed to fetch subtasks for task ${task.task_id}:`, err);
             console.error('Error details:', err.response?.data);
@@ -111,7 +139,17 @@ const ProjectDetails = () => {
 
       // Fetch all documents
       const docsResponse = await documentsAPI.getDocuments(landId);
-      setDocuments(docsResponse || []);
+      // Filter out subtask documents
+      const filteredDocs = (docsResponse || []).filter(doc => !doc.subtask_id);
+      setDocuments(filteredDocs);
+
+      // Fetch slot status summary
+      try {
+        const slotStatus = await documentsAPI.getSlotStatusSummary(landId);
+        setSlotStatusSummary(slotStatus.slot_status || {});
+      } catch (err) {
+        console.error('Failed to fetch slot status summary:', err);
+      }
 
       // If project data not in location state, fetch land details
       if (!project) {
@@ -134,7 +172,13 @@ const ProjectDetails = () => {
   const handleViewTask = async (task) => {
     try {
       const updatedSubtasks = await taskAPI.getSubtasks(task.task_id);
-      setSelectedTask({ ...task, subtasks: updatedSubtasks });
+      // Filter out "Document type" subtasks
+      const filteredSubtasks = (updatedSubtasks || []).filter(subtask => 
+        subtask.title !== 'Document type' && 
+        subtask.title !== 'document type' &&
+        !subtask.title.toLowerCase().includes('document type')
+      );
+      setSelectedTask({ ...task, subtasks: filteredSubtasks });
       setShowTaskModal(true);
     } catch (err) {
       console.error("Failed to fetch subtasks for modal:", err);
@@ -145,11 +189,44 @@ const ProjectDetails = () => {
 
  const handleSubtaskUpdate = async (taskId) => {
   try {
+    // Refresh the specific task data to get updated status
+    const updatedTask = await taskAPI.getTaskById(taskId);
     const updatedSubtasks = await taskAPI.getSubtasks(taskId);
-    setSelectedTask(prev => ({ ...prev, subtasks: updatedSubtasks }));
-    await fetchProjectDetails(); // Optional: refresh entire task list
+    
+    // Filter out "Document type" subtasks
+    const filteredSubtasks = (updatedSubtasks || []).filter(subtask => 
+      subtask.title !== 'Document type' && 
+      subtask.title !== 'document type' &&
+      !subtask.title.toLowerCase().includes('document type')
+    );
+    
+    // Update the selected task with new data
+    setSelectedTask(prev => ({ 
+      ...prev, 
+      ...updatedTask, 
+      subtasks: filteredSubtasks 
+    }));
+    
+    // Update the task in the allTasks list
+    setAllTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.task_id === taskId 
+          ? { ...task, ...updatedTask, subtasks: filteredSubtasks }
+          : task
+      )
+    );
+    
+    console.log('Task status updated:', {
+      taskId,
+      oldStatus: 'previous',
+      newStatus: updatedTask.status,
+      completionPercentage: Math.round((filteredSubtasks.filter(s => s.status === 'completed').length / filteredSubtasks.length) * 100)
+    });
+    
   } catch (err) {
-    console.error("Failed to refresh subtasks after update:", err);
+    console.error("Failed to refresh task after subtask update:", err);
+    // Fallback: refresh entire project details
+    await fetchProjectDetails();
   }
 };
 
@@ -192,16 +269,52 @@ const ProjectDetails = () => {
     return `${kb.toFixed(2)} KB`;
   };
 
+  const toggleAccordion = (docIndex) => {
+    setExpandedAccordions(prev => ({
+      ...prev,
+      [docIndex]: !prev[docIndex]
+    }));
+  };
+
+  const groupDocumentsBySlot = (docs) => {
+    // Only use D1, D2 for Ownership Documents and Government NOCs
+    const multiSlotTypes = ['ownership-documents', 'government-nocs'];
+    const isMultiSlot = multiSlotTypes.includes(selectedDocumentType?.id);
+    
+    if (!isMultiSlot) {
+      // For other document types, return as single group
+      return { 'D1': docs };
+    }
+    
+    // Group documents by actual doc_slot field for multi-slot types
+    const grouped = {};
+    docs.forEach((doc) => {
+      const docSlot = doc.doc_slot || 'D1'; // Default to D1 if no slot specified
+      if (!grouped[docSlot]) {
+        grouped[docSlot] = [];
+      }
+      grouped[docSlot].push(doc);
+    });
+    
+    // Ensure D1 and D2 slots exist even if empty
+    if (!grouped['D1']) grouped['D1'] = [];
+    if (!grouped['D2']) grouped['D2'] = [];
+    
+    return grouped;
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed':
         return 'bg-green-500/10 text-green-500 border-green-500/20';
       case 'in_progress':
         return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'pending':
-        return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
       case 'rejected':
         return 'bg-red-500/10 text-red-500 border-red-500/20';
+      case 'under_review': 
+        return 'text-yellow-600 bg-yellow-100';
+      case 'archived': 
+        return 'text-gray-600 bg-gray-100';
       default:
         return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
     }
@@ -215,6 +328,320 @@ const ProjectDetails = () => {
     };
     return roleLabels[role] || role;
   };
+
+  // Document management helper functions
+  const getDocumentTypes = () => {
+    const typeMap = new Map();
+    
+    // Process each document type separately to ensure consistent version numbering
+    const documentTypes = [...new Set(documents.filter(doc => !doc.subtask_id).map(doc => doc.document_type || 'unknown'))];
+    
+    documentTypes.forEach(type => {
+      // Get all documents of this type
+      const docsOfType = documents
+        .filter(doc => (doc.document_type || 'unknown') === type && !doc.subtask_id);
+      
+      if (docsOfType.length === 0) return;
+      
+      // Group by doc_slot for independent D1/D2 processing
+      const groupedDocs = groupDocumentsBySlot(docsOfType);
+      
+      // Calculate total count and latest version across all slots
+      let totalCount = 0;
+      let maxVersion = 0;
+      let underReviewVersion = null;
+      
+      Object.entries(groupedDocs).forEach(([slot, slotDocs]) => {
+        const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        totalCount += sortedSlotDocs.length;
+        
+        // Find the document that's under review in this slot
+        sortedSlotDocs.forEach((doc, index) => {
+          const versionNumber = index + 1; // Version numbers start from 1
+          const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
+          
+          if (isUnderReview) {
+            console.log(`Document ${doc.file_name} in ${slot} is under review with version ${versionNumber}`);
+            underReviewVersion = versionNumber;
+          }
+        });
+        
+        maxVersion = Math.max(maxVersion, sortedSlotDocs.length);
+      });
+      
+      // Initialize document type
+      typeMap.set(type, {
+        id: type,
+        name: type.replace(/-|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        icon: getDocumentTypeIcon(type),
+        count: totalCount,
+        latestVersion: maxVersion, // Latest version across all slots
+        underReviewVersion: underReviewVersion,
+        documents: docsOfType
+      });
+    });
+    
+    const result = Array.from(typeMap.values()).map(type => ({
+      ...type,
+      isLatest: true // Mark the latest document
+    }));
+    
+    console.log('Document types processed:', result.map(type => ({
+      name: type.name,
+      count: type.count,
+      latestVersion: type.latestVersion,
+      underReviewVersion: type.underReviewVersion
+    })));
+    
+    return result;
+  };
+
+  const getDocumentsByType = (typeId) => {
+    const filteredDocs = documents
+      .filter(doc => (doc.document_type || 'unknown') === typeId)
+      .filter(doc => !doc.subtask_id); // Exclude subtask documents
+    
+    // Group by doc_slot for independent D1/D2 processing
+    const groupedDocs = groupDocumentsBySlot(filteredDocs);
+    
+    // Process each slot independently
+    const processedDocs = [];
+    Object.entries(groupedDocs).forEach(([slot, slotDocs]) => {
+      const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      
+      sortedSlotDocs.forEach((doc, index) => {
+        const processedDoc = {
+          ...doc,
+          version: index + 1, // Independent version numbering per slot
+          isLatest: index === sortedSlotDocs.length - 1, // Last document in slot is latest
+          // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
+          status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+        };
+        
+        console.log(`Processing document ${doc.file_name} in ${slot}:`, {
+          original_status: doc.status,
+          version_status: doc.version_status,
+          final_status: processedDoc.status,
+          slot: slot,
+          version: processedDoc.version
+        });
+        
+        processedDocs.push(processedDoc);
+      });
+    });
+    
+    return processedDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Sort by newest first
+  };
+
+  const getDocumentTypeIcon = (type) => {
+    const iconMap = {
+      'land-valuation': 'FileText',
+      'ownership-documents': 'Scale',
+      'sale-contracts': 'FileText',
+      'topographical-surveys': 'Map',
+      'grid-connectivity': 'Zap',
+      'financial-models': 'DollarSign',
+      'zoning-approvals': 'Building',
+      'environmental-impact': 'Leaf',
+      'government-nocs': 'Shield'
+    };
+    return iconMap[type] || 'File';
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'under_review': return 'Clock';
+      case 'archived': return 'Archive';
+      default: return 'File';
+    }
+  };
+
+  const refreshDocuments = async () => {
+    try {
+      console.log('Refreshing documents from server...');
+      const docsResponse = await documentsAPI.getDocuments(landId);
+      console.log('Raw documents response:', docsResponse);
+      
+      // Filter out subtask documents and ensure proper status mapping
+      const filteredDocs = (docsResponse || [])
+        .filter(doc => !doc.subtask_id)
+        .map(doc => {
+          const processedDoc = {
+            ...doc,
+            // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
+            status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+          };
+          console.log(`Refreshed document ${doc.file_name}:`, {
+            version_status: doc.version_status,
+            original_status: doc.status,
+            final_status: processedDoc.status
+          });
+          return processedDoc;
+        });
+      
+      console.log('Setting documents state:', filteredDocs.map(d => ({
+        file_name: d.file_name,
+        status: d.status,
+        version_status: d.version_status
+      })));
+      
+      setDocuments(filteredDocs);
+    } catch (error) {
+      console.error('Failed to refresh documents:', error);
+    }
+  };
+
+  const handleMarkSlotForReview = async (documentType, docSlot) => {
+    if (isProcessingSlot) return;
+    
+    try {
+      setIsProcessingSlot(true);
+      await documentsAPI.markSlotForReview(landId, documentType, docSlot, `Marked ${docSlot} slot for review`);
+      
+      toast.success(`Successfully marked ${docSlot} slot for review`);
+      
+      // Refresh documents and slot status
+      await refreshDocuments();
+      const slotStatus = await documentsAPI.getSlotStatusSummary(landId);
+      setSlotStatusSummary(slotStatus.slot_status || {});
+      
+    } catch (err) {
+      console.error('Failed to mark slot for review:', err);
+      toast.error('Failed to mark slot for review: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsProcessingSlot(false);
+    }
+  };
+
+  const handleUnlockSlotFromReview = async (documentType, docSlot) => {
+    if (isProcessingSlot) return;
+    
+    try {
+      setIsProcessingSlot(true);
+      await documentsAPI.unlockSlotFromReview(landId, documentType, docSlot, `Unlocked ${docSlot} slot from review`);
+      
+      toast.success(`Successfully unlocked ${docSlot} slot from review`);
+      
+      // Refresh documents and slot status
+      await refreshDocuments();
+      const slotStatus = await documentsAPI.getSlotStatusSummary(landId);
+      setSlotStatusSummary(slotStatus.slot_status || {});
+      
+    } catch (err) {
+      console.error('Failed to unlock slot from review:', err);
+      toast.error('Failed to unlock slot from review: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsProcessingSlot(false);
+    }
+  };
+
+  const getSlotStatusIndicator = (documentType) => {
+    const slotStatus = slotStatusSummary[documentType];
+    if (!slotStatus || !slotStatus.show_slot_indicators) {
+      return null;
+    }
+    
+    return slotStatus.status_summary;
+  };
+
+ const handleMarkForReview = async (doc) => {
+  if (isProcessing) return;
+
+  try {
+    setIsProcessing(true);
+
+    if (doc.status === 'under_review') {
+
+      toast.error('Document is already under review');
+      return;
+    }
+
+    // Optimistic UI update
+    setDocuments(prevDocs =>
+      prevDocs.map(d =>
+        d.document_id === doc.document_id
+          ? { ...d, version_status: 'under_review', status: 'under_review' }
+          : d
+      )
+    );
+    setForceUpdate(prev => prev + 1);
+
+     // API call
+     const response = await reviewerAPI.claimDocument(doc.document_id);
+
+    // ✅ Wait for backend confirmation before showing toast
+    await refreshDocuments();
+    console.log("📦 API response:", response);
+    toast.success(response.message || 'Document marked for review successfully');
+  } catch (error) {
+    console.error('Error marking document for review:', error);
+
+    // Revert optimistic update on error
+    setDocuments(prevDocs =>
+      prevDocs.map(d =>
+        d.document_id === doc.document_id
+          ? { ...d, version_status: 'pending', status: 'pending' }
+          : d
+      )
+    );
+
+    setForceUpdate(prev => prev + 1);
+    toast.error(error.response?.data?.detail || 'Failed to mark document for review');
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
+
+const handleReleaseFromReview = async (doc) => {
+  if (isProcessing) return;
+
+  try {
+    setIsProcessing(true);
+
+    if (doc.status !== 'under_review') {
+      toast.error('Document is not under review');
+      return;
+    }
+
+    // Optimistic UI update
+    setDocuments(prevDocs =>
+      prevDocs.map(d =>
+        d.document_id === doc.document_id
+          ? { ...d, version_status: 'pending', status: 'pending' }
+          : d
+      )
+    );
+    setForceUpdate(prev => prev + 1);
+
+    // API call
+    await reviewerAPI.completeReview(
+      doc.document_id,
+      'request_changes',
+      'Released from review'
+    );
+
+    // ✅ Wait for backend data before toast
+    await refreshDocuments();
+
+    toast.success('Document released from review successfully');
+  } catch (error) {
+    console.error('Error releasing document from review:', error);
+    toast.error(error.response?.data?.detail || 'Failed to release document from review');
+    // Revert optimistic UI
+    setDocuments(prevDocs =>
+      prevDocs.map(d =>
+        d.document_id === doc.document_id
+          ? { ...d, version_status: 'under_review', status: 'under_review' }
+          : d
+      )
+    );
+    setForceUpdate(prev => prev + 1);
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
 
   if (loading) {
     return (
@@ -375,91 +802,294 @@ const ProjectDetails = () => {
 
         {/* Documents Tab */}
         {activeTab === 'documents' && (
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
+                <Icon name="FileText" size={24} color="white" />
+              </div>
               <div>
-                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                  <Icon name="FileText" size={24} />
-                  Landowner Documents
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  View and download documents uploaded by the landowner (Read-only)
+                <h1 className="font-heading font-bold text-2xl text-foreground">
+                  Document Review
+                </h1>
+                <p className="font-body text-lg text-muted-foreground">
+                  Review and manage documents for: {project?.title || 'Project'}
                 </p>
               </div>
-              <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg">
-                <span className="text-2xl font-bold">{documents.length}</span>
-                <span className="text-sm ml-2">Documents</span>
+            </div>
+
+            {/* Project Info Card */}
+            <div className="bg-card border border-border rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <span className="text-sm text-muted-foreground">Project:</span>
+                  <p className="font-medium text-foreground">{project?.title || 'Untitled Project'}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Land ID:</span>
+                  <p className="font-medium text-foreground">{landId}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Total Documents:</span>
+                  <p className="font-medium text-foreground">{documents.length} documents</p>
+                </div>
               </div>
             </div>
-            
-            {documents.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Icon name="FileX" size={64} className="mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No documents uploaded yet</p>
-                <p className="text-sm mt-2">The landowner hasn't uploaded any documents for this project</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.document_id}
-                    className="bg-background border border-border rounded-lg p-4 hover:shadow-md transition-all"
-                  >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Sidebar - Document Types */}
+              <div className="lg:col-span-1">
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <h3 className="font-heading font-semibold text-lg text-foreground mb-4">
+                    Document Types
+                  </h3>
+                  <div className="space-y-2">
+                    {getDocumentTypes().map((docType) => (
+                      <button
+                        key={docType.id}
+                        onClick={() => setSelectedDocumentType(docType)}
+                        className={`w-full text-left p-3 rounded-lg transition-smooth ${
+                          selectedDocumentType?.id === docType.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-muted border border-border'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3">
                           <Icon 
-                            name={doc.mime_type?.includes('pdf') ? 'FileText' : doc.mime_type?.includes('image') ? 'Image' : 'File'} 
-                            size={24} 
-                            className="text-primary" 
+                            name={docType.icon} 
+                            size={20} 
+                            className={selectedDocumentType?.id === docType.id ? 'text-primary-foreground' : 'text-primary'} 
                           />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="font-medium text-foreground text-sm mb-1 truncate" title={doc.file_name}>
-                          {doc.file_name || 'Unnamed Document'}
-                        </h5>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded">
-                              {doc.document_type?.replace(/-|_/g, ' ').toUpperCase() || 'DOCUMENT'}
-                            </span>
-                          </p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Icon name="HardDrive" size={12} />
-                            {formatFileSize(doc.file_size)}
-                          </p>
-                          {doc.created_at && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Icon name="Calendar" size={12} />
-                              {new Date(doc.created_at).toLocaleDateString()}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {docType.name}
                             </p>
-                          )}
+                            <p className="text-xs opacity-75 mt-1">
+                              {docType.count} version{docType.count !== 1 ? 's' : ''}
+                            </p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
+                                Latest: v{docType.latestVersion}
+                              </span>
+                              {docType.underReviewVersion && (
+                                <span className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">
+                                  Under Review: v{docType.underReviewVersion}
+                                </span>
+                              )}
+                            </div>
+                            {/* Slot Status Indicator */}
+                            {getSlotStatusIndicator(docType.id) && (
+                              <div className="mt-2">
+                                <span className="text-xs text-muted-foreground">
+                                  {getSlotStatusIndicator(docType.id)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side - Document Versions */}
+              <div className="lg:col-span-2">
+                {selectedDocumentType ? (
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="font-heading font-semibold text-lg text-foreground">
+                          {selectedDocumentType.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {selectedDocumentType.count} version{selectedDocumentType.count !== 1 ? 's' : ''} available
+                        </p>
                       </div>
                     </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                      <button
-                        onClick={() => handleViewDocument(doc)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground rounded-md text-xs font-medium transition-colors"
-                      >
-                        <Icon name="Eye" size={14} />
-                        View
-                      </button>
-                      <button
-                        onClick={() => handleDownloadDocument(doc)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted-foreground/20 text-foreground rounded-md text-xs font-medium transition-colors"
-                      >
-                        <Icon name="Download" size={14} />
-                        Download
-                      </button>
-                    </div>
+
+                        {/* Document Versions Grid */}
+                        <div className="space-y-4">
+                          {Object.entries(groupDocumentsBySlot(getDocumentsByType(selectedDocumentType.id))).map(([docSlot, docs], docIndex) => (
+                            <div key={docSlot} className="border border-border rounded-lg">
+                              {/* Accordion Header */}
+                              <div className="p-4">
+                                <div className="flex items-center justify-between">
+                                  <button
+                                    onClick={() => toggleAccordion(docIndex)}
+                                    className="flex items-center space-x-3 text-left hover:bg-muted/50 transition-colors rounded p-2"
+                                  >
+                                    <Icon name="File" size={20} className="text-primary" />
+                                    <span className="font-medium text-foreground">{docSlot}</span>
+                                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                      {docs.length} version{docs.length !== 1 ? 's' : ''}
+                                    </span>
+                                    <Icon 
+                                      name={expandedAccordions[docIndex] ? "ChevronUp" : "ChevronDown"} 
+                                      size={20} 
+                                      className="text-muted-foreground" 
+                                    />
+                                  </button>
+                                  
+                                  {/* Slot Review Buttons */}
+                                  {docs.length > 0 && (
+                                    <div className="flex items-center space-x-2">
+                                      {docs.some(doc => doc.status === 'under_review') ? (
+                                        <button
+                                          onClick={() => handleUnlockSlotFromReview(selectedDocumentType.id, docSlot)}
+                                          disabled={isProcessingSlot}
+                                          className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                          {isProcessingSlot ? 'Unlocking...' : 'Unlock Slot'}
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleMarkSlotForReview(selectedDocumentType.id, docSlot)}
+                                          disabled={isProcessingSlot}
+                                          className="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                          {isProcessingSlot ? 'Marking...' : 'Mark Slot for Review'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Accordion Content */}
+                              {expandedAccordions[docIndex] && (
+                                <div className="border-t border-border">
+                                  <div className="p-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {docs.map((doc, versionIndex) => (
+                                        <div
+                                          key={`${doc.document_id}-${doc.status}-${forceUpdate}`}
+                                          className={`p-4 rounded-lg border hover:shadow-md transition-all ${
+                                            doc.isLatest ? 'border-primary bg-primary/5' : 'border-border bg-card'
+                                          }`}
+                                        >
+                                          <div className="flex flex-col h-full">
+                                            {/* Header */}
+                                            <div className="flex items-start justify-between mb-3">
+                                              <div className="flex items-center space-x-2">
+                                                <div>
+                                                  <div className="flex items-center space-x-2">
+                                                    <span className="font-medium text-foreground text-sm">
+                                                      Version {doc.version || 1}
+                                                    </span>
+                                                    {doc.isLatest && (
+                                                      <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded">
+                                                        Latest
+                                                      </span>
+                                                    )}
+                                                    {doc.status === 'under_review' && (
+                                                      <span className="px-2 py-1 bg-orange-500 text-white text-xs rounded">
+                                                        Under Review
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* File Info */}
+                                            <div className="flex-1 mb-3">
+                                              <h3 className="font-medium text-foreground mb-2 text-sm truncate" title={doc.file_name}>
+                                                {doc.file_name || 'Unnamed Document'}
+                                              </h3>
+                                              <div className="space-y-1 text-xs text-muted-foreground">
+                                                <div className="flex items-center justify-between">
+                                                  <span>Size:</span>
+                                                  <span>{formatFileSize(doc.file_size)}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                  <span>Uploaded:</span>
+                                                  <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : 'Unknown'}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                  <span>By:</span>
+                                                  <span className="truncate">{doc.uploader_name || 'Unknown'}</span>
+                                                </div>
+                                              </div>
+
+                                              {doc.status === 'under_review' && doc.reviewedBy && (
+                                                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                                                  <div className="flex items-center space-x-1 mb-1">
+                                                    <Icon name="Clock" size={12} className="text-yellow-600" />
+                                                    <span className="font-medium text-yellow-800">Under Review</span>
+                                                  </div>
+                                                  <div className="text-yellow-700">
+                                                    <p className="truncate">By {doc.reviewedBy}</p>
+                                                    <p>Since {doc.reviewStartedAt ? new Date(doc.reviewStartedAt).toLocaleDateString() : 'Recently'}</p>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-between pt-3 border-t border-border">
+                                              <div className="flex items-center space-x-1">
+                                                <button
+                                                  onClick={() => {
+                                                    console.log('Button clicked for document:', {
+                                                      file_name: doc.file_name,
+                                                      status: doc.status,
+                                                      version_status: doc.version_status,
+                                                      document_id: doc.document_id
+                                                    });
+                                                    doc.status === 'under_review' ? handleReleaseFromReview(doc) : handleMarkForReview(doc);
+                                                  }}
+                                                  disabled={isProcessing}
+                                                  className={`px-3 py-1 text-sm border rounded-md transition-colors ${
+                                                    isProcessing 
+                                                      ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed'
+                                                      : doc.status === 'under_review' 
+                                                        ? 'bg-orange-500 text-white border-orange-600 hover:bg-orange-600' 
+                                                        : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                                                  }`}
+                                                  title={isProcessing ? 'Processing...' : (doc.status === 'under_review' ? 'Release from Review' : 'Mark for Review')}
+                                                >
+                                                  <Icon name={isProcessing ? 'Loader' : (doc.status === 'under_review' ? 'Clock' : 'Check')} size={16} />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleViewDocument(doc)}
+                                                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                                                >
+                                                  <Icon name="Eye" size={16} />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDownloadDocument(doc)}
+                                                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                                                >
+                                                  <Icon name="Download" size={16} />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                   </div>
-                ))}
+                ) : (
+                  <div className="bg-card border border-border rounded-lg p-8 text-center">
+                    <Icon name="FileText" size={48} className="text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-heading font-semibold text-lg text-foreground mb-2">
+                      Select a Document Type
+                    </h3>
+                    <p className="text-muted-foreground">
+                      Choose a document type from the left sidebar to view its versions
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -496,6 +1126,37 @@ const TaskCard = ({ task, reviewer, isMyTask, onView, getStatusColor, getRoleLab
   const completedSubtasks = task.subtasks?.filter(s => s.status === 'completed').length || 0;
   const totalSubtasks = task.subtasks?.length || 0;
   
+  // Calculate completion percentage
+  const completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  
+  // Determine display status based on subtask completion
+  const getDisplayStatus = () => {
+    if (totalSubtasks === 0) {
+      return task.status; // No subtasks, use original status
+    }
+    
+    if (completionPercentage === 100) {
+      return 'completed'; // All subtasks completed
+    } else if (completionPercentage > 0) {
+      return 'in_progress'; // Some subtasks completed
+    } else {
+      return 'pending'; // No subtasks completed
+    }
+  };
+  
+  const displayStatus = getDisplayStatus();
+  
+  // Debug logging for status changes
+  if (totalSubtasks > 0 && displayStatus !== task.status) {
+    console.log(`Task ${task.task_id} status changed:`, {
+      originalStatus: task.status,
+      displayStatus: displayStatus,
+      completionPercentage: completionPercentage,
+      completedSubtasks: completedSubtasks,
+      totalSubtasks: totalSubtasks
+    });
+  }
+  
   return (
     <div className={`border rounded-lg p-4 transition-colors ${
       isMyTask ? 'border-primary/50 bg-primary/5' : 'border-border hover:border-primary/30'
@@ -506,8 +1167,8 @@ const TaskCard = ({ task, reviewer, isMyTask, onView, getStatusColor, getRoleLab
             <h4 className="font-semibold text-foreground">
               {task.task_type?.replace(/_/g, ' ').toUpperCase()}
             </h4>
-            <span className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(task.status)}`}>
-              {task.status?.toUpperCase()}
+            <span className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(displayStatus)}`}>
+              {displayStatus?.toUpperCase()}
             </span>
             {isMyTask && (
               <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/10 text-blue-500">
@@ -556,12 +1217,12 @@ const TaskCard = ({ task, reviewer, isMyTask, onView, getStatusColor, getRoleLab
         <div className="mt-3 pt-3 border-t border-border">
           <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
             <span>Subtask Progress</span>
-            <span>{Math.round((completedSubtasks / totalSubtasks) * 100)}%</span>
+            <span>{completionPercentage}%</span>
           </div>
           <div className="w-full bg-muted rounded-full h-1.5">
             <div
               className="bg-primary h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+              style={{ width: `${completionPercentage}%` }}
             />
           </div>
         </div>

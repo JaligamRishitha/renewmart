@@ -13,7 +13,13 @@ const SubtaskManager = ({ taskId, initialSubtasks = [], onUpdate, taskTitle = ''
   const lastUpdateTimeRef = React.useRef(Date.now());
 
   useEffect(() => {
-    setSubtasks(initialSubtasks);
+    // Filter out "Document type" subtasks
+    const filteredSubtasks = (initialSubtasks || []).filter(subtask => 
+      subtask.title !== 'Document type' && 
+      subtask.title !== 'document type' &&
+      !subtask.title.toLowerCase().includes('document type')
+    );
+    setSubtasks(filteredSubtasks);
   }, [initialSubtasks]);
   
 

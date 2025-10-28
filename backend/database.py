@@ -29,13 +29,35 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Create Base class
 Base = declarative_base()
 
+# Helper function to reset a database session
+def reset_session(db: Session):
+    """Reset a database session to a clean state"""
+    try:
+        db.rollback()
+    except Exception:
+        pass  # Ignore rollback errors
+    try:
+        db.close()
+    except Exception:
+        pass  # Ignore close errors
+
 # Dependency to get database session
 def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        # If there's an exception, ensure the session is properly closed
+        try:
+            db.rollback()
+        except Exception:
+            pass  # Ignore rollback errors
+        raise e
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass  # Ignore close errors
 
 # Helper function to get user by email (for auth compatibility)
 def get_user_by_id(db: Session, user_id: str) -> Optional[dict]:

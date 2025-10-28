@@ -19,11 +19,17 @@ const TaskDocuments = ({ taskId, onRefresh }) => {
     try {
       setLoading(true);
       const subtaskList = await taskAPI.getSubtasks(taskId);
-      setSubtasks(subtaskList);
+      // Filter out "Document type" subtasks
+      const filteredSubtasks = (subtaskList || []).filter(subtask => 
+        subtask.title !== 'Document type' && 
+        subtask.title !== 'document type' &&
+        !subtask.title.toLowerCase().includes('document type')
+      );
+      setSubtasks(filteredSubtasks);
       
       // Fetch documents for each subtask
       const allDocs = {};
-      for (const subtask of subtaskList) {
+      for (const subtask of filteredSubtasks) {
         const docs = await documentsAPI.getSubtaskDocuments(subtask.subtask_id);
         allDocs[subtask.subtask_id] = docs;
       }

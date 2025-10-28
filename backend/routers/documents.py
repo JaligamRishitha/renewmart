@@ -10,7 +10,7 @@ import os
 import uuid
 from datetime import datetime
 
-from database import get_db
+from database import get_db, reset_session
 from auth import get_current_user, require_admin
 from models.schemas import (
     DocumentCreate, DocumentUpdate, Document,
@@ -56,6 +56,7 @@ async def upload_document(
     land_id: UUID,
     document_type: str = Form(...),
     file: UploadFile = File(...),
+    doc_slot: str = Form("D1"),  # Add doc_slot parameter with default D1
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -102,49 +103,71 @@ async def upload_document(
         # Determine MIME type
         mime_type = file.content_type or 'application/octet-stream'
         
-        # Calculate version number and handle versioning
+        # Calculate version number and handle versioning per doc_slot (independent D1/D2)
         version_query = text("""
-            SELECT COALESCE(MAX(version_number), 0) + 1 as next_version,
-                   MAX(document_id) as latest_document_id
+            SELECT COALESCE(MAX(COALESCE(version_number, 1)), 0) + 1 as next_version
             FROM documents 
-            WHERE land_id = :land_id AND document_type = :document_type
+            WHERE land_id = :land_id AND document_type = :document_type AND doc_slot = :doc_slot
         """)
         
         version_result = db.execute(version_query, {
             "land_id": str(land_id),
-            "document_type": document_type
+            "document_type": document_type,
+            "doc_slot": doc_slot
         }).fetchone()
         
         next_version = version_result.next_version if version_result else 1
-        latest_document_id = version_result.latest_document_id if version_result else None
+        latest_document_id = None  # Simplified - we'll get this later if needed
         
-        # Mark previous versions as not latest
-        if latest_document_id:
+        # Mark previous versions as not latest for this specific doc_slot
+        try:
             update_previous_query = text("""
                 UPDATE documents 
-                SET is_latest_version = FALSE 
-                WHERE land_id = :land_id AND document_type = :document_type
+                SET is_latest_version = FALSE
+                WHERE land_id = :land_id AND document_type = :document_type AND doc_slot = :doc_slot
+                AND is_latest_version = TRUE
             """)
             db.execute(update_previous_query, {
                 "land_id": str(land_id),
-                "document_type": document_type
+                "document_type": document_type,
+                "doc_slot": doc_slot
             })
+        except Exception as e:
+            # If versioning columns don't exist, skip this step
+            print(f"Versioning update skipped: {e}")
         
-        # Create document record with version control
+        # Create document record with basic fields first
         document_id = str(uuid.uuid4())
-        insert_query = text("""
-            INSERT INTO documents (
-                document_id, land_id, document_type, file_name, 
-                file_data, file_size, uploaded_by, mime_type, is_draft,
-                version_number, is_latest_version, parent_document_id
-            ) VALUES (
-                :document_id, :land_id, :document_type, :file_name,
-                :file_data, :file_size, :uploaded_by, :mime_type, :is_draft,
-                :version_number, :is_latest_version, :parent_document_id
-            )
-        """)
         
-        db.execute(insert_query, {
+        # Try to insert with versioning fields, fallback to basic insert
+        try:
+            insert_query = text("""
+                INSERT INTO documents (
+                    document_id, land_id, document_type, file_name, 
+                    file_data, file_size, uploaded_by, mime_type, is_draft,
+                    version_number, is_latest_version, parent_document_id,
+                    version_status, version_change_reason, doc_slot
+                ) VALUES (
+                    :document_id, :land_id, :document_type, :file_name,
+                    :file_data, :file_size, :uploaded_by, :mime_type, :is_draft,
+                    :version_number, :is_latest_version, :parent_document_id,
+                    :version_status, :version_change_reason, :doc_slot
+                )
+            """)
+        except Exception:
+            # Fallback to basic insert without versioning fields
+            insert_query = text("""
+                INSERT INTO documents (
+                    document_id, land_id, document_type, file_name, 
+                    file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot
+                ) VALUES (
+                    :document_id, :land_id, :document_type, :file_name,
+                    :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot
+                )
+            """)
+        
+        # Prepare parameters for insert
+        insert_params = {
             "document_id": document_id,
             "land_id": str(land_id),
             "document_type": document_type,
@@ -154,22 +177,144 @@ async def upload_document(
             "uploaded_by": current_user["user_id"],
             "mime_type": mime_type,
             "is_draft": True,
-            "version_number": next_version,
-            "is_latest_version": True,
-            "parent_document_id": latest_document_id
-        })
+            "doc_slot": doc_slot
+        }
+        
+        # Add versioning parameters if available
+        try:
+            insert_params.update({
+                "version_number": next_version,
+                "is_latest_version": True,
+                "parent_document_id": latest_document_id,
+                "version_status": "active",
+                "version_change_reason": f"New version uploaded by {current_user.get('email', 'user')}"
+            })
+        except Exception:
+            # Versioning not available, use basic parameters only
+            pass
+        
+        db.execute(insert_query, insert_params)
         
         db.commit()
         
-        # Fetch the created document
-        return await get_document(UUID(document_id), current_user, db)
+        # Send notification for new document version upload
+        try:
+            from notification_service import NotificationService
+            notification_service = NotificationService(db)
+            notification_service.notify_version_upload(
+                str(land_id),
+                document_type,
+                next_version,
+                str(current_user["user_id"]),
+                f"New version uploaded: {file.filename}"
+            )
+        except Exception as e:
+            # Don't fail the upload if notification fails
+            print(f"Notification failed: {e}")
+        
+        print(f"Document uploaded: {file.filename} for land {land_id}")
+        
+        # Return the created document directly without additional query
+        return Document(
+            document_id=UUID(document_id),
+            land_id=land_id,
+            document_type=document_type,
+            file_name=file.filename,
+            file_path=None,  # Using binary storage
+            file_size=file_size,
+            uploaded_by=current_user["user_id"],
+            created_at=datetime.utcnow(),  # Set current timestamp
+            mime_type=mime_type,
+            is_draft=True
+        )
         
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            # If rollback fails, the session is already in an aborted state
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload document: {str(e)}"
         )
+
+@router.get("/land/{land_id}/versions/{document_type}", response_model=List[Document])
+async def get_document_versions(
+    land_id: UUID,
+    document_type: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all versions of a specific document type for a land"""
+    
+    # Check permissions
+    user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
+    
+    # Get land info to check ownership
+    land_check = text("""
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+    """)
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    is_admin = "administrator" in user_roles
+    is_owner = user_id_str == str(land_result.landowner_id)
+    
+    if not (is_admin or is_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to view document versions"
+        )
+    
+    # Get all documents of this type (treating each as a version)
+    query = text("""
+        SELECT d.*, u.first_name, u.last_name, u.email as uploader_email
+        FROM documents d
+        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        WHERE d.land_id = :land_id AND d.document_type = :document_type
+        ORDER BY d.doc_slot, d.created_at DESC
+    """)
+    
+    result = db.execute(query, {
+        "land_id": str(land_id),
+        "document_type": document_type
+    }).fetchall()
+    
+    documents = []
+    for i, row in enumerate(result):
+        doc_dict = dict(row._mapping)
+        # Convert to Document schema format with safe defaults for missing columns
+        # Assign version numbers based on creation order (newest = version 1)
+        version_number = len(result) - i
+        
+        documents.append({
+            "document_id": doc_dict["document_id"],
+            "land_id": doc_dict["land_id"],
+            "document_type": doc_dict["document_type"],
+            "file_name": doc_dict["file_name"],
+            "file_size": doc_dict["file_size"],
+            "mime_type": doc_dict["mime_type"],
+            "is_draft": doc_dict.get("is_draft", True),
+            "status": doc_dict.get("status", "pending"),
+            "version_number": doc_dict.get("version_number", version_number),
+            "is_latest_version": doc_dict.get("is_latest_version", i == 0),  # First (newest) is latest
+            "version_status": doc_dict.get("version_status", "active"),
+            "version_notes": doc_dict.get("version_notes"),
+            "version_change_reason": doc_dict.get("version_change_reason"),
+            "review_locked_at": doc_dict.get("review_locked_at"),
+            "created_at": doc_dict["created_at"],
+            "doc_slot": doc_dict.get("doc_slot", "D1"),
+            "uploader_name": f"{doc_dict.get('first_name', '')} {doc_dict.get('last_name', '')}".strip() or doc_dict.get('uploader_email', 'Unknown')
+        })
+    
+    return documents
 
 @router.get("/land/{land_id}", response_model=List[Document])
 async def get_land_documents(
@@ -179,12 +324,34 @@ async def get_land_documents(
     db: Session = Depends(get_db)
 ):
     """Get all documents for a land."""
-    # Check if land exists and user has permission
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    try:
+        # Check if land exists and user has permission
+        land_check = text("""
+            SELECT landowner_id, status FROM lands WHERE land_id = :land_id
+        """)
+        
+        land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    except Exception as e:
+        # If we get a transaction error, reset the session and retry once
+        if "InFailedSqlTransaction" in str(e) or "aborted" in str(e).lower():
+            reset_session(db)
+            # Create a new session for retry
+            from database import SessionLocal
+            new_db = SessionLocal()
+            try:
+                land_result = new_db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+                db = new_db  # Use the new session
+            except Exception as retry_error:
+                new_db.close()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Database transaction error: {str(retry_error)}"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(e)}"
+            )
     
     if not land_result:
         raise HTTPException(
@@ -233,12 +400,15 @@ async def get_land_documents(
                d.mime_type, d.is_draft, d.status, d.approved_by, d.approved_at,
                d.rejection_reason, d.admin_comments, d.version_number,
                d.is_latest_version, d.parent_document_id, d.version_notes,
+               d.version_status, d.review_locked_at, d.review_locked_by, d.version_change_reason,
+               d.doc_slot,
                u.first_name || ' ' || u.last_name as uploader_name,
                l.title as land_title
         FROM documents d
         LEFT JOIN "user" u ON d.uploaded_by = u.user_id
         LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.land_id = :land_id
+        AND d.subtask_id IS NULL
     """
     
     params = {"land_id": str(land_id)}
@@ -302,7 +472,12 @@ async def get_land_documents(
             version_number=row.version_number,
             is_latest_version=row.is_latest_version,
             parent_document_id=row.parent_document_id,
-            version_notes=row.version_notes
+            version_notes=row.version_notes,
+            version_status=getattr(row, 'version_status', 'active'),
+            review_locked_at=getattr(row, 'review_locked_at', None),
+            review_locked_by=getattr(row, 'review_locked_by', None),
+            version_change_reason=getattr(row, 'version_change_reason', None),
+            doc_slot=getattr(row, 'doc_slot', 'D1')
         )
         for row in results
     ]
@@ -314,17 +489,39 @@ async def get_document(
     db: Session = Depends(get_db)
 ):
     """Get document by ID."""
-    query = text("""
-        SELECT d.document_id, d.land_id, d.document_type, d.file_name,
-               d.file_path, d.file_size, d.uploaded_by, d.created_at,
-               d.mime_type, d.is_draft,
-               l.landowner_id, l.status
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    result = db.execute(query, {"document_id": str(document_id)}).fetchone()
+    try:
+        query = text("""
+            SELECT d.document_id, d.land_id, d.document_type, d.file_name,
+                   d.file_path, d.file_size, d.uploaded_by, d.created_at,
+                   d.mime_type, d.is_draft,
+                   l.landowner_id, l.status
+            FROM documents d
+            LEFT JOIN lands l ON d.land_id = l.land_id
+            WHERE d.document_id = :document_id
+        """)
+        
+        result = db.execute(query, {"document_id": str(document_id)}).fetchone()
+    except Exception as e:
+        # If we get a transaction error, reset the session and retry once
+        if "InFailedSqlTransaction" in str(e) or "aborted" in str(e).lower():
+            reset_session(db)
+            # Create a new session for retry
+            from database import SessionLocal
+            new_db = SessionLocal()
+            try:
+                result = new_db.execute(query, {"document_id": str(document_id)}).fetchone()
+                db = new_db  # Use the new session
+            except Exception as retry_error:
+                new_db.close()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Database transaction error: {str(retry_error)}"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(e)}"
+            )
     
     if not result:
         raise HTTPException(
@@ -465,7 +662,11 @@ async def delete_document(
         return MessageResponse(message="Document deleted successfully")
         
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            # If rollback fails, the session is already in an aborted state
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}"
@@ -555,13 +756,14 @@ async def get_my_uploads(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all documents uploaded by the current user."""
+    """Get all documents uploaded by the current user (exclude subtask documents)."""
     query = text("""
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
                d.mime_type, d.is_draft
         FROM documents d
         WHERE d.uploaded_by = :user_id
+        AND d.subtask_id IS NULL
         ORDER BY d.created_at DESC
     """)
     
@@ -592,7 +794,7 @@ async def get_all_documents(
     current_user: dict = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get all documents (admin only) - only latest versions."""
+    """Get all documents (admin only) - only latest versions, exclude subtask documents."""
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
@@ -601,6 +803,7 @@ async def get_all_documents(
                d.is_latest_version, d.parent_document_id, d.version_notes
         FROM documents d
         WHERE d.is_latest_version = TRUE
+        AND d.subtask_id IS NULL
     """
     
     params = {"skip": skip, "limit": limit}
@@ -694,7 +897,9 @@ async def upload_task_document(
         # Calculate version number and handle versioning for task documents
         version_query = text("""
             SELECT COALESCE(MAX(version_number), 0) + 1 as next_version,
-                   MAX(document_id) as latest_document_id
+                   (SELECT document_id FROM documents 
+                    WHERE land_id = :land_id AND document_type = :document_type 
+                    ORDER BY created_at DESC LIMIT 1) as latest_document_id
             FROM documents 
             WHERE land_id = :land_id AND document_type = :document_type
         """)
@@ -775,7 +980,11 @@ async def upload_task_document(
         )
         
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            # If rollback fails, the session is already in an aborted state
+            pass
         print(f"Upload error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1062,7 +1271,11 @@ async def upload_subtask_document(
         )
         
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            # If rollback fails, the session is already in an aborted state
+            pass
         print(f"Upload error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1167,10 +1380,11 @@ async def get_document_versions(
                d.file_path, d.file_size, d.uploaded_by, d.created_at, d.mime_type, 
                d.is_draft, d.status, d.approved_by, d.approved_at, 
                d.rejection_reason, d.admin_comments, d.version_number, 
-               d.is_latest_version, d.parent_document_id, d.version_notes
+               d.is_latest_version, d.parent_document_id, d.version_notes,
+               d.doc_slot
         FROM documents d
         WHERE d.land_id = :land_id AND d.document_type = :document_type
-        ORDER BY d.version_number DESC
+        ORDER BY d.doc_slot, d.version_number DESC
     """)
     
     results = db.execute(query, {
@@ -1198,7 +1412,8 @@ async def get_document_versions(
             version_number=row.version_number,
             is_latest_version=row.is_latest_version,
             parent_document_id=row.parent_document_id,
-            version_notes=row.version_notes
+            version_notes=row.version_notes,
+            doc_slot=row.doc_slot
         )
         for row in results
     ]

@@ -32,6 +32,11 @@ class Document(Base):
     is_latest_version = Column(Boolean, default=True)
     parent_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.document_id"), nullable=True)
     version_notes = Column(Text, nullable=True)
+    version_status = Column(String(50), default='active')  # active, archived, under_review, locked
+    review_locked_at = Column(DateTime(timezone=True), nullable=True)
+    review_locked_by = Column(UUID(as_uuid=True), ForeignKey("user.user_id"), nullable=True)
+    version_change_reason = Column(Text, nullable=True)
+    doc_slot = Column(String(10), nullable=True, default='D1')  # Document slot: D1, D2, etc.
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -39,3 +44,4 @@ class Document(Base):
     land_section = relationship("LandSection", back_populates="documents")
     uploader = relationship("User", foreign_keys=[uploaded_by], back_populates="uploaded_documents")
     approver = relationship("User", foreign_keys=[approved_by])
+    assignments = relationship("DocumentAssignment", back_populates="document", cascade="all, delete-orphan")

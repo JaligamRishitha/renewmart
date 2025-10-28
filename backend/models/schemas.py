@@ -501,30 +501,14 @@ class DocumentBase(BaseSchema):
     is_latest_version: Optional[bool] = Field(True, description="Whether this is the latest version")
     parent_document_id: Optional[UUID] = Field(None, description="Reference to parent document for version tracking")
     version_notes: Optional[str] = Field(None, description="Notes about this version")
+    version_status: Optional[str] = Field("active", max_length=50, description="Version-specific status: active, archived, under_review, locked")
+    review_locked_at: Optional[datetime] = Field(None, description="When this version was locked for review")
+    review_locked_by: Optional[UUID] = Field(None, description="User who locked this version for review")
+    version_change_reason: Optional[str] = Field(None, description="Reason for version change")
+    doc_slot: Optional[str] = Field("D1", max_length=10, description="Document slot: D1, D2, etc.")
 
-    @validator('file_name')
-    def validate_file_name(cls, v):
-        # Check for valid file name characters
-        if not re.match(r'^[a-zA-Z0-9._\- ]+$', v):
-            raise ValueError('File name contains invalid characters')
-        return v
-
-    @validator('mime_type')
-    def validate_mime_type(cls, v):
-        if v is not None:
-            allowed_types = [
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'image/jpeg',
-                'image/png',
-                'image/gif',
-                'image/tiff',
-                'text/plain'
-            ]
-            if v not in allowed_types:
-                raise ValueError(f'MIME type {v} is not allowed')
-        return v
+    # File validation is handled in the upload endpoint
+    # Removed custom validators to avoid JSON serialization issues
 
 class DocumentCreate(DocumentBase):
     land_id: Optional[UUID] = None
@@ -543,8 +527,39 @@ class Document(DocumentBase):
     task_id: Optional[UUID] = None
     subtask_id: Optional[UUID] = None
     uploaded_by: Optional[UUID] = None
-    parent_document_id: Optional[UUID] = None
-    created_at: datetime
+
+# ============================================================================
+# DOCUMENT ASSIGNMENT SCHEMAS
+# ============================================================================
+
+class DocumentAssignmentBase(BaseSchema):
+    document_id: UUID = Field(..., description="ID of the document version to assign")
+    assigned_to: UUID = Field(..., description="User ID of the reviewer to assign to")
+    reviewer_role: str = Field(..., max_length=50, description="Role of the reviewer")
+    task_id: Optional[UUID] = Field(None, description="Optional related task ID")
+    assignment_notes: Optional[str] = Field(None, description="Notes about the assignment")
+    due_date: Optional[datetime] = Field(None, description="Due date for the assignment")
+    priority: str = Field("medium", max_length=20, description="Priority level")
+    lock_reason: Optional[str] = Field(None, description="Reason for locking the document")
+
+class DocumentAssignmentCreate(DocumentAssignmentBase):
+    pass
+
+class DocumentAssignmentUpdate(BaseSchema):
+    assignment_status: Optional[str] = Field(None, max_length=50, description="New assignment status")
+    assignment_notes: Optional[str] = Field(None, description="Updated notes")
+    due_date: Optional[datetime] = Field(None, description="Updated due date")
+    priority: Optional[str] = Field(None, max_length=20, description="Updated priority")
+
+class DocumentAssignment(DocumentAssignmentBase):
+    assignment_id: UUID
+    land_id: UUID
+    assigned_by: UUID
+    assignment_status: str
+    assigned_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    is_locked: bool
 
 # ============================================================================
 # TASK SCHEMAS

@@ -8,7 +8,8 @@ import time
 import logging
 from pydantic import ValidationError
 from database import engine, Base
-from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health, websocket, messaging_api
+from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health, websocket, messaging_api, document_versions, document_assignments, reviewer
+from routers.document_slots import router as document_slots_router
 import logs
 from logs import log_request_middleware, setup_request_logging
 from config import settings
@@ -128,13 +129,29 @@ async def add_process_time_header(request: Request, call_next):
 async def validation_exception_handler(request: Request, exc: ValidationError):
     logger.error(f"Validation error: {str(exc)}")
     
-    # Convert UUID objects to strings in error details
-    errors = exc.errors()
-    for error in errors:
+    # Convert errors to JSON-serializable format
+    errors = []
+    for error in exc.errors():
+        # Convert each error to a dictionary and ensure all values are serializable
+        error_dict = {
+            'loc': list(error.get('loc', [])),
+            'msg': str(error.get('msg', '')),
+            'type': str(error.get('type', ''))
+        }
+        
+        # Handle context if it exists
         if 'ctx' in error and isinstance(error['ctx'], dict):
+            ctx_dict = {}
             for key, value in error['ctx'].items():
                 if hasattr(value, '__class__') and value.__class__.__name__ == 'UUID':
-                    error['ctx'][key] = str(value)
+                    ctx_dict[key] = str(value)
+                elif isinstance(value, (str, int, float, bool, type(None))):
+                    ctx_dict[key] = value
+                else:
+                    ctx_dict[key] = str(value)
+            error_dict['ctx'] = ctx_dict
+        
+        errors.append(error_dict)
     
     return JSONResponse(
         status_code=422,
@@ -170,6 +187,10 @@ app.include_router(sections.router, prefix="/api/sections", tags=["sections"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])  # tasks router already has /tasks prefix
 app.include_router(investors.router, prefix="/api", tags=["investors"])  # investors router already has /investors prefix
 app.include_router(documents.router, prefix="/api", tags=["documents"])  # documents router already has /documents prefix
+app.include_router(document_versions.router, prefix="/api", tags=["document-versions"])  # document versions router
+app.include_router(document_assignments.router, prefix="/api", tags=["document-assignments"])  # document assignments router
+app.include_router(document_slots_router, prefix="/api", tags=["document-slots"])  # document slots router
+app.include_router(reviewer.router, prefix="/api", tags=["reviewer"])  # reviewer router
 app.include_router(reviews.router, prefix="/api", tags=["reviews"])  # reviews router already has /reviews prefix
 app.include_router(logs_router.router, prefix="/api", tags=["logs"])  # logs router already has /logs prefix
 app.include_router(cache.router, prefix="/api", tags=["cache"])  # cache router already has /cache prefix

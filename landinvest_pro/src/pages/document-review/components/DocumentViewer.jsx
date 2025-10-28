@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 import Button from '../../../components/ui/Button';
+import ReviewerActions from '../../document-versions/components/ReviewerActions';
 
 const DocumentViewer = ({ 
   documents = [], 
@@ -9,7 +10,11 @@ const DocumentViewer = ({
   onDocumentSelect = () => {},
   annotations = [],
   onAddAnnotation = () => {},
-  onDeleteAnnotation = () => {}
+  onDeleteAnnotation = () => {},
+  userRole = 'reviewer',
+  onMarkForReview = () => {},
+  onCompleteReview = () => {},
+  onArchive = () => {}
 }) => {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isAnnotating, setIsAnnotating] = useState(false);
@@ -31,33 +36,59 @@ const DocumentViewer = ({
   const mockDocuments = [
     {
       id: 'doc-1',
+      document_id: 'doc-1',
+      fileName: 'Land_Ownership_Certificate.pdf',
       name: 'Land_Ownership_Certificate.pdf',
       category: 'ownership',
       size: '2.4 MB',
+      fileSize: '2.4 MB',
       uploadDate: '2025-01-10',
-      status: 'pending',
+      uploadedAt: '2025-01-10T10:30:00Z',
+      status: 'active',
+      version_status: 'active',
+      version: 1,
+      isLatest: true,
       type: 'pdf',
-      url: 'https://images.unsplash.com/photo-1568667256549-094345857637?w=800&h=600&fit=crop'
+      url: 'https://images.unsplash.com/photo-1568667256549-094345857637?w=800&h=600&fit=crop',
+      uploadedBy: 'John Doe'
     },
     {
       id: 'doc-2',
+      document_id: 'doc-2',
+      fileName: 'Property_Valuation_Report.pdf',
       name: 'Property_Valuation_Report.pdf',
       category: 'valuation',
       size: '5.1 MB',
+      fileSize: '5.1 MB',
       uploadDate: '2025-01-09',
-      status: 'reviewed',
+      uploadedAt: '2025-01-09T14:20:00Z',
+      status: 'under_review',
+      version_status: 'under_review',
+      version: 1,
+      isLatest: true,
       type: 'pdf',
-      url: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&h=600&fit=crop'
+      url: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&h=600&fit=crop',
+      uploadedBy: 'Jane Smith',
+      reviewedBy: 'Mike Johnson',
+      reviewStartedAt: '2025-01-16T09:00:00Z'
     },
     {
       id: 'doc-3',
+      document_id: 'doc-3',
+      fileName: 'Topographical_Survey_Map.jpg',
       name: 'Topographical_Survey_Map.jpg',
       category: 'survey',
       size: '8.7 MB',
+      fileSize: '8.7 MB',
       uploadDate: '2025-01-08',
-      status: 'pending',
+      uploadedAt: '2025-01-08T16:45:00Z',
+      status: 'active',
+      version_status: 'active',
+      version: 2,
+      isLatest: true,
       type: 'image',
-      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop'
+      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop',
+      uploadedBy: 'Sarah Wilson'
     }
   ];
 
@@ -174,6 +205,14 @@ const DocumentViewer = ({
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(doc?.status)}`}>
                   {doc?.status}
                 </span>
+                {userRole === 'reviewer' && (
+                  <ReviewerActions
+                    document={doc}
+                    onMarkForReview={onMarkForReview}
+                    onCompleteReview={onCompleteReview}
+                    onArchive={onArchive}
+                  />
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

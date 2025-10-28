@@ -11,7 +11,7 @@ const TaskPanel = ({ task, onClose, onRefresh, reviewerRole }) => {
     { id: 'details', label: 'Task Details', icon: 'FileCheck' },
     { id: 'subtasks', label: 'Subtasks', icon: 'List' },
     { id: 'documents', label: 'Documents', icon: 'FileText' },
-    { id: 'review', label: 'Review', icon: 'CheckSquare' }
+   
   ];
 
   const getPriorityColor = (priority) => {

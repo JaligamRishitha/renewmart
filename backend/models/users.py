@@ -44,6 +44,7 @@ class User(Base):
     received_messages = relationship("Message", foreign_keys="Message.recipient_id", back_populates="recipient")
     created_threads = relationship("MessageThread", back_populates="creator")
     message_reactions = relationship("MessageReaction", back_populates="user")
+    assigned_documents = relationship("DocumentAssignment", foreign_keys="DocumentAssignment.assigned_to", back_populates="assignee")
 
 
 class UserRole(Base):

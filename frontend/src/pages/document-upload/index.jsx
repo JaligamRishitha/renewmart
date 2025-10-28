@@ -387,15 +387,23 @@ const DocumentUpload = () => {
       console.error('Error saving draft:', error);
       setIsSaving(false);
       
+      let errorMessage = 'Could not save draft. Please try again.';
+      
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        errorMessage = 'Save is taking longer than expected. Please check your internet connection and try again.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      
       addNotification({
         id: Date.now(),
         type: 'error',
         title: 'Failed to save draft',
-        message: error.response?.data?.detail || 'Could not save draft. Please try again.',
+        message: errorMessage,
         timestamp: new Date()
       });
       
-      showErrorToast(error.response?.data?.detail || 'Failed to save draft');
+      showErrorToast(errorMessage);
     }
   };
 
@@ -443,19 +451,35 @@ const DocumentUpload = () => {
       const createdLand = await landsAPI.createLand(landData);
       const landId = createdLand.land_id;
       
-      // Step 2: Upload all documents
+      // Step 2: Upload all documents with progress tracking
       const uploadPromises = [];
+      const totalFiles = Object.values(uploadedFiles).flat().length;
+      let uploadedFiles = 0;
+      
       Object.entries(uploadedFiles).forEach(([sectionId, files]) => {
         files.forEach(file => {
           const formData = new FormData();
           formData.append('file', file);
           formData.append('document_type', sectionId);
           formData.append('is_draft', 'false');
-          uploadPromises.push(documentsAPI.uploadDocument(landId, formData));
+          
+          const uploadPromise = documentsAPI.uploadDocument(landId, formData)
+            .then(result => {
+              uploadedFiles++;
+              const progress = Math.round((uploadedFiles / totalFiles) * 100);
+              console.log(`Upload progress: ${progress}% (${uploadedFiles}/${totalFiles})`);
+              return result;
+            });
+          
+          uploadPromises.push(uploadPromise);
         });
       });
       
-      await Promise.all(uploadPromises);
+      if (uploadPromises.length > 0) {
+        console.log(`Starting upload of ${totalFiles} documents...`);
+        await Promise.all(uploadPromises);
+        console.log('All documents uploaded successfully');
+      }
       
       // Step 3: Submit for review
       await landsAPI.submitForReview(landId);
@@ -483,15 +507,23 @@ const DocumentUpload = () => {
       console.error('Error submitting project:', error);
       setIsSaving(false);
       
+      let errorMessage = 'Failed to submit project. Please try again.';
+      
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        errorMessage = 'Upload is taking longer than expected. Please check your internet connection and try again.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      
       addNotification({
         id: Date.now(),
         type: 'error',
         title: 'Submission failed',
-        message: error.response?.data?.detail || 'Failed to submit project. Please try again.',
+        message: errorMessage,
         timestamp: new Date()
       });
       
-      showErrorToast(error.response?.data?.detail || 'Failed to submit project');
+      showErrorToast(errorMessage);
     }
   };
 

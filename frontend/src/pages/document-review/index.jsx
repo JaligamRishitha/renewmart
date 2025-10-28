@@ -5,7 +5,6 @@ import Header from "../../components/ui/Header";
 import WorkflowBreadcrumbs from "../../components/ui/WorkflowBreadcrumbs";
 import NotificationIndicator from "../../components/ui/NotificationIndicator";
 import QuickActions from "../../components/ui/QuickActions";
-import DocumentViewer from "./components/DocumentViewer";
 import ReviewPanel from "./components/ReviewPanel";
 import TaskDetails from "./components/TaskDetails";
 import CollaborationTools from "./components/CollaborationTools";
@@ -476,15 +475,49 @@ const DocumentReview = () => {
         {/* GRID */}
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
           <div className="xl:col-span-2">
-            <DocumentViewer
-              documents={documents}
-              selectedDocument={selectedDocument}
-              onDocumentSelect={setSelectedDocument}
-              annotations={annotations}
-              onAddAnnotation={handleAddAnnotation}
-              onDeleteAnnotation={handleDeleteAnnotation}
-              landId={currentLand?.land_id}
-            />
+            {/* Document Version Control Button */}
+            <div className="bg-card border border-border rounded-lg p-6 mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Document Version Control</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Manage document versions, assignments, and audit trail
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    const baseRoute = user?.role === 'admin' ? '/admin' : 
+                                    user?.role === 'reviewer' ? '/reviewer' : 
+                                    user?.role === 'landowner' ? '/landowner' : '/admin';
+                    navigate(`${baseRoute}/document-versions/${currentLand?.land_id || projectId}`);
+                  }}
+                  className="flex items-center space-x-2"
+                >
+                  <Icon name="FileText" size={16} />
+                  <span>Open Version Control</span>
+                </Button>
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                <div className="text-center p-3 bg-muted/20 rounded-lg">
+                  <p className="text-2xl font-semibold text-foreground">{documents.length}</p>
+                  <p className="text-xs text-muted-foreground">Documents</p>
+                </div>
+                <div className="text-center p-3 bg-muted/20 rounded-lg">
+                  <p className="text-2xl font-semibold text-foreground">
+                    {documents.filter(doc => doc.status === 'under_review').length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Under Review</p>
+                </div>
+                <div className="text-center p-3 bg-muted/20 rounded-lg">
+                  <p className="text-2xl font-semibold text-foreground">
+                    {documents.filter(doc => doc.status === 'active').length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Active</p>
+                </div>
+              </div>
+            </div>
             
             {/* Role Status Tracking - Moved under Document Viewer */}
             <div className="mt-6">

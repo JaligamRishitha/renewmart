@@ -41,7 +41,9 @@ import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
 import ProjectDetailsPage from './pages/project-details';
 import Register from './pages/register';
 import Unauthorized from './pages/Unauthorized';
-import RouteDebugger from './components/RouteDebugger';
+import DocumentVersionsDebug from './pages/DocumentVersionsDebug';
+import AdminDocumentVersions from './pages/admin/AdminDocumentVersions';
+import DocumentVersionsPage from './pages/DocumentVersionsPage';
 import RouteTest from './components/RouteTest';
 
 const Routes = () => {
@@ -80,6 +82,11 @@ const Routes = () => {
         <Route path="/admin/dashboard" element={
           <AdminRoute>
             <AdminDashboard />
+          </AdminRoute>
+        } />
+        <Route path="/admin/document-versions/:landId" element={
+          <AdminRoute>
+            <AdminDocumentVersions />
           </AdminRoute>
         } />
         <Route path="/admin/marketplace" element={
@@ -141,6 +148,11 @@ const Routes = () => {
             <ProjectReviewPage />
           </OwnerRoute>
         } />
+        <Route path="/landowner/document-versions/:landId" element={
+          <OwnerRoute>
+            <DocumentVersionsPage />
+          </OwnerRoute>
+        } />
         
         {/* ========================================== */}
         {/* REVIEWER ROUTES - /reviewer/* */}
@@ -165,9 +177,9 @@ const Routes = () => {
             <ProjectDetails />
           </ReviewerRoute>
         } />
-        <Route path="/reviewer/document-review/:projectId" element={
+        <Route path="/reviewer/document-versions/:landId" element={
           <ReviewerRoute>
-            <DocumentReview />
+            <DocumentVersionsPage />
           </ReviewerRoute>
         } />
         <Route path="/reviewer/document-management" element={
@@ -467,10 +479,8 @@ const Routes = () => {
         {/* ========================================== */}
         {/* DEBUG ROUTES */}
         {/* ========================================== */}
-        <Route path="/debug/routes" element={
-          <ProtectedRoute>
-            <RouteDebugger />
-          </ProtectedRoute>
+        <Route path="/debug/document-versions" element={
+          <DocumentVersionsDebug />
         } />
         <Route path="/test/routes" element={
           <ProtectedRoute>

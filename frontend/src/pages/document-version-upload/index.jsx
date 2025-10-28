@@ -5,6 +5,8 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import { landsAPI, documentsAPI } from '../../services/api';
 import DocumentVersions from '../../components/DocumentVersions';
+import DocumentStatusIndicator from '../../components/DocumentStatusIndicator';
+import toast from 'react-hot-toast';
 
 const DocumentVersionUpload = () => {
   const navigate = useNavigate();
@@ -15,7 +17,7 @@ const DocumentVersionUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [expandedAccordions, setExpandedAccordions] = useState({});
 
   const documentTypes = [
     {
@@ -109,10 +111,9 @@ const DocumentVersionUpload = () => {
   const handleDocumentTypeSelect = (documentType) => {
     setSelectedDocumentType(documentType);
     setError(null);
-    setSuccess(null);
   };
 
-  const handleFileUpload = async (files) => {
+  const handleFileUpload = async (files, docSlot = 'D1') => {
     if (!selectedDocumentType || !project) return;
 
     try {
@@ -123,33 +124,73 @@ const DocumentVersionUpload = () => {
       formData.append('file', files[0]);
       formData.append('document_type', selectedDocumentType.id);
       formData.append('is_draft', 'false');
+      formData.append('doc_slot', docSlot); // Add doc slot information
 
       await documentsAPI.uploadDocument(project.land_id, formData);
       
-      setSuccess(`New version of ${selectedDocumentType.title} uploaded successfully!`);
+      // Show success toast message
+      toast.success(`New version of ${selectedDocumentType.title} uploaded successfully to ${docSlot}!`, {
+        duration: 4000,
+        position: 'top-right',
+        style: {
+          background: '#10b981',
+          color: '#fff',
+        },
+      });
+      
       setSelectedDocumentType(null);
       
       // Reset file input
-      const fileInput = document.getElementById('file-upload');
+      const fileInput = document.getElementById(`file-input-${docSlot}`);
       if (fileInput) fileInput.value = '';
 
     } catch (err) {
       console.error('Upload failed:', err);
-      setError('Failed to upload document. Please try again.');
+      const errorMessage = err.response?.data?.detail || 'Failed to upload document. Please try again.';
+      setError(errorMessage);
+      
+      // Show error toast message
+      toast.error(`Upload failed: ${errorMessage}`, {
+        duration: 5000,
+        position: 'top-right',
+        style: {
+          background: '#ef4444',
+          color: '#fff',
+        },
+      });
     } finally {
       setUploading(false);
     }
   };
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = (e, docSlot = 'D1') => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      handleFileUpload(files);
+      handleFileUpload(files, docSlot);
     }
   };
 
   const handleViewVersions = (documentType) => {
     setShowVersions(true);
+  };
+
+  const toggleAccordion = (docIndex) => {
+    setExpandedAccordions(prev => ({
+      ...prev,
+      [docIndex]: !prev[docIndex]
+    }));
+  };
+
+  const getDocumentSlots = (documentType) => {
+    // Only show D1, D2 for Ownership Documents and Government NOCs
+    const multiSlotTypes = ['ownership-documents', 'government-nocs'];
+    const isMultiSlot = multiSlotTypes.includes(documentType.id);
+    
+    if (isMultiSlot) {
+      return ['D1', 'D2'];
+    }
+    // For other document types, show only D1 slot
+    return ['D1'];
   };
 
   if (loading) {
@@ -312,33 +353,64 @@ const DocumentVersionUpload = () => {
                   </Button>
                 </div>
 
-                {/* Upload Area */}
-                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                  <Icon name="Upload" size={48} className="text-muted-foreground mx-auto mb-4" />
-                  <h4 className="font-medium text-foreground mb-2">
-                    Upload New Version
-                  </h4>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Select a file to upload as a new version of this document type
-                  </p>
-                  
-                  <input
-                    id="file-upload"
-                    type="file"
-                    onChange={handleFileSelect}
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
-                    className="hidden"
-                  />
-                  
-                  <Button
-                    variant="default"
-                    onClick={() => document.getElementById('file-upload').click()}
-                    disabled={uploading}
-                    iconName={uploading ? "Loader" : "Upload"}
-                    iconPosition="left"
-                  >
-                    {uploading ? 'Uploading...' : 'Choose File'}
-                  </Button>
+                {/* Document Slots Accordion */}
+                <div className="space-y-4">
+                  {getDocumentSlots(selectedDocumentType).map((docSlot, docIndex) => (
+                    <div key={docSlot} className="border border-border rounded-lg">
+                      {/* Accordion Header */}
+                      <button
+                        onClick={() => toggleAccordion(docIndex)}
+                        className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Icon name="File" size={20} className="text-primary" />
+                          <span className="font-medium text-foreground">{docSlot}</span>
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                            Upload Slot
+                          </span>
+                        </div>
+                        <Icon 
+                          name={expandedAccordions[docIndex] ? "ChevronUp" : "ChevronDown"} 
+                          size={20} 
+                          className="text-muted-foreground" 
+                        />
+                      </button>
+
+                      {/* Accordion Content */}
+                      {expandedAccordions[docIndex] && (
+                        <div className="border-t border-border">
+                          <div className="p-4">
+                            {/* Upload Area */}
+                            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
+                              <Icon name="Upload" size={48} className="text-muted-foreground mx-auto mb-4" />
+                              <h4 className="text-lg font-medium text-foreground mb-2">
+                                Upload Document for {docSlot}
+                              </h4>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                Drag and drop your file here, or click to browse
+                              </p>
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                onChange={(e) => handleFileSelect(e, docSlot)}
+                                className="hidden"
+                                id={`file-input-${docSlot}`}
+                              />
+                              <Button
+                                onClick={() => document.getElementById(`file-input-${docSlot}`).click()}
+                                variant="outline"
+                                size="sm"
+                                iconName="Upload"
+                                iconPosition="left"
+                              >
+                                Choose File
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 {/* File Requirements */}
@@ -358,15 +430,6 @@ const DocumentVersionUpload = () => {
                     <div className="flex items-center space-x-2">
                       <Icon name="AlertCircle" size={16} className="text-red-600" />
                       <span className="text-sm text-red-800">{error}</span>
-                    </div>
-                  </div>
-                )}
-
-                {success && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <Icon name="CheckCircle" size={16} className="text-green-600" />
-                      <span className="text-sm text-green-800">{success}</span>
                     </div>
                   </div>
                 )}

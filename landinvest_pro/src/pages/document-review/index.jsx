@@ -90,6 +90,55 @@ const DocumentReview = () => {
     }
   };
 
+  const handleMarkForReview = async (documentId, reason = null) => {
+    try {
+      // Mock API call to mark document for review
+      console.log('Marking document for review:', documentId, reason);
+      // Update local state or make API call
+      setNotifications(prev => [...prev, {
+        id: `notif-${Date.now()}`,
+        type: 'info',
+        title: 'Document Marked for Review',
+        message: `Document ${documentId} has been marked for review`,
+        timestamp: new Date().toISOString()
+      }]);
+    } catch (error) {
+      console.error('Error marking document for review:', error);
+    }
+  };
+
+  const handleCompleteReview = async (documentId, reason = null) => {
+    try {
+      // Mock API call to complete review
+      console.log('Completing review for document:', documentId, reason);
+      setNotifications(prev => [...prev, {
+        id: `notif-${Date.now()}`,
+        type: 'success',
+        title: 'Review Completed',
+        message: `Review completed for document ${documentId}`,
+        timestamp: new Date().toISOString()
+      }]);
+    } catch (error) {
+      console.error('Error completing review:', error);
+    }
+  };
+
+  const handleArchive = async (documentId, reason = null) => {
+    try {
+      // Mock API call to archive document
+      console.log('Archiving document:', documentId, reason);
+      setNotifications(prev => [...prev, {
+        id: `notif-${Date.now()}`,
+        type: 'info',
+        title: 'Document Archived',
+        message: `Document ${documentId} has been archived`,
+        timestamp: new Date().toISOString()
+      }]);
+    } catch (error) {
+      console.error('Error archiving document:', error);
+    }
+  };
+
   const handleQuickAction = (actionId) => {
     switch (actionId) {
       case 'approve': handleReviewAction('approve', {});
@@ -171,6 +220,10 @@ const DocumentReview = () => {
                 annotations={annotations}
                 onAddAnnotation={handleAddAnnotation}
                 onDeleteAnnotation={handleDeleteAnnotation}
+                userRole="reviewer"
+                onMarkForReview={handleMarkForReview}
+                onCompleteReview={handleCompleteReview}
+                onArchive={handleArchive}
               />
             </div>
 

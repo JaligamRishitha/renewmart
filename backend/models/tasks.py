@@ -35,6 +35,7 @@ class Task(Base):
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan", order_by="Subtask.order_index")
     messages = relationship("Message", back_populates="task", cascade="all, delete-orphan")
     message_threads = relationship("MessageThread", back_populates="task", cascade="all, delete-orphan")
+    document_assignments = relationship("DocumentAssignment", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskHistory(Base):

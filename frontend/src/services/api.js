@@ -1,12 +1,12 @@
 import axios from 'axios';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000, // Increased to 60 seconds for document uploads
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,21 +16,41 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken');
+    console.log('API Interceptor: Adding auth token:', token ? 'Present' : 'Missing');
+    console.log('API Interceptor: Request URL:', config.url);
+    console.log('API Interceptor: Request method:', config.method);
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('API Interceptor: Authorization header set');
+    } else {
+      console.log('API Interceptor: No auth token found');
     }
     return config;
   },
   (error) => {
+    console.log('API Interceptor: Request error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API Interceptor: Response received:', response.status, response.config.url);
+    return response;
+  },
   (error) => {
+    console.log('API Interceptor: Response error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method
+    });
+    
     if (error.response?.status === 401) {
+      console.log('API Interceptor: 401 Unauthorized - removing auth token');
       // Token expired or invalid
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
@@ -296,6 +316,7 @@ export const documentsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000, // 2 minutes for document uploads
     });
     return response.data;
   },
@@ -315,6 +336,47 @@ export const documentsAPI = {
       status,
       review_notes: reviewNotes
     });
+    return response.data;
+  },
+
+  // Document Version Management
+  getDocumentVersions: async (landId, documentType) => {
+    const response = await api.get(`/documents/land/${landId}/versions/${documentType}`);
+    return response.data;
+  },
+
+  getDocumentStatusSummary: async (landId) => {
+    const response = await api.get(`/document-versions/land/${landId}/status-summary`);
+    return response.data;
+  },
+
+  lockDocumentForReview: async (documentId, reason = null) => {
+    const response = await api.post(`/document-versions/${documentId}/lock-for-review`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  unlockDocument: async (documentId, reason = null) => {
+    const response = await api.post(`/document-versions/${documentId}/unlock`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  archiveDocumentVersion: async (documentId, reason = null) => {
+    const response = await api.post(`/document-versions/${documentId}/archive`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  getDocumentAuditTrail: async (landId, documentType = null, actionType = null, limit = 50, offset = 0) => {
+    const params = { limit, offset };
+    if (documentType) params.document_type = documentType;
+    if (actionType) params.action_type = actionType;
+    
+    const response = await api.get(`/document-versions/land/${landId}/audit-trail`, { params });
     return response.data;
   },
  
@@ -405,6 +467,31 @@ export const documentsAPI = {
   // Admin endpoints
   getAllDocuments: async (params = {}) => {
     const response = await api.get('/documents/admin/all', { params });
+    return response.data;
+  },
+
+  // Document slot operations
+  markSlotForReview: async (landId, documentType, docSlot, reason = null) => {
+    const response = await api.post(`/document-slots/${landId}/${documentType}/${docSlot}/mark-for-review`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  unlockSlotFromReview: async (landId, documentType, docSlot, reason = null) => {
+    const response = await api.post(`/document-slots/${landId}/${documentType}/${docSlot}/unlock`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  getSlotStatusSummary: async (landId) => {
+    const response = await api.get(`/document-slots/${landId}/status-summary`);
+    return response.data;
+  },
+
+  getDocumentTypeSlotStatus: async (landId, documentType) => {
+    const response = await api.get(`/document-slots/${landId}/${documentType}/slot-status`);
     return response.data;
   }
 };
@@ -655,6 +742,154 @@ export const taskAPI = {
         summary_only: true
       } 
     });
+    return response.data;
+  }
+};
+
+// Document Versions API
+export const documentVersionsAPI = {
+  // Get document status summary for a land/project
+  getStatusSummary: async (landId) => {
+    const response = await api.get(`/document-versions/land/${landId}/status-summary`);
+    return response.data;
+  },
+
+  // Get all versions of a specific document type for a land
+  getDocumentVersions: async (landId, documentType) => {
+    const response = await api.get(`/document-versions/land/${landId}/document-type/${documentType}`);
+    return response.data;
+  },
+
+  // Lock a document version for review
+  lockVersionForReview: async (documentId, lockData) => {
+    const response = await api.post(`/document-versions/${documentId}/lock-for-review`, {
+      reason: lockData.lock_reason || lockData.assignment_notes
+    });
+    return response.data;
+  },
+
+  // Unlock a document version
+  unlockVersion: async (documentId, unlockReason) => {
+    const response = await api.post(`/document-versions/${documentId}/unlock`, { 
+      reason: unlockReason 
+    });
+    return response.data;
+  },
+
+  // Archive a document version
+  archiveVersion: async (documentId, archiveReason) => {
+    const response = await api.post(`/document-versions/${documentId}/archive`, { 
+      reason: archiveReason 
+    });
+    return response.data;
+  },
+
+  // Get version history for a document
+  getVersionHistory: async (documentId) => {
+    // For now, we'll use the audit trail endpoint with the land ID
+    // We need to get the land ID from the document first
+    try {
+      // Get document info to find the land ID
+      const docResponse = await api.get(`/documents/${documentId}`);
+      const landId = docResponse.data.land_id;
+      
+      // Get audit trail for the land
+      const response = await api.get(`/document-versions/land/${landId}/audit-trail`);
+      return response.data.audit_entries || [];
+    } catch (error) {
+      console.error('Error fetching version history:', error);
+      return [];
+    }
+  },
+
+  // Download a specific document version
+  downloadVersion: async (documentId) => {
+    const response = await api.get(`/documents/${documentId}/download`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  }
+};
+
+// Document Assignment API
+export const documentAssignmentAPI = {
+  // Create a new document assignment
+  createAssignment: async (assignmentData) => {
+    const response = await api.post('/document-assignments/assign', assignmentData);
+    return response.data;
+  },
+
+  // Get assignments for a specific land/project
+  getLandAssignments: async (landId) => {
+    const response = await api.get(`/document-assignments/land/${landId}`);
+    return response.data;
+  },
+
+  // Get assignments for a specific reviewer
+  getReviewerAssignments: async (reviewerId) => {
+    const response = await api.get(`/document-assignments/reviewer/${reviewerId}`);
+    return response.data;
+  },
+
+  // Update assignment status
+  updateAssignmentStatus: async (assignmentId, statusData) => {
+    const response = await api.put(`/document-assignments/${assignmentId}`, statusData);
+    return response.data;
+  },
+
+  // Cancel an assignment
+  cancelAssignment: async (assignmentId, cancelReason) => {
+    const response = await api.post(`/document-assignments/${assignmentId}/cancel`, { cancel_reason: cancelReason });
+    return response.data;
+  },
+
+  // Send assignment notification
+  sendAssignmentNotification: async (notificationData) => {
+    // This might be handled automatically by the backend when creating assignments
+    // For now, we'll just return success
+    return { message: "Notification sent successfully" };
+  },
+
+  // Get assignment details
+  getAssignmentDetails: async (assignmentId) => {
+    const response = await api.get(`/document-assignments/${assignmentId}`);
+    return response.data;
+  }
+};
+
+// Reviewer API
+export const reviewerAPI = {
+  // Claim a document for review
+  claimDocument: async (documentId) => {
+    console.log('API: Claiming document:', { documentId });
+    console.log('API: Auth token:', localStorage.getItem('authToken') ? 'Present' : 'Missing');
+    
+    const response = await api.post(`/reviewer/documents/${documentId}/claim`);
+    
+    console.log('API: Claim response:', response.data);
+    return response.data;
+  },
+
+  // Complete document review
+  completeReview: async (documentId, reviewResult = 'approve', comments = null) => {
+    const response = await api.post(`/reviewer/documents/${documentId}/complete`, null, {
+      params: {
+        review_result: reviewResult,
+        comments: comments || 'Review completed'
+      }
+    });
+    return response.data;
+  },
+
+  // Get assigned documents
+  getAssignedDocuments: async () => {
+    const response = await api.get('/reviewer/documents/assigned');
+    return response.data;
+  },
+
+  // Get available documents for review
+  getAvailableDocuments: async () => {
+    const response = await api.get('/reviewer/documents/available');
     return response.data;
   }
 };

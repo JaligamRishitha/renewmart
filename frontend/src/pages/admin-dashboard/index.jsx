@@ -15,6 +15,9 @@ import ActivityFeed from './components/ActivityFeed';
 import DeadlineAlerts from './components/DeadlineAlerts';
 import BulkActions from './components/BulkActions';
 import AssignReviewerModal from './components/AssignReviewerModal';
+import DocumentVersionAssignmentModal from './components/DocumentVersionAssignmentModal';
+import AdminDocumentVersions from './components/AdminDocumentVersions';
+import AdminDocumentVersionControl from './components/AdminDocumentVersionControl';
 import CreateUserModal from './components/CreateUserModal';
 import { landsAPI, taskAPI, usersAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
@@ -37,6 +40,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showDocumentAssignModal, setShowDocumentAssignModal] = useState(false);
+  const [showDocumentVersionsModal, setShowDocumentVersionsModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [tasksWithDetails, setTasksWithDetails] = useState([]);
@@ -492,6 +497,16 @@ const AdminDashboard = () => {
     setShowAssignModal(true);
   };
 
+  const handleAssignDocumentVersions = (project) => {
+    setSelectedProject(project);
+    setShowDocumentAssignModal(true);
+  };
+
+  const handleViewDocumentVersions = (project) => {
+    setSelectedProject(project);
+    setShowDocumentVersionsModal(true);
+  };
+
   const handleAssignSubmit = async (assignmentData) => {
     try {
       console.log('[Admin Dashboard] Assigning reviewer:', assignmentData);
@@ -528,6 +543,32 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('[Admin Dashboard] Error assigning reviewer:', err);
       throw new Error(err.response?.data?.detail || 'Failed to assign reviewer');
+    }
+  };
+
+  const handleDocumentAssignmentSubmit = async (assignments) => {
+    try {
+      console.log('[Admin Dashboard] Document assignments created:', assignments);
+      
+      // Show success notification
+      const successNotification = {
+        id: Date.now(),
+        type: 'success',
+        title: 'Documents Assigned',
+        message: `Successfully assigned ${assignments.length} document version(s) to reviewer`,
+        timestamp: new Date()
+      };
+      setNotifications(prev => [successNotification, ...prev.slice(0, 4)]);
+
+      // Refresh data
+      await fetchAdminData();
+      
+      // Close modal
+      setShowDocumentAssignModal(false);
+      setSelectedProject(null);
+    } catch (err) {
+      console.error('[Admin Dashboard] Error with document assignments:', err);
+      throw new Error(err.response?.data?.detail || 'Failed to process document assignments');
     }
   };
 
@@ -737,6 +778,8 @@ const AdminDashboard = () => {
                     onTaskSelect={setSelectedTasks}
                     onBulkAction={handleBulkAction}
                     onAssignReviewer={handleAssignReviewer}
+                    onAssignDocumentVersions={handleAssignDocumentVersions}
+                    onViewDocumentVersions={handleViewDocumentVersions}
                     onTaskUpdate={handleTaskUpdate}
                   />
                 )}
@@ -778,6 +821,29 @@ const AdminDashboard = () => {
             setSelectedProject(null);
           }}
           onAssign={handleAssignSubmit}
+        />
+      )}
+
+      {/* Document Version Assignment Modal */}
+      {showDocumentAssignModal && selectedProject && (
+        <DocumentVersionAssignmentModal
+          project={selectedProject}
+          onClose={() => {
+            setShowDocumentAssignModal(false);
+            setSelectedProject(null);
+          }}
+          onAssign={handleDocumentAssignmentSubmit}
+        />
+      )}
+
+      {/* Admin Document Versions Modal */}
+      {showDocumentVersionsModal && selectedProject && (
+        <AdminDocumentVersionControl
+          landId={selectedProject.landId || selectedProject.id}
+          onClose={() => {
+            setShowDocumentVersionsModal(false);
+            setSelectedProject(null);
+          }}
         />
       )}
 

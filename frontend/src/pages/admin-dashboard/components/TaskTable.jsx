@@ -5,7 +5,7 @@ import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 import TaskEditModal from './TaskEditModal';
 
-const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignReviewer, onTaskUpdate }) => {
+const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignReviewer, onAssignDocumentVersions, onViewDocumentVersions, onTaskUpdate }) => {
   const [sortField, setSortField] = useState('startDate');
   const [sortDirection, setSortDirection] = useState('desc');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -241,15 +241,30 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, onAssignR
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-center space-x-2">
-                  <Button
-    variant={task?.assignedReviewer === "Unassigned" ? "default" : "outline"}
-    size="sm"
-    onClick={() => onAssignReviewer && onAssignReviewer(task)}
-    iconName="UserPlus"
-    iconSize={16}
-    title="Assign"
-  />
-
+                    <Button
+                      variant={task?.assignedReviewer === "Unassigned" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onAssignReviewer && onAssignReviewer(task)}
+                      iconName="UserPlus"
+                      iconSize={16}
+                      title="Assign Reviewer"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onAssignDocumentVersions && onAssignDocumentVersions(task)}
+                      iconName="FileText"
+                      iconSize={16}
+                      title="Assign Documents"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onViewDocumentVersions && onViewDocumentVersions(task)}
+                      iconName="FileSearch"
+                      iconSize={16}
+                      title="View Document Versions"
+                    />
                     <Button
                       variant="ghost"
                       size="sm"
