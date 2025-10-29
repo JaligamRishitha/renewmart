@@ -41,13 +41,47 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
     return colorMap?.[type] || 'text-primary bg-primary/10';
   };
 
+  // Get project type image from assets - same logic as admin marketplace
+  const getProjectTypeImage = (project) => {
+    // First check if project has a custom image
+    if (project?.image) {
+      return project.image;
+    }
+    
+    // Otherwise, determine image based on project type
+    const rawType = String(
+      project?.energy_key || 
+      project?.energyType || 
+      project?.project_type || 
+      project?.type || 
+      ''
+    ).toLowerCase();
+    
+    if (rawType.includes('solar')) {
+      return '/assets/images/solar.png';
+    } else if (rawType.includes('wind')) {
+      return '/assets/images/wind.png';
+    } else if (rawType.includes('biomass') || rawType.includes('bio')) {
+      return '/assets/images/biomass.png';
+    } else if (rawType.includes('geothermal') || rawType.includes('geo')) {
+      return '/assets/images/geothermal.png';
+    } else if (rawType.includes('hydro') || rawType.includes('water')) {
+      return '/assets/images/hydro.png';
+    }
+    
+    // Fallback to no_image.png if type doesn't match
+    return '/assets/images/no_image.png';
+  };
+
+  const imgSrc = getProjectTypeImage(project);
+
   return (
     <div className="bg-card border border-border rounded-lg shadow-elevation-1 hover:shadow-elevation-2 transition-all duration-300 overflow-hidden group">
       {/* Project Image */}
       <div className="relative h-48 overflow-hidden bg-muted">
         <Image
-          src={project?.image}
-          alt={`${project?.name} renewable energy project`}
+          src={imgSrc}
+          alt={`${project?.name || 'Project'} renewable energy project`}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onLoad={() => setIsImageLoaded(true)}
         />

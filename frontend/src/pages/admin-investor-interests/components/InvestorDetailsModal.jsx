@@ -278,7 +278,7 @@ const InvestorDetailsModal = ({ isOpen, onClose, investorData }) => {
           <Button
             variant="default"
             onClick={() => {
-              navigate(`/project-details/${investorData.landId}`);
+              navigate(`/admin/projects/${investorData.landId}/reviewers`);
               onClose(); // Close the modal when navigating
             }}
             iconName="BarChart3"

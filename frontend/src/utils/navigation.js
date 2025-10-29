@@ -33,7 +33,9 @@ export const getRoleNavigation = (user) => {
   // Investor navigation
   if (userRoles.includes('investor')) {
     return {
+      dashboard: '/investor/dashboard',
       portal: '/investor/portal',
+      myInterests: '/investor/my-interests',
       basePath: '/investor'
     };
   }
@@ -204,8 +206,7 @@ export const getNavigationMenu = (user) => {
     return [
       { label: 'Dashboard', href: '/admin/dashboard', icon: 'LayoutDashboard' },
       { label: 'Marketplace', href: '/admin/marketplace', icon: 'Store' },
-      { label: 'Investor Interests', href: '/admin/investor-interests', icon: 'Users' },
-      { label: 'Document Review', href: '/admin/document-review', icon: 'FileCheck' }
+      { label: 'Investor Interests', href: '/admin/investor-interests', icon: 'Users' }
     ];
   }
   

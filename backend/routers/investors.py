@@ -377,7 +377,7 @@ async def withdraw_interest(
             detail=f"Failed to withdraw interest: {str(e)}"
         )
 
-@router.get("/my/interests", response_model=List[InterestResponse])
+@router.get("/my/interests")
 async def get_my_interests(
     status: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
@@ -393,44 +393,104 @@ async def get_my_interests(
             detail="Only investors can view their interests"
         )
     
-    base_query = """
-        SELECT ii.interest_id, ii.investor_id, ii.land_id, ii.status,
-               ii.comments, ii.created_at, ii.updated_at,
-               l.title as land_title, l.location_text as land_location, l.landowner_id as owner_id,
-               u.first_name || ' ' || u.last_name as investor_name,
-               u.email as investor_email
-        FROM investor_interests ii
-        JOIN lands l ON ii.land_id = l.land_id
-        JOIN users u ON ii.investor_id = u.user_id
-        WHERE ii.investor_id = :user_id
-    """
-    
-    params = {"user_id": current_user["user_id"]}
-    
-    if status:
-        base_query += " AND ii.status = :status"
-        params["status"] = status
-    
-    base_query += " ORDER BY ii.created_at DESC"
-    
-    results = db.execute(text(base_query), params).fetchall()
-    
-    return [
-        InterestResponse(
-            interest_id=row.interest_id,
-            investor_id=row.investor_id,
-            land_id=row.land_id,
-            status=row.status,
-            comments=row.comments,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            land_title=row.land_title,
-            land_location=row.land_location,
-            investor_name=row.investor_name,
-            investor_email=row.investor_email
+    try:
+        # Debug: Log user info
+        user_id = current_user.get("user_id")
+        print(f"[get_my_interests] User ID: {user_id}, Type: {type(user_id)}")
+        print(f"[get_my_interests] User roles: {user_roles}")
+        
+        # First, let's check if there are any interests at all
+        check_query = text("SELECT COUNT(*) as count FROM investor_interests")
+        count_result = db.execute(check_query).fetchone()
+        print(f"[get_my_interests] Total interests in DB: {count_result.count if count_result else 0}")
+        
+        # Check interests for this specific user
+        check_user_query = text("""
+            SELECT COUNT(*) as count 
+            FROM investor_interests 
+            WHERE investor_id::text = :user_id
+        """)
+        user_count_result = db.execute(check_user_query, {"user_id": str(user_id)}).fetchone()
+        print(f"[get_my_interests] Interests for user {user_id}: {user_count_result.count if user_count_result else 0}")
+        
+        # Build main query - use CAST for UUID comparison to handle string vs UUID
+        base_query = """
+            SELECT 
+                ii.interest_id, 
+                ii.investor_id, 
+                ii.land_id, 
+                ii.status,
+                ii.comments, 
+                ii.created_at, 
+                COALESCE(ii.updated_at, ii.created_at) as updated_at,
+                l.title as project_title, 
+                l.location_text as project_location, 
+                l.landowner_id,
+                l.energy_key as project_type,
+                l.capacity_mw,
+                l.price_per_mwh,
+                l.status as land_status,
+                TRIM(COALESCE(investor.first_name, '') || ' ' || COALESCE(investor.last_name, '')) as investor_name,
+                investor.email as investor_email,
+                TRIM(COALESCE(owner.first_name, '') || ' ' || COALESCE(owner.last_name, '')) as landowner_name,
+                owner.email as landowner_email
+            FROM investor_interests ii
+            JOIN lands l ON ii.land_id = l.land_id
+            JOIN "user" investor ON ii.investor_id = investor.user_id
+            JOIN "user" owner ON l.landowner_id = owner.user_id
+            WHERE ii.investor_id::text = :user_id
+        """
+        
+        params = {"user_id": str(user_id)}
+        
+        if status:
+            base_query += " AND ii.status = :status"
+            params["status"] = status
+        
+        base_query += " ORDER BY ii.created_at DESC"
+        
+        print(f"[get_my_interests] Executing query with params: {params}")
+        results = db.execute(text(base_query), params).fetchall()
+        print(f"[get_my_interests] Query returned {len(results)} results")
+        
+        # Return as dict with all fields for frontend
+        interests = []
+        for row in results:
+            try:
+                interest_dict = {
+                    "interest_id": str(row.interest_id),
+                    "investor_id": str(row.investor_id),
+                    "land_id": str(row.land_id),
+                    "status": row.status,
+                    "comments": row.comments,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "project_title": row.project_title,
+                    "project_location": row.project_location,
+                    "project_type": row.project_type,
+                    "capacity_mw": float(row.capacity_mw) if row.capacity_mw else None,
+                    "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
+                    "landowner_name": row.landowner_name if row.landowner_name and row.landowner_name.strip() else "Unknown",
+                    "investor_name": row.investor_name,
+                    "investor_email": row.investor_email,
+                    "land_status": row.land_status
+                }
+                interests.append(interest_dict)
+            except Exception as e:
+                print(f"[get_my_interests] Error processing row: {str(e)}")
+                continue
+        
+        print(f"[get_my_interests] Returning {len(interests)} interests")
+        return interests
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_my_interests: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch interests: {str(e)}"
         )
-        for row in results
-    ]
 
 @router.get("/land/{land_id}/interests", response_model=List[InterestResponse])
 async def get_land_interests(

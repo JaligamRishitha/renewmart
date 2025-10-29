@@ -25,8 +25,12 @@ import RoleBasedRedirect from './components/RoleBasedRedirect';
 // Import new pages from landinvest_pro
 import AdminDashboard from './pages/admin-dashboard';
 import AdminMarketplace from './pages/admin-marketplace';
+import MarketplaceV2 from './pages/admin-marketplace/MarketplaceV2';
+import MyPublishedProjects from './pages/admin-marketplace/MyPublishedProjects';
 import AdminInvestorInterests from './pages/admin-investor-interests';
+import ProjectReviewersPage from './pages/admin-dashboard/project-reviewers';
 import InvestorPortal from './pages/investor-portal';
+import MyInterests from './pages/investor-portal/MyInterests';
 import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
 import AdminDocumentReview from './pages/document-review/AdminDocumentReview';
@@ -35,6 +39,7 @@ import DocumentVersionUpload from './pages/document-version-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
 import LandownerProjectStatus from './pages/landowner-project-status';
 import ProjectReviewPage from './pages/landowner-project-status/components/ProjectReviewPage';
+import LandownerProjectReview from './pages/landowner-project-status/components/LandownerProjectReview';
 import ReviewerDashboard from './pages/reviewer-dashboard';
 import ReviewerProjects from './pages/reviewer-projects';
 import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
@@ -91,7 +96,12 @@ const Routes = () => {
         } />
         <Route path="/admin/marketplace" element={
           <AdminRoute>
-            <AdminMarketplace />
+            <MarketplaceV2 />
+          </AdminRoute>
+        } />
+        <Route path="/admin/marketplace/my-projects" element={
+          <AdminRoute>
+            <MyPublishedProjects />
           </AdminRoute>
         } />
         <Route path="/admin/investor-interests" element={
@@ -107,6 +117,11 @@ const Routes = () => {
         <Route path="/admin/project-details/:landId" element={
           <AdminRoute>
             <ProjectDetailsPage />
+          </AdminRoute>
+        } />
+        <Route path="/admin/projects/:projectId/reviewers" element={
+          <AdminRoute>
+            <ProjectReviewersPage />
           </AdminRoute>
         } />
         
@@ -145,7 +160,7 @@ const Routes = () => {
         } />
         <Route path="/landowner/project-review/:projectId" element={
           <OwnerRoute>
-            <ProjectReviewPage />
+            <LandownerProjectReview />
           </OwnerRoute>
         } />
         <Route path="/landowner/document-versions/:landId" element={
@@ -224,6 +239,11 @@ const Routes = () => {
         <Route path="/investor/project-details/:landId" element={
           <InvestorRoute>
             <ProjectDetailsPage />
+          </InvestorRoute>
+        } />
+        <Route path="/investor/my-interests" element={
+          <InvestorRoute>
+            <MyInterests />
           </InvestorRoute>
         } />
         
@@ -339,7 +359,7 @@ const Routes = () => {
         } />
         <Route path="/project-manager/marketplace" element={
           <ProjectManagerRoute>
-            <AdminMarketplace />
+            <MarketplaceV2 />
           </ProjectManagerRoute>
         } />
         <Route path="/project-manager/investor-interests" element={
@@ -387,7 +407,7 @@ const Routes = () => {
         } />
         <Route path="/admin-marketplace" element={
           <AdminRoute>
-            <AdminMarketplace />
+            <MarketplaceV2 />
           </AdminRoute>
         } />
         <Route path="/admin-investor-interests" element={

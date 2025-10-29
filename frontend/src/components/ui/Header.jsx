@@ -52,6 +52,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       badge: notifications?.opportunities || 0
     },
     {
+      label: 'My Interest',
+      path: roleNavigation.myInterests || '/investor/my-interests',
+      icon: 'Heart',
+      roles: ['investor'],
+      badge: notifications?.interests || 0
+    },
+    {
       label: 'Account',
       path: '/register',
       icon: 'User',

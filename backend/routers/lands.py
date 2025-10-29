@@ -174,7 +174,120 @@ async def get_admin_summary(
         "totalInvestors": int(interest_result.total_investors) if interest_result.total_investors else 0
     }
 
-
+@router.get("/admin/projects/{project_id}/details-with-tasks", response_model=Dict[str, Any])
+async def get_project_details_with_tasks(
+    project_id: UUID,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get project details with existing tasks for reviewer assignment (admin only)."""
+   
+    # Get project details
+    project_query = text("""
+        SELECT
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        WHERE l.land_id = :project_id
+    """)
+   
+    project_result = db.execute(project_query, {"project_id": str(project_id)}).fetchone()
+   
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Project not found")
+   
+    # Get existing tasks for this project
+    tasks_query = text("""
+        SELECT
+            t.task_id,
+            t.land_id,
+            t.title as task_type,
+            t.description,
+            t.assigned_to,
+            t.assigned_role,
+            t.status,
+            t.priority,
+            t.due_date,
+            t.created_at,
+            t.updated_at,
+            u.first_name || ' ' || u.last_name as assigned_to_name
+        FROM tasks t
+        LEFT JOIN "user" u ON t.assigned_to = u.user_id
+        WHERE t.land_id = :project_id
+        ORDER BY t.created_at DESC
+    """)
+   
+    tasks_result = db.execute(tasks_query, {"project_id": str(project_id)}).fetchall()
+   
+    # Format project data
+    landowner_name = f"{project_result.first_name or ''} {project_result.last_name or ''}".strip() or project_result.landowner_email
+   
+    project_data = {
+        "id": str(project_result.land_id),
+        "title": project_result.title,
+        "location_text": project_result.location_text,
+        "land_type": project_result.land_type,
+        "energy_key": project_result.energy_key,
+        "capacity_mw": project_result.capacity_mw,
+        "price_per_mwh": float(project_result.price_per_mwh) if project_result.price_per_mwh else 0,
+        "area_acres": float(project_result.area_acres) if project_result.area_acres else 0,
+        "status": project_result.status,
+        "timeline_text": project_result.timeline_text,
+        "contract_term_years": project_result.contract_term_years,
+        "developer_name": project_result.developer_name,
+        "admin_notes": project_result.admin_notes,
+        "project_priority": project_result.project_priority,
+        "project_due_date": project_result.project_due_date.isoformat() if project_result.project_due_date else None,
+        "created_at": project_result.created_at.isoformat() if project_result.created_at else None,
+        "updated_at": project_result.updated_at.isoformat() if project_result.updated_at else None,
+        "published_at": project_result.published_at.isoformat() if project_result.published_at else None,
+        "landownerName": landowner_name,
+        "landownerEmail": project_result.landowner_email,
+        "landownerPhone": project_result.phone,
+        "tasks": []
+    }
+   
+    # Format tasks data
+    for task in tasks_result:
+        task_data = {
+            "task_id": str(task.task_id),
+            "land_id": str(task.land_id),
+            "task_type": task.task_type,
+            "description": task.description,
+            "assigned_to": str(task.assigned_to) if task.assigned_to else None,
+            "assigned_role": task.assigned_role,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            "assigned_to_name": task.assigned_to_name
+        }
+        project_data["tasks"].append(task_data)
+   
+    return project_data
+ 
 @router.get("/admin/investor-interests", response_model=List[Dict[str, Any]])
 async def get_admin_investor_interests(
     current_user: dict = Depends(require_admin),

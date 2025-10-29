@@ -32,7 +32,10 @@ const ReviewPanel = ({
   onApprove = () => {},
   onReject = () => {},
   onRequestClarification = () => {},
-  onSaveProgress = () => {}
+  onSaveProgress = () => {},
+  initialRole = null,                  // Initial role from navigation
+  autoSwitchRole = false,              // Flag to auto-switch to initial role
+  initialTaskType = null               // Initial task type from navigation
 }) => {
 
   // 🔹 Role-specific state management - maintains state per role with localStorage persistence
@@ -196,6 +199,26 @@ const ReviewPanel = ({
     }, 50); // Small delay to ensure state is applied after component is fully mounted
   }, [reviewerRole, roleStates, currentTask?.task_id, subtasks?.length]);
 
+  // 🔹 Handle auto-switch to initial role from navigation
+  useEffect(() => {
+    if (autoSwitchRole && initialRole && initialRole !== reviewerRole) {
+      console.log('🔄 ReviewPanel: Auto-switching to initial role:', initialRole);
+      console.log('🔄 ReviewPanel: Current reviewer role:', reviewerRole);
+      console.log('🔄 ReviewPanel: Current task:', currentTask?.task_id);
+      console.log('🔄 ReviewPanel: Current subtasks count:', subtasks?.length);
+      console.log('🔄 ReviewPanel: Calling onRoleChange with:', initialRole);
+      
+      // Add a small delay to ensure parent component is ready
+      setTimeout(() => {
+        try {
+          onRoleChange(initialRole);
+        } catch (error) {
+          console.error('❌ ReviewPanel: Error in auto-switch:', error);
+        }
+      }, 100);
+    }
+  }, [autoSwitchRole, initialRole, reviewerRole, onRoleChange, currentTask, subtasks]);
+
   // 🔹 Update role-specific state when local state changes
   useEffect(() => {
     console.log('🔄 State changed, updating role state for:', reviewerRole, {
@@ -279,21 +302,68 @@ const ReviewPanel = ({
     const fetchTemplates = async () => {
       try {
         console.log('📥 ReviewPanel: Fetching templates based on parent role prop:', reviewerRole);
-        const templates = await taskAPI.getSubtaskTemplates(reviewerRole);
-        console.log('📦 ReviewPanel: Received templates for', reviewerRole, ':', templates);
+        console.log('📥 ReviewPanel: Initial task type from navigation:', initialTaskType);
+        console.log('📥 ReviewPanel: Current task from parent:', currentTask);
+        console.log('📥 ReviewPanel: Current task type from parent:', currentTask?.task_type);
+        
+        let taskType = initialTaskType || currentTask?.task_type;
+        
+        console.log('🎯 ReviewPanel: Final task type decision:', {
+          initialTaskType,
+          currentTaskType: currentTask?.task_type,
+          finalTaskType: taskType
+        });
+        
+        // If no initial task type provided, get available task types for the role
+        if (!taskType) {
+          const taskTypesResponse = await taskAPI.getTaskTypes(reviewerRole);
+          console.log('📋 ReviewPanel: Available task types for', reviewerRole, ':', taskTypesResponse);
+          
+          if (!taskTypesResponse?.task_types || taskTypesResponse.task_types.length === 0) {
+            console.log('⚠️ ReviewPanel: No task types available for role:', reviewerRole);
+            setTemplateSections([]);
+            return;
+          }
+          
+          // Use the first available task type as fallback
+          taskType = taskTypesResponse.task_types[0];
+          console.log('🎯 ReviewPanel: Using fallback task type:', taskType);
+        } else {
+          console.log('🎯 ReviewPanel: Using provided task type:', taskType);
+        }
+        
+        // Get templates for the specific task type
+        console.log('🔍 ReviewPanel: About to call API with:', { role: reviewerRole, taskType });
+        console.log('🔍 ReviewPanel: API URL will be:', `/tasks/subtask-templates/${reviewerRole}?task_type=${taskType}`);
+        
+        const templates = await taskAPI.getSubtaskTemplates(reviewerRole, taskType);
+        console.log('📦 ReviewPanel: API Response:', templates);
+        console.log('📦 ReviewPanel: Templates count:', templates?.templates?.length);
+        console.log('📦 ReviewPanel: Templates data:', templates?.templates);
+        
+        if (!templates?.templates || templates.templates.length === 0) {
+          console.log('⚠️ ReviewPanel: No templates received for role:', reviewerRole, 'task type:', taskType);
+          console.log('⚠️ ReviewPanel: Available task types from API:', templates?.available_task_types);
+          setTemplateSections([]);
+          return;
+        }
         
         const sections = {};
         templates.templates.forEach(template => {
+          console.log('📝 Processing template:', template);
           if (!sections[template.section]) {
             sections[template.section] = { title: template.section, items: [] };
           }
           sections[template.section].items.push(template.title);
         });
         
-        setTemplateSections(Object.values(sections));
-        console.log('✅ ReviewPanel: Template sections updated for', reviewerRole, ':', Object.values(sections).length, 'sections');
+        const sectionsArray = Object.values(sections);
+        console.log('📊 ReviewPanel: Created sections:', sectionsArray);
+        setTemplateSections(sectionsArray);
+        console.log('✅ ReviewPanel: Template sections updated for', reviewerRole, 'task type', taskType, ':', sectionsArray.length, 'sections');
       } catch (error) {
         console.error('❌ ReviewPanel: Error fetching subtask templates for', reviewerRole, ':', error);
+        console.error('❌ ReviewPanel: Error details:', error.response?.data || error.message);
         setTemplateSections([]);
       }
     };
@@ -302,7 +372,7 @@ const ReviewPanel = ({
       console.log('🔍 ReviewPanel: reviewerRole prop exists, fetching templates...');
       fetchTemplates();
     }
-  }, [reviewerRole]); // Re-fetch whenever parent changes reviewerRole
+  }, [reviewerRole, initialTaskType]); // Re-fetch when role or initial task type changes
 
   // 🔹 Role-specific display logic (memoized based on parent's reviewerRole prop)
   const currentCriteria = React.useMemo(() => {
@@ -336,11 +406,30 @@ const ReviewPanel = ({
     console.log('   Input:', {
       subtasksCount: subtasks?.length,
       parentRole: reviewerRole,
-      templateSections: templateSections?.length
+      templateSections: templateSections?.length,
+      templateSectionsData: templateSections
     });
 
     if (!subtasks || subtasks.length === 0) {
       console.log('   → No subtasks from parent, returning template sections');
+      console.log('   → Template sections:', templateSections);
+      console.log('   → Current criteria sections:', currentCriteria?.sections);
+      
+      // If we have template sections, convert them to the expected format
+      if (templateSections && templateSections.length > 0) {
+        const formattedSections = templateSections.map(section => ({
+          title: section.title,
+          items: section.items.map(item => ({
+            title: item,
+            status: 'pending',
+            checked: false,
+            description: `${section.title} - ${item}`
+          }))
+        }));
+        console.log('   → Formatted template sections:', formattedSections);
+        return formattedSections;
+      }
+      
       return currentCriteria?.sections || [];
     }
 
@@ -357,7 +446,7 @@ const ReviewPanel = ({
     const result = Object.values(groups);
     console.log('   → Grouped parent subtasks into', result.length, 'sections for role:', reviewerRole);
     return result;
-  }, [subtasks, currentCriteria, reviewerRole]); // Recompute when parent changes subtasks, criteria, or role
+  }, [subtasks, currentCriteria, reviewerRole, templateSections]); // Added templateSections dependency
 
   // 🔹 Check if user is admin (view-only for subtask status)
   const isAdmin = currentUser?.roles?.includes('administrator') || false;
@@ -594,14 +683,18 @@ const ReviewPanel = ({
     }
   };
 
-  // 🔹 Display "No Task Assigned"
+  // 🔹 Display "No Task Assigned" - but still show templates if available
   const hasNoTask = !currentTask;
+  const hasTemplates = templateSections && templateSections.length > 0;
 
   // 🔹 Log render with parent props
   console.log('🎨 ReviewPanel: RENDERING based on parent props:');
   console.log('   Parent reviewerRole:', reviewerRole);
   console.log('   Parent currentTask:', currentTask?.task_id);
   console.log('   Parent subtasks count:', subtasks?.length);
+  console.log('   Initial role from navigation:', initialRole);
+  console.log('   Initial task type from navigation:', initialTaskType);
+  console.log('   Auto-switch flag:', autoSwitchRole);
   console.log('   Computed groupedSections:', groupedSubtasks?.length);
   console.log('   Criteria title:', currentCriteria?.title);
   console.log('   ⚡ Everything renders based on parent Document Review page props');
@@ -684,7 +777,7 @@ const ReviewPanel = ({
       <div className="flex-1 overflow-hidden relative">
         {!showMessaging && activeTab === "review" && (
           <div className="h-full overflow-y-auto">
-            {hasNoTask ? (
+            {hasNoTask && !hasTemplates ? (
               <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center max-w-md">
                   <Icon name="AlertCircle" size={64} className="text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -716,11 +809,15 @@ const ReviewPanel = ({
                         <h2 className="text-lg font-semibold text-foreground">
                           {currentCriteria?.title}
                         </h2>
-                        {currentTask && (
+                        {currentTask ? (
                           <p className="text-sm font-medium text-primary mt-1">
                             Task: {currentTask.title || currentTask.task_type || 'Untitled Task'}
                           </p>
-                        )}
+                        ) : hasTemplates ? (
+                          <p className="text-sm font-medium text-primary mt-1">
+                            Template Review: {reviewerRole.replace('_', ' ').toUpperCase()}
+                          </p>
+                        ) : null}
                         <p className="text-sm text-muted-foreground mt-1">
                           Document Category: {documentCategory?.replace('_', ' ')?.toUpperCase()}
                         </p>
@@ -733,20 +830,29 @@ const ReviewPanel = ({
                   </div>
 
                   {/* Summary */}
-                  {subtasks?.length > 0 && (
+                  {(subtasks?.length > 0 || hasTemplates) && (
                     <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2 pt-2 border-t border-border">
                       <span className="flex items-center gap-1">
                         <Icon name="ListChecks" size={14} />
-                        {subtasks.length} Subtasks
+                        {subtasks?.length > 0 ? subtasks.length : groupedSubtasks?.reduce((total, section) => total + section.items.length, 0) || 0} {hasTemplates && !subtasks?.length ? 'Template Items' : 'Subtasks'}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Icon name="CheckCircle2" size={14} className="text-green-500" />
-                        {subtasks.filter(s => s.status === 'completed').length} Completed
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Icon name="Clock" size={14} className="text-orange-500" />
-                        {subtasks.filter(s => s.status === 'pending').length} Pending
-                      </span>
+                      {subtasks?.length > 0 ? (
+                        <>
+                          <span className="flex items-center gap-1">
+                            <Icon name="CheckCircle2" size={14} className="text-green-500" />
+                            {subtasks.filter(s => s.status === 'completed').length} Completed
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Icon name="Clock" size={14} className="text-orange-500" />
+                            {subtasks.filter(s => s.status === 'pending').length} Pending
+                          </span>
+                        </>
+                      ) : hasTemplates ? (
+                        <span className="flex items-center gap-1">
+                          <Icon name="FileText" size={14} className="text-blue-500" />
+                          Template Review Items
+                        </span>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -1038,50 +1144,7 @@ const ReviewPanel = ({
                     </div>
                   )}
 
-                  {/* RATING + COMMENTS */}
-                  <div className="space-y-3 pt-4 border-t border-border">
-                    <h3 className="text-base font-semibold text-foreground">Overall Assessment</h3>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Rating (1–5 stars)</label>
-                      <div className="flex items-center space-x-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={`rating-${reviewerRole}-${star}`}
-                            onClick={() => setOverallRating(star)}
-                            className="p-1 rounded hover:bg-muted transition-smooth"
-                          >
-                            <Icon
-                              name="Star"
-                              size={24}
-                              className={`${star <= overallRating ? 'text-warning fill-current' : 'text-muted-foreground'}`}
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-foreground">Review Comments</label>
-                    <textarea
-                      key={`comments-${reviewerRole}`}
-                      value={comments}
-                      onChange={(e) => setComments(e.target.value)}
-                      placeholder="Add your detailed review comments here..."
-                      className="w-full h-24 p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-foreground">Action Justification</label>
-                    <textarea
-                      key={`justification-${reviewerRole}`}
-                      value={justification}
-                      onChange={(e) => setJustification(e.target.value)}
-                      placeholder="Provide justification for your decision..."
-                      className="w-full h-20 p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
+                  {/* Assessment, rating, comments, and justification removed as requested */}
                 </div>
 
                 {/* FOOTER */}
@@ -1169,57 +1232,12 @@ const ReviewPanel = ({
                   {(() => {
                     const docProgress = getDocumentProgress();
                     const documentsNotReady = docProgress.total > 0 && !docProgress.allApproved;
-                    
-                    return (
-                      <>
-                        {/* Warning if documents not approved */}
-                        {documentsNotReady && (
-                          <div className="text-xs text-orange-600 flex items-center gap-1 p-2 bg-orange-500/10 rounded border border-orange-500/20">
-                            <Icon name="AlertCircle" size={14} />
-                            Please approve all pending documents before submitting your review
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                          <Button 
-                            variant="outline" 
-                            onClick={() => handleSubmitReview('save')} 
-                            className="w-full"
-                            disabled={documentsNotReady}
-                            title={documentsNotReady ? "All documents must be approved first" : "Save your progress"}
-                          >
-                            <Icon name="Save" size={16} /> Save Progress
-                          </Button>
-                          <Button
-                            variant="warning"
-                            onClick={() => handleSubmitReview('clarification')}
-                            disabled={!justification?.trim() || documentsNotReady}
-                            className="w-full"
-                            title={documentsNotReady ? "All documents must be approved first" : "Request clarification"}
-                          >
-                            <Icon name="MessageCircle" size={16} /> Request Clarification
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => handleSubmitReview('reject')}
-                            disabled={!justification?.trim() || documentsNotReady}
-                            className="w-full"
-                            title={documentsNotReady ? "All documents must be approved first" : "Reject submission"}
-                          >
-                            <Icon name="XCircle" size={16} /> Reject
-                          </Button>
-                          <Button
-                            variant="success"
-                            onClick={() => handleSubmitReview('approve')}
-                            disabled={!isReviewComplete() || !justification?.trim()}
-                            className="w-full"
-                            title={!isReviewComplete() ? "Complete all requirements first" : "Approve submission"}
-                          >
-                            <Icon name="CheckCircle" size={16} /> Approve
-                          </Button>
-                        </div>
-                      </>
-                    );
+                    return documentsNotReady ? (
+                      <div className="text-xs text-orange-600 flex items-center gap-1 p-2 bg-orange-500/10 rounded border border-orange-500/20">
+                        <Icon name="AlertCircle" size={14} />
+                        Please approve all pending documents before proceeding
+                      </div>
+                    ) : null;
                   })()}
                 </div>
               </>
@@ -1240,10 +1258,130 @@ const ReviewPanel = ({
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8">
-                <Icon name="Clock" size={48} className="text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">Task Details</h3>
-                <p className="text-muted-foreground">Task details content will be displayed here.</p>
+              <div className="space-y-6">
+                {/* Task Header */}
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">
+                        {currentTask?.task_type?.replace(/_/g, ' ').toUpperCase() || 'Task Details'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Role: {reviewerRole?.replace(/_/g, ' ').toUpperCase()}
+                      </p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                      currentTask?.status === 'completed' ? 'text-green-500 bg-green-500/10 border-green-500/20' :
+                      currentTask?.status === 'in_progress' ? 'text-blue-500 bg-blue-500/10 border-blue-500/20' :
+                      currentTask?.status === 'pending' ? 'text-orange-500 bg-orange-500/10 border-orange-500/20' :
+                      'text-muted-foreground bg-muted border-border'
+                    }`}>
+                      {currentTask?.status?.toUpperCase() || 'UNKNOWN'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Task Description */}
+                {currentTask?.description && (
+                  <div className="bg-muted/50 border border-border rounded-lg p-4">
+                    <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Icon name="FileText" size={18} className="text-primary" />
+                      Description
+                    </h4>
+                    <p className="text-sm text-foreground">
+                      {currentTask.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Task Timeline */}
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <h4 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Icon name="Clock" size={18} className="text-primary" />
+                    Timeline
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Created</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.created_at ? new Date(currentTask.created_at).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Due Date</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.due_date ? new Date(currentTask.due_date).toLocaleDateString() : 'No due date'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Priority</div>
+                      <div className="text-sm font-medium text-foreground">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          currentTask?.priority === 'high' ? 'bg-red-500/10 text-red-600 border border-red-500/20' :
+                          currentTask?.priority === 'medium' ? 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/20' :
+                          currentTask?.priority === 'low' ? 'bg-green-500/10 text-green-600 border border-green-500/20' :
+                          'bg-muted text-muted-foreground border-border'
+                        }`}>
+                          {currentTask?.priority?.toUpperCase() || 'NORMAL'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Last Updated</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.updated_at ? new Date(currentTask.updated_at).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+
+                {/* Task Assignment Info */}
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <h4 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Icon name="User" size={18} className="text-primary" />
+                    Assignment Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Assigned To</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.assigned_to_name || 'Unassigned'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Assigned Role</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.assigned_role?.replace(/_/g, ' ').toUpperCase() || reviewerRole?.replace(/_/g, ' ').toUpperCase()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Assigned By</div>
+                      <div className="text-sm font-medium text-foreground">
+                        {currentTask?.assigned_by_name || 'N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">Task ID</div>
+                      <div className="text-sm font-medium text-foreground font-mono">
+                        {currentTask?.task_id || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Completion Notes */}
+                {currentTask?.completion_notes && (
+                  <div className="bg-muted/50 border border-border rounded-lg p-4">
+                    <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Icon name="MessageSquare" size={18} className="text-primary" />
+                      Completion Notes
+                    </h4>
+                    <p className="text-sm text-foreground">
+                      {currentTask.completion_notes}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

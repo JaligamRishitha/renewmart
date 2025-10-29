@@ -331,7 +331,7 @@ const AdminInvestorInterests = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => navigate(`/project-details/${interest.landId}`)}
+                              onClick={() => navigate(`/admin/projects/${interest.landId}/reviewers`)}
                               iconName="BarChart3"
                               iconSize={14}
                               title="View Project Details & Tasks"

@@ -3,10 +3,14 @@ from fastapi import status as http_status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
+from sqlalchemy.exc import IntegrityError
+from psycopg2.errors import UniqueViolation
 from datetime import datetime
 import uuid
 import logging
+from http import HTTPStatus
+from sqlalchemy.sql import text
 
 from database import get_db
 from auth import get_current_user, require_admin
@@ -107,10 +111,6 @@ def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> boo
     if "administrator" in user_roles:
         return True
     
-    # Investors can access tasks for lands they're interested in
-    if "investor" in user_roles:
-        return True
-    
     # Task creator can access
     if str(task_data.get("assigned_by")) == user_id:
         return True
@@ -153,12 +153,11 @@ async def create_task(
     land_check = text("""
         SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
-    
     land_result = db.execute(land_check, {"land_id": str(task_data.land_id)}).fetchone()
     
     if not land_result:
         raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
+            status_code=HTTPStatus.NOT_FOUND,  # Corrected from HTTP_404_NOT_FOUND
             detail="Land not found"
         )
     
@@ -166,7 +165,7 @@ async def create_task(
     if ("administrator" not in user_roles and 
         str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN,
+            status_code=HTTPStatus.FORBIDDEN,  # Corrected from HTTP_403_FORBIDDEN
             detail="Not enough permissions to create tasks for this land"
         )
     
@@ -177,15 +176,40 @@ async def create_task(
         
         if not user_result:
             raise HTTPException(
-                status_code=http_status.HTTP_404_NOT_FOUND,
+                status_code=HTTPStatus.NOT_FOUND,  # Corrected from HTTP_404_NOT_FOUND
                 detail="Assigned user not found"
             )
     
+    # Step 1: Validate for existing pending task
+    if task_data.assigned_to:
+        existing_task_check = text("""
+            SELECT 1
+            FROM tasks
+            WHERE land_id = :land_id
+              AND title = :title
+              AND assigned_to = :assigned_to
+              AND status = 'pending'
+        """)
+        existing_task = db.execute(
+            existing_task_check,
+            {
+                "land_id": str(task_data.land_id),
+                "title": task_data.task_type.replace('_', ' ').title(),
+                "assigned_to": str(task_data.assigned_to)
+            }
+        ).fetchone()
+
+        if existing_task:
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,  # Corrected from HTTP_400_BAD_REQUEST
+                detail="This Same task is already assigned to this user."
+            )
+
+    # Step 2: Insert the task
     try:
         # Generate new task ID
-        task_id = str(uuid.uuid4())
+        task_id = str(uuid4())
         
-        # Direct INSERT into tasks table (matching actual schema)
         insert_query = text("""
             INSERT INTO tasks (
                 task_id, land_id, title, description,
@@ -201,7 +225,7 @@ async def create_task(
         db.execute(insert_query, {
             "task_id": task_id,
             "land_id": str(task_data.land_id),
-            "title": task_data.task_type.replace('_', ' ').title(),  # Convert task_type to title
+            "title": task_data.task_type.replace('_', ' ').title(),
             "description": task_data.description,
             "assigned_to": str(task_data.assigned_to) if task_data.assigned_to else None,
             "assigned_role": task_data.assigned_role,
@@ -219,10 +243,21 @@ async def create_task(
         # Fetch the created task
         return await get_task(UUID(task_id), current_user, db)
         
+    except IntegrityError as e:
+        db.rollback()
+        if isinstance(e.orig, UniqueViolation) and "idx_unique_task_assignment" in str(e):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,  # Corrected from HTTP_400_BAD_REQUEST
+                detail="This task is already assigned to the user and is pending."
+            )
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,  # Corrected from HTTP_500_INTERNAL_SERVER_ERROR
+            detail=f"Failed to create task: {str(e)}"
+        )
     except Exception as e:
         db.rollback()
         raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,  # Corrected from HTTP_500_INTERNAL_SERVER_ERROR
             detail=f"Failed to create task: {str(e)}"
         )
 
@@ -244,10 +279,18 @@ async def get_tasks(
     user_roles = current_user.get("roles", [])
     
     # Build base query (matching actual schema)
+    # Include role lookup from user_roles if assigned_role is null
     base_query = """
         SELECT t.task_id, t.land_id, t.title as task_type, t.description,
                t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
-               t.assigned_role, t.start_date, t.end_date, t.due_date,
+               COALESCE(t.assigned_role, 
+                   (SELECT ur.role_key 
+                    FROM user_roles ur 
+                    WHERE ur.user_id = t.assigned_to 
+                      AND ur.role_key IN ('re_sales_advisor', 're_analyst', 're_governance_lead')
+                    LIMIT 1
+                   )) as assigned_role,
+               t.start_date, t.end_date, t.due_date,
                t.completion_notes, t.created_at, t.updated_at,
                l.title as land_title, l.landowner_id,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
@@ -279,12 +322,22 @@ async def get_tasks(
         params["task_type"] = task_type
     
     # Add permission filter for non-admin users
-    if "administrator" not in user_roles and "investor" not in user_roles:
-        base_query += """
-            AND (t.assigned_to = :user_id 
-                 OR t.created_by = :user_id 
-                 OR l.landowner_id = :user_id)
-        """
+    if "administrator" not in user_roles:
+        if "investor" in user_roles:
+            # Investors can see tasks for published lands
+            base_query += """
+                AND (t.assigned_to = :user_id 
+                     OR t.created_by = :user_id 
+                     OR l.landowner_id = :user_id
+                     OR l.status = 'published')
+            """
+        else:
+            # Other users (reviewers, landowners) see their assigned/created tasks
+            base_query += """
+                AND (t.assigned_to = :user_id 
+                     OR t.created_by = :user_id 
+                     OR l.landowner_id = :user_id)
+            """
         params["user_id"] = current_user["user_id"]
     
     base_query += " ORDER BY t.created_at DESC OFFSET :skip LIMIT :limit"
@@ -389,7 +442,6 @@ async def get_project_review_tasks(
     
     user_roles = current_user.get("roles", [])
     if ("administrator" not in user_roles and 
-        "investor" not in user_roles and
         str(land_result.landowner_id) != current_user["user_id"]):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
@@ -397,11 +449,18 @@ async def get_project_review_tasks(
         )
     
     try:
-        # Get all tasks for this land
+        # Get all tasks for this land, including reviewer role from user_roles
         tasks_query = text("""
             SELECT t.task_id, t.land_id, t.title as task_type, t.description,
                    t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
-                   t.assigned_role, t.start_date, t.end_date, t.due_date,
+                   COALESCE(t.assigned_role, 
+                       (SELECT ur.role_key 
+                        FROM user_roles ur 
+                        WHERE ur.user_id = t.assigned_to 
+                          AND ur.role_key IN ('re_sales_advisor', 're_analyst', 're_governance_lead')
+                        LIMIT 1
+                       )) as assigned_role,
+                   t.start_date, t.end_date, t.due_date,
                    t.completion_notes, t.created_at, t.updated_at,
                    l.title as land_title, l.landowner_id,
                    u1.first_name || ' ' || u1.last_name as assigned_to_name,
@@ -1490,11 +1549,97 @@ async def submit_subtasks_status(
 @router.get("/subtask-templates/{role}")
 async def get_default_subtask_templates(
     role: str,
+    task_type: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get default subtask templates for a reviewer role."""
+    """Get subtask templates for a role, optionally filtered by task type."""
     
+    # Task-type specific subtask templates
+    task_specific_subtasks = {
+        "re_sales_advisor": {
+            "market_evaluation": [
+                {"title": "Location accessibility and infrastructure", "section": "Market Viability", "order": 0},
+                {"title": "Proximity to transmission lines", "section": "Market Viability", "order": 1},
+                {"title": "Local energy demand assessment", "section": "Market Viability", "order": 2},
+                {"title": "Competition analysis in the region", "section": "Market Viability", "order": 3},
+                {"title": "Market price competitiveness", "section": "Market Viability", "order": 4},
+                {"title": "Revenue projection accuracy", "section": "Commercial Feasibility", "order": 5},
+                {"title": "Contract terms evaluation", "section": "Commercial Feasibility", "order": 6},
+                {"title": "Risk assessment completeness", "section": "Commercial Feasibility", "order": 7},
+                {"title": "ROI calculations verification", "section": "Commercial Feasibility", "order": 8},
+                {"title": "Market timing considerations", "section": "Commercial Feasibility", "order": 9}
+            ],
+            "site_assessment": [
+                {"title": "Site accessibility evaluation", "section": "Site Accessibility", "order": 0},
+                {"title": "Transportation infrastructure", "section": "Site Accessibility", "order": 1},
+                {"title": "Utility connections assessment", "section": "Site Accessibility", "order": 2},
+                {"title": "Environmental impact evaluation", "section": "Environmental Assessment", "order": 3},
+                {"title": "Wildlife and habitat considerations", "section": "Environmental Assessment", "order": 4},
+                {"title": "Soil condition analysis", "section": "Environmental Assessment", "order": 5},
+                {"title": "Water resource availability", "section": "Environmental Assessment", "order": 6},
+                {"title": "Local community impact", "section": "Social Impact", "order": 7},
+                {"title": "Economic benefits to region", "section": "Social Impact", "order": 8},
+                {"title": "Stakeholder engagement plan", "section": "Social Impact", "order": 9}
+            ]
+        },
+        "re_analyst": {
+            "technical_analysis": [
+                {"title": "Site topography analysis", "section": "Technical Analysis", "order": 0},
+                {"title": "Wind/solar resource assessment", "section": "Technical Analysis", "order": 1},
+                {"title": "Grid connection feasibility", "section": "Technical Analysis", "order": 2},
+                {"title": "Technology selection validation", "section": "Technical Analysis", "order": 3},
+                {"title": "Performance ratio calculations", "section": "Technical Analysis", "order": 4},
+                {"title": "Energy yield estimation", "section": "Technical Analysis", "order": 5}
+            ],
+            "financial_analysis": [
+                {"title": "O&M cost projections", "section": "Financial Analysis", "order": 0},
+                {"title": "CAPEX breakdown validation", "section": "Financial Analysis", "order": 1},
+                {"title": "LCOE calculations", "section": "Financial Analysis", "order": 2},
+                {"title": "Sensitivity analysis", "section": "Financial Analysis", "order": 3},
+                {"title": "Cash flow projections", "section": "Financial Analysis", "order": 4},
+                {"title": "ROI and payback period", "section": "Financial Analysis", "order": 5},
+                {"title": "Risk-adjusted returns", "section": "Financial Analysis", "order": 6},
+                {"title": "Tax implications analysis", "section": "Financial Analysis", "order": 7}
+            ],
+            "document_verification": [
+                {"title": "Technical specification review", "section": "Document Review", "order": 0},
+                {"title": "Engineering drawings validation", "section": "Document Review", "order": 1},
+                {"title": "Equipment specifications check", "section": "Document Review", "order": 2},
+                {"title": "Compliance documentation", "section": "Document Review", "order": 3},
+                {"title": "Quality assurance standards", "section": "Document Review", "order": 4},
+                {"title": "Safety protocol verification", "section": "Document Review", "order": 5}
+            ]
+        },
+        "re_governance_lead": {
+            "compliance_review": [
+                {"title": "Land ownership documentation", "section": "Legal Compliance", "order": 0},
+                {"title": "Zoning and permits verification", "section": "Legal Compliance", "order": 1},
+                {"title": "Environmental clearances", "section": "Legal Compliance", "order": 2},
+                {"title": "Government NOC validation", "section": "Legal Compliance", "order": 3},
+                {"title": "Legal title verification", "section": "Legal Compliance", "order": 4}
+            ],
+            "regulatory_approval": [
+                {"title": "Industry standards compliance", "section": "Regulatory Requirements", "order": 0},
+                {"title": "Safety regulations adherence", "section": "Regulatory Requirements", "order": 1},
+                {"title": "Environmental regulations", "section": "Regulatory Requirements", "order": 2},
+                {"title": "Local authority approvals", "section": "Regulatory Requirements", "order": 3},
+                {"title": "Regulatory timeline compliance", "section": "Regulatory Requirements", "order": 4},
+                {"title": "Permit application review", "section": "Regulatory Requirements", "order": 5},
+                {"title": "Public hearing requirements", "section": "Regulatory Requirements", "order": 6}
+            ],
+            "environmental_review": [
+                {"title": "Environmental impact assessment", "section": "Environmental Review", "order": 0},
+                {"title": "Wildlife protection measures", "section": "Environmental Review", "order": 1},
+                {"title": "Water resource impact", "section": "Environmental Review", "order": 2},
+                {"title": "Air quality considerations", "section": "Environmental Review", "order": 3},
+                {"title": "Noise level assessments", "section": "Environmental Review", "order": 4},
+                {"title": "Mitigation measures planning", "section": "Environmental Review", "order": 5}
+            ]
+        }
+    }
+    
+    # Fallback to role-based templates if task_type not found
     default_subtasks = {
         "re_sales_advisor": [
             {"title": "Location accessibility and infrastructure", "section": "Market Viability", "order": 0},
@@ -1534,10 +1679,129 @@ async def get_default_subtask_templates(
         ]
     }
     
-    templates = default_subtasks.get(role, [])
+    # Get templates based on task_type if provided, otherwise use role-based defaults
+    if task_type and role in task_specific_subtasks and task_type in task_specific_subtasks[role]:
+        templates = task_specific_subtasks[role][task_type]
+    else:
+        templates = default_subtasks.get(role, [])
     
     return {
         "role": role,
+        "task_type": task_type,
         "templates": templates,
         "count": len(templates)
     }
+@router.get("/admin/projects/{project_id}/details-with-tasks", response_model=Dict[str, Any])
+async def get_project_details_with_tasks(
+    project_id: UUID,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get project details with existing tasks for reviewer assignment (admin only)."""
+   
+    # Get project details
+    project_query = text("""
+        SELECT
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        WHERE l.land_id = :project_id
+    """)
+   
+    project_result = db.execute(project_query, {"project_id": str(project_id)}).fetchone()
+   
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Project not found")
+   
+    # Get existing tasks for this project
+    tasks_query = text("""
+        SELECT
+            t.task_id,
+            t.land_id,
+            t.title as task_type,
+            t.description,
+            t.assigned_to,
+            t.assigned_role,
+            t.status,
+            t.priority,
+            t.due_date,
+            t.created_at,
+            t.updated_at,
+            u.first_name || ' ' || u.last_name as assigned_to_name
+        FROM tasks t
+        LEFT JOIN "user" u ON t.assigned_to = u.user_id
+        WHERE t.land_id = :project_id
+        ORDER BY t.created_at DESC
+    """)
+   
+    tasks_result = db.execute(tasks_query, {"project_id": str(project_id)}).fetchall()
+   
+    # Format project data
+    landowner_name = f"{project_result.first_name or ''} {project_result.last_name or ''}".strip() or project_result.landowner_email
+   
+    project_data = {
+        "id": str(project_result.land_id),
+        "title": project_result.title,
+        "location_text": project_result.location_text,
+        "land_type": project_result.land_type,
+        "energy_key": project_result.energy_key,
+        "capacity_mw": project_result.capacity_mw,
+        "price_per_mwh": float(project_result.price_per_mwh) if project_result.price_per_mwh else 0,
+        "area_acres": float(project_result.area_acres) if project_result.area_acres else 0,
+        "status": project_result.status,
+        "timeline_text": project_result.timeline_text,
+        "contract_term_years": project_result.contract_term_years,
+        "developer_name": project_result.developer_name,
+        "admin_notes": project_result.admin_notes,
+        "project_priority": project_result.project_priority,
+        "project_due_date": project_result.project_due_date.isoformat() if project_result.project_due_date else None,
+        "created_at": project_result.created_at.isoformat() if project_result.created_at else None,
+        "updated_at": project_result.updated_at.isoformat() if project_result.updated_at else None,
+        "published_at": project_result.published_at.isoformat() if project_result.published_at else None,
+        "landownerName": landowner_name,
+        "landownerEmail": project_result.landowner_email,
+        "landownerPhone": project_result.phone,
+        "tasks": []
+    }
+   
+    # Format tasks data
+    for task in tasks_result:
+        task_data = {
+            "task_id": str(task.task_id),
+            "land_id": str(task.land_id),
+            "task_type": task.task_type,
+            "description": task.description,
+            "assigned_to": str(task.assigned_to) if task.assigned_to else None,
+            "assigned_role": task.assigned_role,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            "assigned_to_name": task.assigned_to_name
+        }
+        project_data["tasks"].append(task_data)
+   
+    return project_data
+ 

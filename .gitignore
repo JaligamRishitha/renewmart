@@ -9,3 +9,6 @@ backend/logs/
 .venv/
 *.env
 .DS_Store
+
+# Ignore Windows NUL device files
+nul

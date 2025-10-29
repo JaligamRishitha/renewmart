@@ -18,6 +18,8 @@ const LandownerProjectReview = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [reviewers, setReviewers] = useState({});
+  const [expandedRoles, setExpandedRoles] = useState({});
+  const [expandedTasks, setExpandedTasks] = useState({});
 
   const tabs = [
     { id: 'overview', label: 'Review Progress', icon: 'LayoutGrid' },
@@ -53,17 +55,39 @@ const LandownerProjectReview = () => {
 
       setAllTasks(tasksWithSubtasks);
 
-      // Fetch unique reviewers
-      const uniqueUserIds = [...new Set(tasksWithSubtasks.map(t => t.assigned_to).filter(Boolean))];
+      // Fetch unique reviewers - normalize UUIDs to strings for consistent lookup
+      // Note: User fetching may fail due to permissions (403), but we can still use task.assigned_role
+      const uniqueUserIds = [...new Set(
+        tasksWithSubtasks
+          .map(t => t.assigned_to ? String(t.assigned_to) : null)
+          .filter(Boolean)
+      )];
+      
+      console.log('Unique reviewer user IDs:', uniqueUserIds);
       const reviewerData = {};
-      for (const userId of uniqueUserIds) {
+      
+      // Try to fetch user details, but don't block if it fails (403 errors are expected)
+      const userFetchPromises = uniqueUserIds.map(async (userId) => {
         try {
           const userData = await usersAPI.getUserById(userId);
-          reviewerData[userId] = userData;
+          reviewerData[String(userId)] = userData;
+          console.log(`Fetched reviewer ${userId}:`, userData);
         } catch (err) {
-          console.error(`Failed to fetch user ${userId}:`, err);
+          // 403 errors are expected for landowners viewing reviewers
+          if (err.response?.status === 403) {
+            console.log(`Skipping user ${userId} due to permissions (expected for landowners)`);
+          } else {
+            console.error(`Failed to fetch user ${userId}:`, err);
+          }
+          // Store minimal info with just the user_id
+          reviewerData[String(userId)] = { user_id: userId };
         }
-      }
+      });
+      
+      // Wait for all user fetches but don't block the UI
+      await Promise.allSettled(userFetchPromises);
+      
+      console.log('Reviewer data object:', reviewerData);
       setReviewers(reviewerData);
 
       // Fetch only reviewer-uploaded documents (task documents)
@@ -114,12 +138,42 @@ const LandownerProjectReview = () => {
   };
 
   const getRoleLabel = (role) => {
+    if (!role) return null;
+    
     const roleLabels = {
       're_sales_advisor': 'RE Sales Advisor',
       're_analyst': 'RE Analyst',
-      're_governance_lead': 'RE Governance Lead'
+      're_governance_lead': 'RE Governance Lead',
+      'sales_advisor': 'RE Sales Advisor',
+      'analyst': 'RE Analyst',
+      'governance_lead': 'RE Governance Lead'
     };
-    return roleLabels[role] || role;
+    
+    // Check if it's already a mapped label
+    if (Object.values(roleLabels).includes(role)) {
+      return role;
+    }
+    
+    // Check if it matches a key
+    const normalizedRole = String(role).toLowerCase();
+    return roleLabels[normalizedRole] || roleLabels[role] || role;
+  };
+
+  const inferRoleFromTask = (task) => {
+    // Try to infer role from task title, description, or type
+    const searchText = `${task.title || ''} ${task.task_type || ''} ${task.description || ''}`.toLowerCase();
+    
+    if (searchText.includes('sales') || searchText.includes('market') || searchText.includes('advisor')) {
+      return 'RE Sales Advisor';
+    }
+    if (searchText.includes('analyst') || searchText.includes('analyze') || searchText.includes('technical') || searchText.includes('financial')) {
+      return 'RE Analyst';
+    }
+    if (searchText.includes('governance') || searchText.includes('compliance') || searchText.includes('regulatory') || searchText.includes('legal')) {
+      return 'RE Governance Lead';
+    }
+    
+    return null;
   };
 
   const getProgressPercentage = (task) => {
@@ -301,8 +355,47 @@ const LandownerProjectReview = () => {
               ) : (
                 <div className="space-y-4">
                   {allTasks.map((task) => {
-                    const reviewer = reviewers[task.assigned_to];
+                    // Normalize assigned_to to string for lookup
+                    const reviewerKey = task.assigned_to ? String(task.assigned_to) : null;
+                    const reviewer = reviewerKey ? reviewers[reviewerKey] : null;
                     const progress = getProgressPercentage(task);
+                    
+                    // Try multiple possible fields for role
+                    let taskRole = task.assigned_role || task.role || task.role_key || task.reviewer_role;
+                    
+                    // If no role in task, try to infer from task content
+                    if (!taskRole) {
+                      taskRole = inferRoleFromTask(task);
+                    }
+                    
+                    const roleLabel = getRoleLabel(taskRole);
+                    console.log('Task role info:', { 
+                      task_id: task.task_id, 
+                      assigned_role: task.assigned_role, 
+                      task_type: task.task_type,
+                      title: task.title,
+                      inferred_role: taskRole,
+                      roleLabel 
+                    });
+                    
+                    // Determine display name - prioritize role label, then reviewer name
+                    let displayName = roleLabel;
+                    if (!displayName) {
+                      // If no role, try to get from reviewer's roles
+                      if (reviewer && reviewer.roles && reviewer.roles.length > 0) {
+                        displayName = getRoleLabel(reviewer.roles[0]) || null;
+                      }
+                      // Fallback to reviewer name
+                      if (!displayName && reviewer && reviewer.first_name && reviewer.last_name) {
+                        displayName = `${reviewer.first_name} ${reviewer.last_name}`;
+                      }
+                      // Last fallback - try to infer from task one more time
+                      if (!displayName) {
+                        const inferred = inferRoleFromTask(task);
+                        displayName = inferred || 'Reviewer';
+                      }
+                    }
+                    
                     return (
                       <div key={task.task_id} className="bg-background rounded-lg p-4 border border-border">
                         <div className="flex items-center justify-between mb-3">
@@ -312,10 +405,10 @@ const LandownerProjectReview = () => {
                             </div>
                             <div>
                               <h3 className="font-medium text-foreground">
-                                {reviewer ? `${reviewer.first_name} ${reviewer.last_name}` : 'Unknown Reviewer'}
+                                {displayName}
                               </h3>
                               <p className="text-sm text-muted-foreground">
-                                {getRoleLabel(task.assigned_role)}
+                                {roleLabel || 'Role not specified'}
                               </p>
                             </div>
                           </div>
@@ -352,93 +445,249 @@ const LandownerProjectReview = () => {
         )}
 
         {/* Reviewers Tab */}
-        {activeTab === 'reviewers' && (
-          <div className="space-y-6">
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Icon name="Users" size={24} />
-                Reviewers & Their Tasks ({allTasks.length})
-              </h2>
-              
-              {allTasks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Icon name="Inbox" size={48} className="mx-auto mb-2 opacity-50" />
-                  <p>No reviewers assigned to this project</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {allTasks.map((task) => {
-                    const reviewer = reviewers[task.assigned_to];
-                    const progress = getProgressPercentage(task);
-                    return (
-                      <div key={task.task_id} className="bg-background rounded-lg p-6 border border-border">
-                        <div className="flex items-start justify-between mb-4">
+        {activeTab === 'reviewers' && (() => {
+          // Group tasks by role
+          const tasksByRole = {};
+          allTasks.forEach((task) => {
+            // Normalize assigned_to to string for lookup
+            const reviewerKey = task.assigned_to ? String(task.assigned_to) : null;
+            const reviewer = reviewerKey ? reviewers[reviewerKey] : null;
+            
+            // Try multiple possible fields for role
+            let taskRole = task.assigned_role || task.role || task.role_key || task.reviewer_role;
+            
+            // If no role in task, try to infer from task content
+            if (!taskRole) {
+              taskRole = inferRoleFromTask(task);
+            }
+            
+            const roleLabel = getRoleLabel(taskRole) || 'Unknown Role';
+            
+            if (!tasksByRole[roleLabel]) {
+              tasksByRole[roleLabel] = [];
+            }
+            
+            tasksByRole[roleLabel].push({ ...task, roleLabel, reviewerKey, reviewer });
+          });
+
+          // Calculate stats for each role
+          const roleStats = Object.keys(tasksByRole).map(role => {
+            const tasks = tasksByRole[role];
+            const totalProgress = tasks.reduce((sum, t) => sum + getProgressPercentage(t), 0);
+            const avgProgress = tasks.length > 0 ? Math.round(totalProgress / tasks.length) : 0;
+            const completedCount = tasks.filter(t => t.status === 'completed').length;
+            
+            return {
+              role,
+              tasks,
+              taskCount: tasks.length,
+              avgProgress,
+              completedCount
+            };
+          });
+
+          const toggleRoleAccordion = (role) => {
+            setExpandedRoles(prev => ({
+              ...prev,
+              [role]: !prev[role]
+            }));
+          };
+
+          const toggleTaskAccordion = (taskId) => {
+            setExpandedTasks(prev => ({
+              ...prev,
+              [taskId]: !prev[taskId]
+            }));
+          };
+
+          return (
+            <div className="space-y-6">
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <Icon name="Users" size={24} />
+                  Reviewers & Their Tasks ({allTasks.length})
+                </h2>
+                
+                {allTasks.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Icon name="Inbox" size={48} className="mx-auto mb-2 opacity-50" />
+                    <p>No reviewers assigned to this project</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {roleStats.map(({ role, tasks, taskCount, avgProgress, completedCount }) => (
+                      <div key={role} className="bg-background border border-border rounded-lg overflow-hidden">
+                        {/* Role Accordion Header */}
+                        <button
+                          onClick={() => toggleRoleAccordion(role)}
+                          className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+                        >
                           <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                              <Icon name="User" size={24} className="text-primary" />
+                            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                              <Icon name="Users" size={20} className="text-primary" />
                             </div>
-                            <div>
-                              <h3 className="text-lg font-semibold text-foreground">
-                                {reviewer ? `${reviewer.first_name} ${reviewer.last_name}` : 'Unknown Reviewer'}
-                              </h3>
-                              <p className="text-muted-foreground">{getRoleLabel(task.assigned_role)}</p>
-                              {reviewer && (
-                                <p className="text-sm text-muted-foreground">{reviewer.email}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(task.status)}`}>
-                              {task.status?.replace('_', ' ')}
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">{progress}% complete</p>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          <div>
-                            <h4 className="font-medium text-foreground mb-2">Task Description</h4>
-                            <p className="text-muted-foreground">{task.description || 'No description provided'}</p>
-                          </div>
-                          
-                          {task.subtasks && task.subtasks.length > 0 && (
-                            <div>
-                              <h4 className="font-medium text-foreground mb-2">Subtasks ({task.subtasks.length})</h4>
-                              <div className="space-y-2">
-                                {task.subtasks.map((subtask, index) => (
-                                  <div key={index} className="flex items-center gap-2 text-sm">
-                                    <Icon 
-                                      name={subtask.status === 'completed' ? 'CheckCircle' : 'Circle'} 
-                                      size={16} 
-                                      className={subtask.status === 'completed' ? 'text-green-500' : 'text-muted-foreground'} 
-                                    />
-                                    <span className={subtask.status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}>
-                                      {subtask.title}
+                            <div className="text-left">
+                              <h3 className="text-lg font-semibold text-foreground">{role}</h3>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="text-sm text-muted-foreground">
+                                  {taskCount} task{taskCount !== 1 ? 's' : ''}
+                                </span>
+                                <span className="text-sm text-muted-foreground">•</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {avgProgress}% avg progress
+                                </span>
+                                {completedCount > 0 && (
+                                  <>
+                                    <span className="text-sm text-muted-foreground">•</span>
+                                    <span className="text-sm text-green-600 font-medium">
+                                      {completedCount} completed
                                     </span>
-                                    <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(subtask.status)}`}>
-                                      {subtask.status}
-                                    </span>
-                                  </div>
-                                ))}
+                                  </>
+                                )}
                               </div>
                             </div>
-                          )}
-                          
-                          <div className="flex justify-between text-sm text-muted-foreground">
-                            <span>Assigned: {new Date(task.created_at).toLocaleDateString()}</span>
-                            {task.due_date && (
-                              <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>
-                            )}
                           </div>
-                        </div>
+                          <div className="flex items-center gap-3">
+                            <Icon 
+                              name={expandedRoles[role] ? "ChevronUp" : "ChevronDown"} 
+                              size={20} 
+                              className="text-muted-foreground" 
+                            />
+                          </div>
+                        </button>
+
+                        {/* Role Accordion Content */}
+                        {expandedRoles[role] && (
+                          <div className="border-t border-border p-4 space-y-3">
+                            {tasks.map((task) => {
+                              const progress = getProgressPercentage(task);
+                              const reviewer = task.reviewer;
+                              
+                              // Determine reviewer display name
+                              let reviewerName = 'Unknown Reviewer';
+                              if (reviewer && reviewer.first_name && reviewer.last_name) {
+                                reviewerName = `${reviewer.first_name} ${reviewer.last_name}`;
+                              } else if (reviewer && reviewer.email) {
+                                reviewerName = reviewer.email;
+                              }
+
+                              return (
+                                <div key={task.task_id} className="bg-card border border-border rounded-lg overflow-hidden">
+                                  {/* Task Accordion Header */}
+                                  <button
+                                    onClick={() => toggleTaskAccordion(task.task_id)}
+                                    className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3 flex-1">
+                                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <Icon name="ClipboardList" size={16} className="text-primary" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <h4 className="font-medium text-foreground truncate">
+                                            {task.task_type || task.title || 'Task'}
+                                          </h4>
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                                            {task.status?.replace('_', ' ')}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                          <span>Assigned to: {reviewerName}</span>
+                                          <span>•</span>
+                                          <span>{progress}% complete</span>
+                                          {task.subtasks && task.subtasks.length > 0 && (
+                                            <>
+                                              <span>•</span>
+                                              <span>{task.subtasks.filter(st => st.status === 'completed').length}/{task.subtasks.length} subtasks</span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Icon 
+                                      name={expandedTasks[task.task_id] ? "ChevronUp" : "ChevronDown"} 
+                                      size={18} 
+                                      className="text-muted-foreground ml-3 flex-shrink-0" 
+                                    />
+                                  </button>
+
+                                  {/* Task Accordion Content */}
+                                  {expandedTasks[task.task_id] && (
+                                    <div className="border-t border-border p-4 space-y-4">
+                                      {task.description && (
+                                        <div>
+                                          <h5 className="font-medium text-foreground mb-2">Task Description</h5>
+                                          <p className="text-sm text-muted-foreground">{task.description}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Progress Bar */}
+                                      <div>
+                                        <div className="flex justify-between text-sm mb-2">
+                                          <span className="text-muted-foreground">Progress</span>
+                                          <span className="font-medium text-foreground">{progress}%</span>
+                                        </div>
+                                        <div className="w-full bg-muted rounded-full h-2">
+                                          <div 
+                                            className="bg-primary h-2 rounded-full transition-all duration-300"
+                                            style={{ width: `${progress}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Subtasks */}
+                                      {task.subtasks && task.subtasks.length > 0 && (
+                                        <div>
+                                          <h5 className="font-medium text-foreground mb-3">
+                                            Subtasks ({task.subtasks.length})
+                                          </h5>
+                                          <div className="space-y-2">
+                                            {task.subtasks.map((subtask, index) => (
+                                              <div key={subtask.subtask_id || index} className="flex items-center gap-3 p-2 bg-background rounded border border-border">
+                                                <Icon 
+                                                  name={subtask.status === 'completed' ? 'CheckCircle' : 'Circle'} 
+                                                  size={16} 
+                                                  className={subtask.status === 'completed' ? 'text-green-500' : 'text-muted-foreground'} 
+                                                />
+                                                <div className="flex-1">
+                                                  <span className={`text-sm ${subtask.status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                                                    {subtask.title}
+                                                  </span>
+                                                  {subtask.description && (
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{subtask.description}</p>
+                                                  )}
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(subtask.status)}`}>
+                                                  {subtask.status}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Task Metadata */}
+                                      <div className="flex justify-between items-center pt-3 border-t border-border text-sm text-muted-foreground">
+                                        <span>Assigned: {new Date(task.created_at).toLocaleDateString()}</span>
+                                        {task.due_date && (
+                                          <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Documents Tab */}
         {activeTab === 'documents' && (

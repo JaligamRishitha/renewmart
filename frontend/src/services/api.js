@@ -248,6 +248,11 @@ export const landsAPI = {
     return response.data;
   },
 
+  togglePublish: async (landId) => {
+    const response = await api.post(`/lands/${landId}/toggle-publish`);
+    return response.data;
+  },
+
   markLandReadyToBuy: async (landId) => {
     const response = await api.post(`/lands/${landId}/mark-rtb`);
     return response.data;
@@ -260,6 +265,11 @@ export const landsAPI = {
 
   getAdminInvestorInterests: async () => {
     const response = await api.get('/lands/admin/investor-interests');
+    return response.data;
+  },
+
+  getProjectDetailsWithTasks: async (projectId) => {
+    const response = await api.get(`/lands/admin/projects/${projectId}/details-with-tasks`);
     return response.data;
   }
 };
@@ -326,6 +336,15 @@ export const documentsAPI = {
     return response.data;
   },
  
+  getReviewerDocuments: async (landId) => {
+
+    const response = await api.get(`/documents/land/${landId}/reviewer`);
+
+    return response.data;
+
+  },
+
+
   getDocumentById: async (documentId) => {
     const response = await api.get(`/documents/${documentId}`);
     return response.data;
@@ -555,7 +574,7 @@ export const investorsAPI = {
   },
   
   getMyInterests: async (params = {}) => {
-    const response = await api.get('/investors/my-interests', { params });
+    const response = await api.get('/investors/my/interests', { params });
     return response.data;
   },
   
@@ -573,6 +592,17 @@ export const investorsAPI = {
   
   getAvailableLands: async (params = {}) => {
     const response = await api.get('/investors/available-lands', { params });
+    return response.data;
+  },
+
+  // Dashboard APIs
+  getDashboardMetrics: async () => {
+    const response = await api.get('/investors/dashboard/metrics');
+    return response.data;
+  },
+
+  getDashboardInterests: async (limit = 5) => {
+    const response = await api.get('/investors/dashboard/interests', { params: { limit } });
     return response.data;
   }
 };
@@ -660,9 +690,21 @@ export const taskAPI = {
     return response.data;
   },
 
-  // Get default subtask templates for a role
-  getSubtaskTemplates: async (role) => {
-    const response = await api.get(`/tasks/subtask-templates/${role}`);
+  // Get available task types for a role
+  getTaskTypes: async (role) => {
+    const response = await api.get(`/tasks/task-types/${role}`);
+    return response.data;
+  },
+
+  // Get subtask templates for a role and task type
+  getSubtaskTemplates: async (role, taskType = null) => {
+    const url = taskType 
+      ? `/tasks/subtask-templates/${role}?task_type=${taskType}`
+      : `/tasks/subtask-templates/${role}`;
+    console.log('🔗 API: Calling getSubtaskTemplates with URL:', url);
+    console.log('🔗 API: Parameters:', { role, taskType });
+    const response = await api.get(url);
+    console.log('🔗 API: Response:', response.data);
     return response.data;
   },
   // Submit subtasks status

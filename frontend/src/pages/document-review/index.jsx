@@ -42,9 +42,21 @@ const DocumentReview = () => {
 
 
   /** 🧩 Create Default Subtasks */
-  const createDefaultSubtasks = async (taskId, assignedRole) => {
+  const createDefaultSubtasks = async (taskId, assignedRole, taskType = null) => {
     try {
-      const templates = await taskAPI.getSubtaskTemplates(assignedRole);
+      // If no task type provided, get the first available one for the role
+      if (!taskType) {
+        const taskTypesResponse = await taskAPI.getTaskTypes(assignedRole);
+        if (taskTypesResponse?.task_types && taskTypesResponse.task_types.length > 0) {
+          taskType = taskTypesResponse.task_types[0];
+          console.log(`🎯 Using first available task type for ${assignedRole}:`, taskType);
+        } else {
+          console.error(`❌ No task types available for role: ${assignedRole}`);
+          return;
+        }
+      }
+      
+      const templates = await taskAPI.getSubtaskTemplates(assignedRole, taskType);
       const defaultSubtasks = templates?.templates || [];
 
       for (const subtask of defaultSubtasks) {
@@ -55,7 +67,7 @@ const DocumentReview = () => {
           order_index: subtask.order,
         });
       }
-      console.log(`✅ Created ${defaultSubtasks.length} default subtasks for ${taskId}`);
+      console.log(`✅ Created ${defaultSubtasks.length} default subtasks for ${taskId} (task type: ${taskType})`);
     } catch (err) {
       console.error("Error creating default subtasks:", err);
     }
@@ -243,10 +255,32 @@ const DocumentReview = () => {
         if (docs.length > 0) setSelectedDocument(docs[0]);
       }
 
+      // Store auto-switch info for later processing
+      const autoSwitchRole = location.state?.autoSwitchRole;
+      const targetRole = location.state?.reviewerRole;
+      
+      console.log('📋 Document Review - Navigation state:', {
+        autoSwitchRole,
+        targetRole,
+        taskType: location.state?.taskType,
+        taskAssignedRole: task.assigned_role,
+        currentReviewerRole: reviewerRole,
+        locationState: location.state,
+        projectId,
+        landId: task.land_id
+      });
+      
+      if (autoSwitchRole && targetRole) {
+        console.log('🔄 Auto-switch requested for role:', targetRole, 'from task role:', task.assigned_role);
+        // Store the target role for processing after component is fully loaded
+        window.autoSwitchTargetRole = targetRole;
+        window.autoSwitchProjectId = projectId;
+      }
+
       // Subtasks
       let taskSubtasks = await taskAPI.getSubtasks(task.task_id);
       if (!taskSubtasks || taskSubtasks.length === 0) {
-        await createDefaultSubtasks(task.task_id, task.assigned_role);
+        await createDefaultSubtasks(task.task_id, task.assigned_role, task.task_type);
         taskSubtasks = await taskAPI.getSubtasks(task.task_id);
       }
       setSubtasks(taskSubtasks);
@@ -294,6 +328,29 @@ const DocumentReview = () => {
     fetchReviewStatuses();
   }, [currentLand?.land_id]);
 
+  /** 🧩 Auto-switch to target role after component is fully loaded */
+  useEffect(() => {
+    const autoSwitchTargetRole = window.autoSwitchTargetRole;
+    const autoSwitchProjectId = window.autoSwitchProjectId;
+    
+    console.log('🔄 Auto-switch check:', {
+      autoSwitchTargetRole,
+      autoSwitchProjectId,
+      currentReviewerRole: reviewerRole,
+      currentProjectId: projectId,
+      shouldSwitch: autoSwitchTargetRole && reviewerRole && autoSwitchTargetRole !== reviewerRole
+    });
+    
+    if (autoSwitchTargetRole && reviewerRole && autoSwitchTargetRole !== reviewerRole) {
+      console.log('🔄 Auto-switching to role:', autoSwitchTargetRole);
+      // Clear the stored target role
+      delete window.autoSwitchTargetRole;
+      delete window.autoSwitchProjectId;
+      // Store the target role for the handleRoleChange function to pick up
+      window.pendingRoleSwitch = autoSwitchTargetRole;
+    }
+  }, [reviewerRole, projectId]);
+
   /** 🧩 Role Switching */
   const handleRoleChange = async (newRole) => {
     if (isRoleChanging || reviewerRole === newRole) return;
@@ -305,11 +362,25 @@ const DocumentReview = () => {
     setSubtasks([]);
     
     console.log('🔄 Role change initiated:', newRole);
+    console.log('🔄 Current state:', {
+      currentTask: currentTask?.task_id,
+      currentLand: currentLand?.land_id,
+      projectId,
+      locationState: location.state
+    });
   
     try {
-      // Fetch all tasks for the current land
-      const landId = currentTask?.land_id || currentLand?.land_id;
-      if (!landId) throw new Error("No land selected");
+      // Get land ID from multiple sources
+      const landId = currentTask?.land_id || currentLand?.land_id || projectId || location.state?.landId;
+      if (!landId) {
+        console.error('❌ No land ID available for role change:', {
+          currentTask: currentTask?.land_id,
+          currentLand: currentLand?.land_id,
+          projectId,
+          locationStateLandId: location.state?.landId
+        });
+        throw new Error("No land selected");
+      }
   
       console.log('📋 Fetching tasks for land:', landId);
       const tasksForLand = await taskAPI.getTasks({ land_id: landId });
@@ -348,7 +419,7 @@ const DocumentReview = () => {
       console.log('📦 Fetched subtasks:', subtasksForRole);
       
       if (!subtasksForRole || subtasksForRole.length === 0) {
-        await createDefaultSubtasks(roleTask.task_id, roleTask.assigned_role);
+        await createDefaultSubtasks(roleTask.task_id, roleTask.assigned_role, roleTask.task_type);
         subtasksForRole = await taskAPI.getSubtasks(roleTask.task_id);
       }
       
@@ -393,8 +464,25 @@ const DocumentReview = () => {
       console.log('✅ Role change complete for:', newRole);
     }
   };
-  
-  
+
+  /** 🧩 Check for pending role switch after handleRoleChange is defined */
+  useEffect(() => {
+    const pendingRoleSwitch = window.pendingRoleSwitch;
+    if (pendingRoleSwitch && currentTask && currentLand) {
+      console.log('🔄 Executing pending role switch to:', pendingRoleSwitch);
+      console.log('🔄 Current reviewer role:', reviewerRole);
+      console.log('🔄 Current project ID:', projectId);
+      console.log('🔄 Current task:', currentTask?.task_id);
+      console.log('🔄 Current land:', currentLand?.land_id);
+      delete window.pendingRoleSwitch;
+      
+      // Add a small delay to ensure everything is ready
+      setTimeout(() => {
+        handleRoleChange(pendingRoleSwitch);
+      }, 200);
+    }
+  }, [reviewerRole, projectId, currentTask, currentLand]); // Added currentTask and currentLand dependencies
+
   /** 🧩 Annotation & Subtask handlers */
   const handleAddAnnotation = (a) => setAnnotations((prev) => [...prev, a]);
   const handleDeleteAnnotation = (id) => setAnnotations((p) => p.filter((a) => a.id !== id));
@@ -519,14 +607,7 @@ const DocumentReview = () => {
               </div>
             </div>
             
-            {/* Role Status Tracking - Moved under Document Viewer */}
-            <div className="mt-6">
-              <RoleStatusTracking
-                roleStatuses={roleStatuses}
-                onPublish={handlePublish}
-                isPublishing={isPublishing}
-              />
-            </div>
+            {/* Project Review Status by Role card removed as requested */}
           </div>
 
           <div className="xl:col-span-3">
@@ -543,6 +624,9 @@ const DocumentReview = () => {
               onViewDocument={handleViewDocument}
               onEditDocument={handleEditDocument}
               onApprove={handleApproveReview}
+              initialRole={location.state?.reviewerRole}
+              autoSwitchRole={location.state?.autoSwitchRole}
+              initialTaskType={location.state?.taskType}
             />
           </div>
         </div>
