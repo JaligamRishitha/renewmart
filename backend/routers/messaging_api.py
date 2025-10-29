@@ -38,6 +38,9 @@ class SendMessageRequest(BaseModel):
     is_urgent: bool = False
     message_type: str = "text"
 
+class MarkReadRequest(BaseModel):
+    message_ids: List[str]
+
 class MessageStats(BaseModel):
     total_messages: int
     urgent_messages: int
@@ -320,17 +323,47 @@ async def get_message_reaction_summary(
 
 @router.post("/messages/mark-read")
 async def mark_messages_as_read(
-    message_ids: List[str],
+    request: MarkReadRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Mark specific messages as read"""
     try:
+        if not request.message_ids:
+            return {"marked_count": 0}
+        
         queries = MessagingQueries(db)
-        count = queries.mark_messages_as_read(current_user["user_id"], message_ids)
+        count = queries.mark_messages_as_read(current_user["user_id"], request.message_ids)
         return {"marked_count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error marking messages as read: {str(e)}")
+
+@router.post("/messages/mark-conversation-read/{sender_id}")
+async def mark_conversation_as_read(
+    sender_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark all unread messages from a specific sender as read"""
+    try:
+        query = text("""
+            UPDATE messages 
+            SET is_read = TRUE, read_at = NOW()
+            WHERE sender_id = :sender_id
+            AND (recipient_id = :user_id OR recipient_id IS NULL)
+            AND is_read = FALSE
+        """)
+        
+        result = db.execute(query, {
+            "sender_id": sender_id,
+            "user_id": current_user["user_id"]
+        })
+        db.commit()
+        
+        return {"marked_count": result.rowcount}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error marking conversation as read: {str(e)}")
 
 # ==================== ANALYTICS ENDPOINTS ====================
 

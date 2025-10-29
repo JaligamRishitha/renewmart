@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
 import Header from '../../components/ui/Header';
 import { taskAPI, documentsAPI, landsAPI, usersAPI, reviewerAPI } from '../../services/api';
+import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SubtaskManager from './SubtaskManager';
 import ReviewPanelCompact from './ReviewPanelCompact';
@@ -32,6 +33,7 @@ const ProjectDetails = () => {
   const [isProcessingSlot, setIsProcessingSlot] = useState(false);
   const [expandedAccordions, setExpandedAccordions] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
+  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
 
   // Get user's reviewer role
   const reviewerRole = user?.roles?.find(role => 
@@ -53,7 +55,30 @@ const ProjectDetails = () => {
 
   useEffect(() => {
     fetchProjectDetails();
+    loadMessagingUnreadCount();
   }, [landId]);
+
+  // Refresh messaging unread count periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only refresh if messaging tab is not active
+      if (activeTab !== 'messaging') {
+        loadMessagingUnreadCount();
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
+  
+  // Clear count when messaging tab is opened
+  useEffect(() => {
+    if (activeTab === 'messaging') {
+      setMessagingUnreadCount(0);
+    } else {
+      // Refresh count when leaving messaging tab
+      loadMessagingUnreadCount();
+    }
+  }, [activeTab]);
 
   // Debug: Log document changes
   useEffect(() => {
@@ -336,7 +361,18 @@ const ProjectDetails = () => {
     const typeMap = new Map();
     
     // Process each document type separately to ensure consistent version numbering
-    const documentTypes = [...new Set(documents.filter(doc => !doc.subtask_id).map(doc => doc.document_type || 'unknown'))];
+    // Filter out subtask documents and subtask document types
+    const documentTypes = [...new Set(documents
+      .filter(doc => !doc.subtask_id)
+      .filter(doc => {
+        const docType = doc.document_type || 'unknown';
+        return docType !== 'subtask-document' && 
+               docType !== 'subtask_document' &&
+               !docType.toLowerCase().includes('subtask document') &&
+               !docType.toLowerCase().includes('subtask-document') &&
+               !docType.toLowerCase().includes('subtask_document');
+      })
+      .map(doc => doc.document_type || 'unknown'))];
     
     documentTypes.forEach(type => {
       // Get all documents of this type
@@ -351,7 +387,7 @@ const ProjectDetails = () => {
       // Calculate total count and latest version across all slots
       let totalCount = 0;
       let maxVersion = 0;
-      let underReviewVersion = null;
+      const underReviewVersions = {}; // Track under review versions per slot: { D1: 3, D2: 5 }
       
       Object.entries(groupedDocs).forEach(([slot, slotDocs]) => {
         const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -364,7 +400,7 @@ const ProjectDetails = () => {
           
           if (isUnderReview) {
             console.log(`Document ${doc.file_name} in ${slot} is under review with version ${versionNumber}`);
-            underReviewVersion = versionNumber;
+            underReviewVersions[slot] = versionNumber;
           }
         });
         
@@ -378,7 +414,7 @@ const ProjectDetails = () => {
         icon: getDocumentTypeIcon(type),
         count: totalCount,
         latestVersion: maxVersion, // Latest version across all slots
-        underReviewVersion: underReviewVersion,
+        underReviewVersions: underReviewVersions, // Object with slot -> version mapping
         documents: docsOfType
       });
     });
@@ -392,7 +428,7 @@ const ProjectDetails = () => {
       name: type.name,
       count: type.count,
       latestVersion: type.latestVersion,
-      underReviewVersion: type.underReviewVersion
+      underReviewVersions: type.underReviewVersions
     })));
     
     return result;
@@ -412,18 +448,26 @@ const ProjectDetails = () => {
       const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       
       sortedSlotDocs.forEach((doc, index) => {
+        // Determine the final status
+        const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
+        const finalStatus = isUnderReview ? 'under_review' : (doc.version_status || doc.status || 'pending');
+        
         const processedDoc = {
           ...doc,
           version: index + 1, // Independent version numbering per slot
           isLatest: index === sortedSlotDocs.length - 1, // Last document in slot is latest
-          // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
-          status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+          // Ensure both status and version_status are set correctly
+          status: finalStatus,
+          // Preserve version_status if it's 'under_review', otherwise set it to match status
+          version_status: doc.version_status === 'under_review' ? 'under_review' : (doc.version_status || finalStatus)
         };
         
         console.log(`Processing document ${doc.file_name} in ${slot}:`, {
           original_status: doc.status,
-          version_status: doc.version_status,
+          original_version_status: doc.version_status,
           final_status: processedDoc.status,
+          final_version_status: processedDoc.version_status,
+          isUnderReview: isDocumentUnderReview(processedDoc),
           slot: slot,
           version: processedDoc.version
         });
@@ -458,6 +502,11 @@ const ProjectDetails = () => {
     }
   };
 
+  // Helper function to check if a document is under review
+  const isDocumentUnderReview = (doc) => {
+    return doc.status === 'under_review' || doc.version_status === 'under_review';
+  };
+
   const refreshDocuments = async () => {
     try {
       console.log('Refreshing documents from server...');
@@ -468,15 +517,23 @@ const ProjectDetails = () => {
       const filteredDocs = (docsResponse || [])
         .filter(doc => !doc.subtask_id)
         .map(doc => {
+          // Determine if document is under review
+          const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
+          const finalStatus = isUnderReview ? 'under_review' : (doc.version_status || doc.status || 'pending');
+          
           const processedDoc = {
             ...doc,
-            // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
-            status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+            // Ensure both status and version_status are set correctly
+            status: finalStatus,
+            // Preserve version_status if it's 'under_review', otherwise set it appropriately
+            version_status: doc.version_status === 'under_review' ? 'under_review' : (doc.version_status || finalStatus)
           };
           console.log(`Refreshed document ${doc.file_name}:`, {
-            version_status: doc.version_status,
+            original_version_status: doc.version_status,
             original_status: doc.status,
-            final_status: processedDoc.status
+            final_status: processedDoc.status,
+            final_version_status: processedDoc.version_status,
+            isUnderReview: isDocumentUnderReview(processedDoc)
           });
           return processedDoc;
         });
@@ -546,29 +603,59 @@ const ProjectDetails = () => {
     return slotStatus.status_summary;
   };
 
+  const loadMessagingUnreadCount = async () => {
+    try {
+      const response = await api.get('/messaging/messages/stats/unread-count');
+      setMessagingUnreadCount(response.data.unread_count || 0);
+    } catch (error) {
+      console.error('Error loading messaging unread count:', error);
+    }
+  };
+
  const handleMarkForReview = async (doc) => {
   if (isProcessing) return;
 
   try {
     setIsProcessing(true);
 
-    if (doc.status === 'under_review') {
-
+    if (isDocumentUnderReview(doc)) {
       toast.error('Document is already under review');
       return;
     }
 
-    // Optimistic UI update
-    setDocuments(prevDocs =>
-      prevDocs.map(d =>
-        d.document_id === doc.document_id
-          ? { ...d, version_status: 'under_review', status: 'under_review' }
-          : d
-      )
-    );
+    // Get the doc_slot (default to 'D1' if not specified)
+    const docSlot = doc.doc_slot || 'D1';
+    const documentType = doc.document_type;
+
+    // Optimistic UI update: Mark current doc as under_review and unmark others in same slot
+    setDocuments(prevDocs => {
+      const updated = prevDocs.map(d => {
+        // Same document - mark as under review
+        if (d.document_id === doc.document_id) {
+          console.log('Marking document as under review:', d.file_name);
+          return { ...d, version_status: 'under_review', status: 'under_review' };
+        }
+        // Other documents in same slot and type - unmark from review
+        if (d.document_type === documentType && 
+            (d.doc_slot || 'D1') === docSlot && 
+            d.document_id !== doc.document_id &&
+            (d.version_status === 'under_review' || d.status === 'under_review')) {
+          console.log('Unmarking document from review:', d.file_name);
+          return { ...d, version_status: 'active', status: 'active' };
+        }
+        return d;
+      });
+      console.log('Updated documents state:', updated.map(d => ({
+        file_name: d.file_name,
+        status: d.status,
+        version_status: d.version_status,
+        isUnderReview: isDocumentUnderReview(d)
+      })));
+      return updated;
+    });
     setForceUpdate(prev => prev + 1);
 
-     // API call
+     // API call - backend will handle unmarking others in the same slot
      const response = await reviewerAPI.claimDocument(doc.document_id);
 
     // ✅ Wait for backend confirmation before showing toast
@@ -579,13 +666,7 @@ const ProjectDetails = () => {
     console.error('Error marking document for review:', error);
 
     // Revert optimistic update on error
-    setDocuments(prevDocs =>
-      prevDocs.map(d =>
-        d.document_id === doc.document_id
-          ? { ...d, version_status: 'pending', status: 'pending' }
-          : d
-      )
-    );
+    await refreshDocuments();
 
     setForceUpdate(prev => prev + 1);
     toast.error(error.response?.data?.detail || 'Failed to mark document for review');
@@ -601,7 +682,7 @@ const handleReleaseFromReview = async (doc) => {
   try {
     setIsProcessing(true);
 
-    if (doc.status !== 'under_review') {
+    if (!isDocumentUnderReview(doc)) {
       toast.error('Document is not under review');
       return;
     }
@@ -717,8 +798,13 @@ const handleReleaseFromReview = async (doc) => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === 'messaging') {
+                    loadMessagingUnreadCount(); // Refresh count when messaging tab is opened
+                  }
+                }}
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors relative ${
                   activeTab === tab.id
                     ? 'border-primary text-primary font-medium'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -726,6 +812,11 @@ const handleReleaseFromReview = async (doc) => {
               >
                 <Icon name={tab.icon} size={18} />
                 {tab.label}
+                {tab.id === 'messaging' && messagingUnreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ml-1">
+                    {messagingUnreadCount > 99 ? '99+' : messagingUnreadCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -874,10 +965,14 @@ const handleReleaseFromReview = async (doc) => {
                               <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
                                 Latest: v{docType.latestVersion}
                               </span>
-                              {docType.underReviewVersion && (
-                                <span className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">
-                                  Under Review: v{docType.underReviewVersion}
-                                </span>
+                              {docType.underReviewVersions && Object.keys(docType.underReviewVersions).length > 0 && (
+                                <div className="flex items-center space-x-1 flex-wrap">
+                                  {Object.entries(docType.underReviewVersions).map(([slot, version]) => (
+                                    <span key={slot} className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">
+                                      {slot}: v{version}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                             </div>
                             {/* Slot Status Indicator */}
@@ -937,7 +1032,7 @@ const handleReleaseFromReview = async (doc) => {
                                   {/* Slot Review Buttons */}
                                   {docs.length > 0 && (
                                     <div className="flex items-center space-x-2">
-                                      {docs.some(doc => doc.status === 'under_review') ? (
+                                      {docs.some(doc => isDocumentUnderReview(doc)) ? (
                                         <button
                                           onClick={() => handleUnlockSlotFromReview(selectedDocumentType.id, docSlot)}
                                           disabled={isProcessingSlot}
@@ -964,9 +1059,25 @@ const handleReleaseFromReview = async (doc) => {
                                 <div className="border-t border-border">
                                   <div className="p-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {docs.map((doc, versionIndex) => (
+                                      {docs.map((doc, versionIndex) => {
+                                        // Debug log for each document being rendered
+                                        if (versionIndex === 0) {
+                                          console.log('Rendering documents - First document:', {
+                                            file_name: doc.file_name,
+                                            status: doc.status,
+                                            version_status: doc.version_status,
+                                            isUnderReview: isDocumentUnderReview(doc),
+                                            allDocs: docs.map(d => ({
+                                              file_name: d.file_name,
+                                              status: d.status,
+                                              version_status: d.version_status,
+                                              isUnderReview: isDocumentUnderReview(d)
+                                            }))
+                                          });
+                                        }
+                                        return (
                                         <div
-                                          key={`${doc.document_id}-${doc.status}-${forceUpdate}`}
+                                          key={`${doc.document_id}-${doc.status}-${doc.version_status}-${forceUpdate}`}
                                           className={`p-4 rounded-lg border hover:shadow-md transition-all ${
                                             doc.isLatest ? 'border-primary bg-primary/5' : 'border-border bg-card'
                                           }`}
@@ -985,7 +1096,7 @@ const handleReleaseFromReview = async (doc) => {
                                                         Latest
                                                       </span>
                                                     )}
-                                                    {doc.status === 'under_review' && (
+                                                    {isDocumentUnderReview(doc) && (
                                                       <span className="px-2 py-1 bg-orange-500 text-white text-xs rounded">
                                                         Under Review
                                                       </span>
@@ -1015,7 +1126,7 @@ const handleReleaseFromReview = async (doc) => {
                                                 </div>
                                               </div>
 
-                                              {doc.status === 'under_review' && doc.reviewedBy && (
+                                              {isDocumentUnderReview(doc) && doc.reviewedBy && (
                                                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                                                   <div className="flex items-center space-x-1 mb-1">
                                                     <Icon name="Clock" size={12} className="text-yellow-600" />
@@ -1038,21 +1149,22 @@ const handleReleaseFromReview = async (doc) => {
                                                       file_name: doc.file_name,
                                                       status: doc.status,
                                                       version_status: doc.version_status,
-                                                      document_id: doc.document_id
+                                                      document_id: doc.document_id,
+                                                      isUnderReview: isDocumentUnderReview(doc)
                                                     });
-                                                    doc.status === 'under_review' ? handleReleaseFromReview(doc) : handleMarkForReview(doc);
+                                                    isDocumentUnderReview(doc) ? handleReleaseFromReview(doc) : handleMarkForReview(doc);
                                                   }}
                                                   disabled={isProcessing}
                                                   className={`px-3 py-1 text-sm border rounded-md transition-colors ${
                                                     isProcessing 
                                                       ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed'
-                                                      : doc.status === 'under_review' 
+                                                      : isDocumentUnderReview(doc)
                                                         ? 'bg-orange-500 text-white border-orange-600 hover:bg-orange-600' 
                                                         : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
                                                   }`}
-                                                  title={isProcessing ? 'Processing...' : (doc.status === 'under_review' ? 'Release from Review' : 'Mark for Review')}
+                                                  title={isProcessing ? 'Processing...' : (isDocumentUnderReview(doc) ? 'Release from Review' : 'Mark for Review')}
                                                 >
-                                                  <Icon name={isProcessing ? 'Loader' : (doc.status === 'under_review' ? 'Clock' : 'Check')} size={16} />
+                                                  <Icon name={isProcessing ? 'Loader' : (isDocumentUnderReview(doc) ? 'Clock' : 'Check')} size={16} />
                                                 </button>
                                                 <button
                                                   onClick={() => handleViewDocument(doc)}
@@ -1070,7 +1182,8 @@ const handleReleaseFromReview = async (doc) => {
                                             </div>
                                           </div>
                                         </div>
-                                      ))}
+                                      );
+                                      })}
                                     </div>
                                   </div>
                                 </div>
@@ -1106,8 +1219,14 @@ const handleReleaseFromReview = async (doc) => {
           <div className="bg-card border border-border rounded-lg overflow-hidden h-[600px]">
             <TeamsStyleMessaging 
               currentUser={user}
-              onMessageSent={(message) => console.log('Message sent:', message)}
-              onMessageReceived={(message) => console.log('Message received:', message)}
+              onMessageSent={(message) => {
+                console.log('Message sent:', message);
+                loadMessagingUnreadCount(); // Refresh count after sending
+              }}
+              onMessageReceived={(message) => {
+                console.log('Message received:', message);
+                loadMessagingUnreadCount(); // Refresh count on new message
+              }}
             />
           </div>
         )}

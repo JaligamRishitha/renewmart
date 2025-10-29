@@ -3,8 +3,9 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import { taskAPI, documentsAPI } from '../../../services/api';
 import { Checkbox } from '../../../components/ui/Checkbox';
-import ProjectMessaging from './ProjectMessaging';
+import TeamsStyleMessaging from '../../reviewer-dashboard/components/TeamsStyleMessaging';
 import CollaborationTab from './CollaborationTab';
+import api from '../../../services/api';
 
 /**
  * ReviewPanel Component
@@ -142,6 +143,28 @@ const ReviewPanel = ({
 
   const [activeTab, setActiveTab] = useState("review");
   const [showMessaging, setShowMessaging] = useState(false);
+  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
+  // Load messaging unread count
+  const loadMessagingUnreadCount = async () => {
+    try {
+      if (currentTask?.land_id) {
+        const response = await api.get('/messaging/messages/stats/unread-count');
+        setMessagingUnreadCount(response.data.unread_count || 0);
+      }
+    } catch (error) {
+      console.error('Error loading messaging unread count:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!showMessaging) {
+      loadMessagingUnreadCount();
+      const interval = setInterval(() => {
+        loadMessagingUnreadCount();
+      }, 30000); // Refresh every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showMessaging, currentTask?.land_id]);
 
   // 🔹 Reload state from localStorage when user becomes available
   useEffect(() => {
@@ -164,6 +187,7 @@ const ReviewPanel = ({
       }
     }
   }, [currentUser?.user_id]);
+
 
   // 🔹 Sync local state with role-specific state when role changes
   useEffect(() => {
@@ -722,8 +746,17 @@ const ReviewPanel = ({
       <div className="p-4 border-b border-border bg-muted/30">
         <div className="flex items-center justify-end">
           <button
-            onClick={() => setShowMessaging(!showMessaging)}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+            onClick={() => {
+              setShowMessaging(!showMessaging);
+              if (!showMessaging) {
+                // Clear count when opening messaging
+                setMessagingUnreadCount(0);
+              } else {
+                // Refresh count when closing messaging
+                loadMessagingUnreadCount();
+              }
+            }}
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors relative ${
               showMessaging
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
@@ -731,41 +764,56 @@ const ReviewPanel = ({
           >
             <Icon name="MessageCircle" size={16} />
             <span>Messaging</span>
+            {!showMessaging && messagingUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {messagingUnreadCount > 99 ? '99+' : messagingUnreadCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Tabs - Always visible */}
-      <div className="flex border-b">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center px-4 py-3 text-sm ${
-              activeTab === tab.id
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <Icon name={tab.icon} size={16} />
-            <span className="ml-1">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* Tabs - Hide when messaging is open */}
+      {!showMessaging && (
+        <div className="flex border-b flex-shrink-0">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center px-4 py-3 text-sm ${
+                activeTab === tab.id
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Icon name={tab.icon} size={16} />
+              <span className="ml-1">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Messaging Content */}
+      {/* Messaging Content - Takes full remaining height when open */}
       {showMessaging && (
-        <div className="flex-1 overflow-hidden">
-          <ProjectMessaging 
+        <div className="flex-1 overflow-hidden min-h-0">
+          <TeamsStyleMessaging 
             currentUser={currentUser}
-            onMessageSent={(message) => console.log('Message sent:', message)}
-            onMessageReceived={(message) => console.log('Message received:', message)}
+            landId={currentTask?.land_id}
+            onMessageSent={(message) => {
+              console.log('Message sent:', message);
+              loadMessagingUnreadCount();
+            }}
+            onMessageReceived={(message) => {
+              console.log('Message received:', message);
+              loadMessagingUnreadCount();
+            }}
           />
         </div>
       )}
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-hidden relative">
+      {/* Tab Content - Only show when messaging is closed */}
+      {!showMessaging && (
+      <div className="flex-1 overflow-hidden relative min-h-0">
         {!showMessaging && activeTab === "review" && (
           <div className="h-full overflow-y-auto">
             {hasNoTask && !hasTemplates ? (
@@ -1422,6 +1470,7 @@ const ReviewPanel = ({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

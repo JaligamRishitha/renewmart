@@ -22,14 +22,27 @@ const ProjectMessaging = ({
   const [isUrgent, setIsUrgent] = useState(false);
   const [loadingParticipants, setLoadingParticipants] = useState(true);
   const [loadingConversations, setLoadingConversations] = useState(false);
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const messagesEndRef = useRef(null);
   const { user, token } = useAuth();
 
   useEffect(() => {
     if (token && projectId) {
       loadParticipants();
+      loadUnreadCount();
       connectWebSocket();
     }
+  }, [token, projectId]);
+
+  // Refresh unread count periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (token && projectId) {
+        loadUnreadCount();
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
   }, [token, projectId]);
 
   // Add WebSocket event listeners
@@ -37,6 +50,22 @@ const ProjectMessaging = ({
     if (isConnected) {
       const handleNewMessage = (message) => {
         console.log('Received new message:', message);
+        
+        // Update unread count for the sender
+        if (message.sender_id !== user?.user_id) {
+          setParticipants(prev => prev.map(p => {
+            if (p.user_id === message.sender_id) {
+              return {
+                ...p,
+                unreadCount: (p.unreadCount || 0) + 1,
+                lastMessageTime: message.created_at,
+                lastMessage: message.content
+              };
+            }
+            return p;
+          }));
+          setTotalUnreadCount(prev => prev + 1);
+        }
         
         // Add message to conversation if it's for the selected participant
         if (selectedParticipant && message.sender_id === selectedParticipant.user_id) {
@@ -66,13 +95,79 @@ const ProjectMessaging = ({
         websocketService.off('new_message', handleNewMessage);
       };
     }
-  }, [isConnected, selectedParticipant, onMessageReceived]);
+  }, [isConnected, selectedParticipant, onMessageReceived, user]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await api.get('/messaging/messages/stats/unread-count');
+      setTotalUnreadCount(response.data.unread_count || 0);
+    } catch (error) {
+      console.error('Error loading unread count:', error);
+    }
+  };
 
   const loadParticipants = async () => {
     try {
       setLoadingParticipants(true);
       const response = await api.get(`/messaging/project/${projectId}/participants`);
-      setParticipants(response.data);
+      const participantsList = response.data || [];
+      
+      // Load unread counts and last messages for each participant
+      const participantsWithUnread = await Promise.all(
+        participantsList.map(async (participant) => {
+          try {
+            // Get conversation summary with unread count
+            const convResponse = await api.get(`/messaging/conversations/${participant.user_id}`);
+            const messages = convResponse.data || [];
+            
+            // Calculate unread count
+            const unreadCount = messages.filter(msg => 
+              !msg.is_read && msg.sender_id !== user?.user_id
+            ).length;
+            
+            // Get last message
+            const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+            
+            return {
+              ...participant,
+              unreadCount: unreadCount || 0,
+              lastMessageTime: lastMessage?.created_at || null,
+              lastMessage: lastMessage?.content || null
+            };
+          } catch (error) {
+            console.error(`Error loading conversation for ${participant.user_id}:`, error);
+            return {
+              ...participant,
+              unreadCount: 0,
+              lastMessageTime: null,
+              lastMessage: null
+            };
+          }
+        })
+      );
+      
+      // Sort by last message time (most recent first), then by unread count
+      participantsWithUnread.sort((a, b) => {
+        // Chats with unread messages first
+        if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+        if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+        
+        // Then by last message time (most recent first)
+        if (a.lastMessageTime && b.lastMessageTime) {
+          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+        }
+        if (a.lastMessageTime) return -1;
+        if (b.lastMessageTime) return 1;
+        
+        // Finally by name
+        return a.name.localeCompare(b.name);
+      });
+      
+      setParticipants(participantsWithUnread);
+      
+      // Update total unread count
+      const totalUnread = participantsWithUnread.reduce((sum, p) => sum + (p.unreadCount || 0), 0);
+      setTotalUnreadCount(totalUnread);
     } catch (error) {
       console.error('Error loading participants:', error);
     } finally {
@@ -100,6 +195,33 @@ const ProjectMessaging = ({
         ...prev,
         [participantId]: formattedMessages
       }));
+      
+      // Mark messages as read
+      const unreadMessageIds = formattedMessages
+        .filter(msg => !msg.is_read && msg.sender_id !== user?.user_id)
+        .map(msg => msg.message_id);
+      
+      if (unreadMessageIds.length > 0) {
+        try {
+          await api.post('/messaging/messages/mark-read', {
+            message_ids: unreadMessageIds
+          });
+          
+          // Update unread count in participants list
+          setParticipants(prev => prev.map(p => {
+            if (p.user_id === participantId) {
+              const newCount = Math.max(0, (p.unreadCount || 0) - unreadMessageIds.length);
+              return { ...p, unreadCount: newCount };
+            }
+            return p;
+          }));
+          
+          // Update total unread count
+          setTotalUnreadCount(prev => Math.max(0, prev - unreadMessageIds.length));
+        } catch (error) {
+          console.error('Error marking messages as read:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading conversation:', error);
       // Set empty array if conversation loading fails
@@ -128,12 +250,32 @@ const ProjectMessaging = ({
     // Load conversation if not already loaded
     if (!conversations[participant.user_id]) {
       loadConversation(participant.user_id);
+    } else {
+      // Still mark messages as read even if conversation is already loaded
+      const conversation = conversations[participant.user_id] || [];
+      const unreadMessageIds = conversation
+        .filter(msg => !msg.is_read && msg.sender_id !== user?.user_id)
+        .map(msg => msg.message_id);
+      
+      if (unreadMessageIds.length > 0) {
+        api.post('/messaging/messages/mark-read', {
+          message_ids: unreadMessageIds
+        }).then(() => {
+          setParticipants(prev => prev.map(p => {
+            if (p.user_id === participant.user_id) {
+              return { ...p, unreadCount: 0 };
+            }
+            return p;
+          }));
+          setTotalUnreadCount(prev => Math.max(0, prev - unreadMessageIds.length));
+        }).catch(err => console.error('Error marking messages as read:', err));
+      } else {
+        // Clear unread count for this participant
+        setParticipants(prev => prev.map(p => 
+          p.user_id === participant.user_id ? { ...p, unreadCount: 0 } : p
+        ));
+      }
     }
-    
-    // Clear unread count for this participant
-    setParticipants(prev => prev.map(p => 
-      p.user_id === participant.user_id ? { ...p, unreadCount: 0 } : p
-    ));
   };
 
   const handleSendMessage = async () => {
@@ -196,6 +338,19 @@ const ProjectMessaging = ({
 
         setNewMessage('');
         setIsUrgent(false);
+        
+        // Update participant's last message info
+        setParticipants(prev => prev.map(p => {
+          if (p.user_id === selectedParticipant.user_id) {
+            return {
+              ...p,
+              lastMessageTime: message.created_at,
+              lastMessage: message.content
+            };
+          }
+          return p;
+        }));
+        
         onMessageSent(message);
         
         // Success toast
@@ -237,6 +392,39 @@ const ProjectMessaging = ({
 
         setNewMessage('');
         setIsUrgent(false);
+        
+        // Update participant's last message info
+        setParticipants(prev => prev.map(p => {
+          if (p.user_id === selectedParticipant.user_id) {
+            return {
+              ...p,
+              lastMessageTime: message.created_at,
+              lastMessage: message.content
+            };
+          }
+          return p;
+        }));
+        
+        // Re-sort participants by last message time
+        setParticipants(prev => {
+          const sorted = [...prev].sort((a, b) => {
+            // Chats with unread messages first
+            if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+            if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+            
+            // Then by last message time (most recent first)
+            if (a.lastMessageTime && b.lastMessageTime) {
+              return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+            }
+            if (a.lastMessageTime) return -1;
+            if (b.lastMessageTime) return 1;
+            
+            // Finally by name
+            return a.name.localeCompare(b.name);
+          });
+          return sorted;
+        });
+        
         onMessageSent(message);
         
         toast.dismiss();
@@ -292,10 +480,17 @@ const ProjectMessaging = ({
       {/* Participants Sidebar */}
       <div className="w-1/3 border-r border-border bg-card">
         <div className="p-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Icon name="Users" size={20} className="text-primary" />
-            Team Members
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Icon name="Users" size={20} className="text-primary" />
+              Team Members
+              {totalUnreadCount > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                  {totalUnreadCount}
+                </span>
+              )}
+            </h3>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
             Select a team member to start chatting
           </p>
@@ -316,7 +511,11 @@ const ProjectMessaging = ({
             </div>
           ) : (
             participants.map((participant) => {
-              const lastMessage = getLastMessage(participant.user_id);
+              // Use participant.lastMessage if available, otherwise get from conversations
+              const lastMessage = participant.lastMessage ? {
+                content: participant.lastMessage,
+                created_at: participant.lastMessageTime
+              } : getLastMessage(participant.user_id);
               const isSelected = selectedParticipant?.user_id === participant.user_id;
             
               return (
@@ -340,12 +539,12 @@ const ProjectMessaging = ({
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-foreground truncate">
+                        <h4 className={`font-medium truncate ${participant.unreadCount > 0 ? 'font-semibold' : ''}`}>
                           {participant.name}
                         </h4>
                         {participant.unreadCount > 0 && (
-                          <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                            {participant.unreadCount}
+                          <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                            {participant.unreadCount > 99 ? '99+' : participant.unreadCount}
                           </span>
                         )}
                       </div>

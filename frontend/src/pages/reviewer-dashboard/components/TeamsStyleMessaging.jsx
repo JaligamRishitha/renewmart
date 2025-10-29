@@ -5,14 +5,17 @@ import websocketService from '../../../services/websocketService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useParams } from 'react-router-dom';
 import api from '../../../services/api';
+import { taskAPI } from '../../../services/api';
 import { toast } from 'react-hot-toast';
 
 const TeamsStyleMessaging = ({ 
   currentUser,
   onMessageSent = () => {},
-  onMessageReceived = () => {}
+  onMessageReceived = () => {},
+  landId: landIdProp = null // Accept landId as prop, fallback to useParams
 }) => {
-  const { landId } = useParams();
+  const { landId: landIdFromParams } = useParams();
+  const landId = landIdProp || landIdFromParams; // Use prop if provided, otherwise use params
   const [participants, setParticipants] = useState([]);
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [conversations, setConversations] = useState({});
@@ -22,15 +25,37 @@ const TeamsStyleMessaging = ({
   const [isUrgent, setIsUrgent] = useState(false);
   const [loadingParticipants, setLoadingParticipants] = useState(true);
   const [loadingConversations, setLoadingConversations] = useState(false);
+  const [taskId, setTaskId] = useState(null);
   const messagesEndRef = useRef(null);
   const { user, token } = useAuth();
 
+  // Get task_id for the land
   useEffect(() => {
-    if (landId && token) {
+    const fetchTaskId = async () => {
+      if (!landId) return;
+      try {
+        const tasks = await taskAPI.getTasks({ land_id: landId });
+        if (tasks && tasks.length > 0) {
+          setTaskId(tasks[0].task_id);
+        } else {
+          // If no task, use landId as fallback (some backends may support this)
+          setTaskId(landId);
+        }
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        // Fallback to landId
+        setTaskId(landId);
+      }
+    };
+    fetchTaskId();
+  }, [landId]);
+
+  useEffect(() => {
+    if (landId && token && taskId) {
       loadParticipants();
       connectWebSocket();
     }
-  }, [landId, token]);
+  }, [landId, token, taskId]);
 
   // Add WebSocket event listeners
   useEffect(() => {
@@ -38,7 +63,25 @@ const TeamsStyleMessaging = ({
       const handleNewMessage = (message) => {
         console.log('Received new message:', message);
         
-        // Add message to conversation if it's for the selected participant
+        // Update unread count for the sender (only if chat is NOT currently open)
+        if (message.sender_id !== user?.user_id && message.sender_id !== selectedParticipant?.user_id) {
+          setParticipants(prev => prev.map(p => {
+            if (p.user_id === message.sender_id) {
+              return {
+                ...p,
+                unreadCount: (p.unreadCount || 0) + 1,
+                lastMessageTime: message.created_at,
+                lastMessage: message.content
+              };
+            }
+            return p;
+          }));
+          
+          // Notify parent component about new message for unread count badge
+          onMessageReceived(message);
+        }
+        
+        // If the message is for the currently open chat, add it to conversation without incrementing count
         if (selectedParticipant && message.sender_id === selectedParticipant.user_id) {
           setConversations(prev => ({
             ...prev,
@@ -68,11 +111,73 @@ const TeamsStyleMessaging = ({
     }
   }, [isConnected, selectedParticipant, onMessageReceived]);
 
+
   const loadParticipants = async () => {
     try {
       setLoadingParticipants(true);
       const response = await api.get(`/messaging/project/${landId}/participants`);
-      setParticipants(response.data);
+      const participantsList = response.data || [];
+      
+      // Load unread counts and last messages for each participant
+      const participantsWithUnread = await Promise.all(
+        participantsList.map(async (participant) => {
+          try {
+            // Get conversation summary with unread count
+            const convResponse = await api.get(`/messaging/conversations/${participant.user_id}`);
+            const messages = convResponse.data || [];
+            
+            // Calculate unread count
+            const unreadCount = messages.filter(msg => 
+              !msg.is_read && msg.sender_id !== user?.user_id
+            ).length;
+            
+            // Get last message
+            const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+            
+            return {
+              ...participant,
+              unreadCount: unreadCount || 0,
+              lastMessageTime: lastMessage?.created_at || null,
+              lastMessage: lastMessage?.content || null
+            };
+          } catch (error) {
+            console.error(`Error loading conversation for ${participant.user_id}:`, error);
+            return {
+              ...participant,
+              unreadCount: 0,
+              lastMessageTime: null,
+              lastMessage: null
+            };
+          }
+        })
+      );
+      
+      // Sort by last message time (most recent first), then by unread count
+      participantsWithUnread.sort((a, b) => {
+        // Chats with unread messages first
+        if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+        if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+        
+        // Then by last message time (most recent first)
+        if (a.lastMessageTime && b.lastMessageTime) {
+          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+        }
+        if (a.lastMessageTime) return -1;
+        if (b.lastMessageTime) return 1;
+        
+        // Finally by name
+        return a.name.localeCompare(b.name);
+      });
+      
+      // Clear unread count for currently selected participant
+      const updatedParticipants = participantsWithUnread.map(p => {
+        if (selectedParticipant && p.user_id === selectedParticipant.user_id) {
+          return { ...p, unreadCount: 0 };
+        }
+        return p;
+      });
+      
+      setParticipants(updatedParticipants);
     } catch (error) {
       console.error('Error loading participants:', error);
     } finally {
@@ -100,6 +205,29 @@ const TeamsStyleMessaging = ({
         ...prev,
         [participantId]: formattedMessages
       }));
+      
+      // Mark messages as read
+      const unreadMessageIds = formattedMessages
+        .filter(msg => !msg.is_read && msg.sender_id !== user?.user_id)
+        .map(msg => msg.message_id);
+      
+      if (unreadMessageIds.length > 0) {
+        try {
+          await api.post('/messaging/messages/mark-read', {
+            message_ids: unreadMessageIds
+          });
+          
+          // Update unread count in participants list (should already be 0 from handleParticipantSelect, but keep for safety)
+          setParticipants(prev => prev.map(p => {
+            if (p.user_id === participantId) {
+              return { ...p, unreadCount: 0 };
+            }
+            return p;
+          }));
+        } catch (error) {
+          console.error('Error marking messages as read:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading conversation:', error);
       // Set empty array if conversation loading fails
@@ -114,26 +242,126 @@ const TeamsStyleMessaging = ({
 
   const connectWebSocket = async () => {
     try {
-      await websocketService.connect(token);
+      if (!token) return;
+      
+      // Get WebSocket URL from environment or construct from API base URL
+      const apiBaseUrl = api.defaults.baseURL || '/api';
+      let wsBaseUrl;
+      
+      if (apiBaseUrl.startsWith('/')) {
+        // Relative URL - construct from current origin
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        wsBaseUrl = `${protocol}//${host}`;
+      } else {
+        // Absolute URL
+        wsBaseUrl = apiBaseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+      }
+      
+      await websocketService.connect(token, wsBaseUrl);
       setIsConnected(true);
+      
+      // Join the task/land for real-time messaging
+      if (taskId) {
+        websocketService.joinTask(taskId);
+      }
     } catch (error) {
       console.error('Failed to connect to WebSocket:', error);
       setIsConnected(false);
     }
   };
 
-  const handleParticipantSelect = (participant) => {
+  const handleParticipantSelect = async (participant) => {
     setSelectedParticipant(participant);
     
-    // Load conversation if not already loaded
-    if (!conversations[participant.user_id]) {
-      loadConversation(participant.user_id);
-    }
-    
-    // Clear unread count for this participant
+    // Immediately clear unread count for this participant in UI
     setParticipants(prev => prev.map(p => 
       p.user_id === participant.user_id ? { ...p, unreadCount: 0 } : p
     ));
+    
+    // Load conversation and mark all messages as read
+    try {
+      // First, load or reload the conversation to get all current messages
+      const response = await api.get(`/messaging/conversations/${participant.user_id}`);
+      const allMessages = response.data || [];
+      
+      // Format and store messages
+      const formattedMessages = allMessages.map(msg => ({
+        message_id: msg.message_id,
+        sender_id: msg.sender_id,
+        sender_name: msg.sender_name || 'Unknown',
+        content: msg.content,
+        created_at: msg.created_at,
+        is_read: msg.is_read,
+        is_urgent: msg.is_urgent
+      }));
+      
+      setConversations(prev => ({
+        ...prev,
+        [participant.user_id]: formattedMessages
+      }));
+      
+      // Mark ALL unread messages from this sender as read using the conversation endpoint
+      // This ensures we mark all messages, even ones not currently loaded
+      try {
+        const markResponse = await api.post(`/messaging/messages/mark-conversation-read/${participant.user_id}`);
+        const markedCount = markResponse.data?.marked_count || 0;
+        
+        if (markedCount > 0) {
+          console.log(`Marked ${markedCount} messages as read for ${participant.name}`);
+          
+          // Also mark specific loaded messages in case the endpoint missed any
+          const unreadMessageIds = formattedMessages
+            .filter(msg => !msg.is_read && msg.sender_id === participant.user_id && msg.sender_id !== user?.user_id)
+            .map(msg => msg.message_id);
+          
+          if (unreadMessageIds.length > 0) {
+            try {
+              await api.post('/messaging/messages/mark-read', {
+                message_ids: unreadMessageIds
+              });
+            } catch (error) {
+              console.error('Error marking specific messages as read:', error);
+            }
+          }
+          
+          // Update local conversation state to reflect read status
+          setConversations(prev => ({
+            ...prev,
+            [participant.user_id]: prev[participant.user_id]?.map(msg => 
+              ({ ...msg, is_read: true })
+            ) || []
+          }));
+          
+          // Reload participants to update unread counts
+          await loadParticipants();
+        }
+      } catch (error) {
+        console.error('Error marking conversation as read, trying individual messages:', error);
+        
+        // Fallback: mark individual messages
+        const unreadMessageIds = formattedMessages
+          .filter(msg => !msg.is_read && msg.sender_id === participant.user_id && msg.sender_id !== user?.user_id)
+          .map(msg => msg.message_id);
+        
+        if (unreadMessageIds.length > 0) {
+          try {
+            await api.post('/messaging/messages/mark-read', {
+              message_ids: unreadMessageIds
+            });
+          } catch (err) {
+            console.error('Error marking messages as read:', err);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+      // Still set empty array so UI doesn't break
+      setConversations(prev => ({
+        ...prev,
+        [participant.user_id]: []
+      }));
+    }
   };
 
   const handleSendMessage = async () => {
@@ -153,9 +381,9 @@ const TeamsStyleMessaging = ({
         is_urgent: isUrgent
       });
 
-      // Send message via REST API for persistence
+      // Send message via REST API for persistence (use taskId, fallback to landId)
       const response = await api.post('/messaging/messages/send-simple', {
-        task_id: landId,
+        task_id: taskId || landId,
         content: messageContent,
         recipient_id: recipientId,
         is_urgent: isUrgent,
@@ -185,9 +413,9 @@ const TeamsStyleMessaging = ({
         }));
 
         // Also send via WebSocket for real-time updates (optional)
-        if (isConnected) {
+        if (isConnected && taskId) {
           websocketService.sendMessage(
-            landId,
+            taskId,
             messageContent,
             recipientId,
             isUrgent
@@ -228,19 +456,21 @@ const TeamsStyleMessaging = ({
           ]
         }));
 
-        websocketService.sendMessage(
-          landId,
-          messageContent,
-          recipientId,
-          isUrgent
-        );
+        if (taskId) {
+          websocketService.sendMessage(
+            taskId,
+            messageContent,
+            recipientId,
+            isUrgent
+          );
+        }
 
         setNewMessage('');
         setIsUrgent(false);
         onMessageSent(message);
         
         toast.dismiss();
-        toast.success('Message sent via WebSocket!');
+        toast.success('Message sent successfully!');
       } else {
         toast.error('Failed to send message. Please check your connection.');
       }
@@ -297,20 +527,22 @@ const TeamsStyleMessaging = ({
   };
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full bg-background min-h-0">
       {/* Participants Sidebar */}
-      <div className="w-1/3 border-r border-border bg-card">
-        <div className="p-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Icon name="Users" size={20} className="text-primary" />
-            Project Team
-          </h3>
+      <div className="w-1/3 border-r border-border bg-card flex flex-col min-h-0">
+        <div className="p-4 border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Icon name="Users" size={20} className="text-primary" />
+              Project Team
+            </h3>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
             Select a team member to start chatting
           </p>
         </div>
         
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {loadingParticipants ? (
             <div className="flex items-center justify-center p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -330,24 +562,18 @@ const TeamsStyleMessaging = ({
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg">
-                      {participant.avatar}
-                    </div>
-                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${
-                      participant.status === 'online' ? 'bg-green-500' : 
-                      participant.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
-                    }`} />
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg">
+                    {participant.avatar}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-foreground truncate">
+                      <h4 className={`font-medium truncate ${participant.unreadCount > 0 ? 'font-semibold' : ''}`}>
                         {participant.name}
                       </h4>
                       {participant.unreadCount > 0 && (
-                        <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full">
-                          {participant.unreadCount}
+                        <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                          {participant.unreadCount > 99 ? '99+' : participant.unreadCount}
                         </span>
                       )}
                     </div>
@@ -371,9 +597,6 @@ const TeamsStyleMessaging = ({
                          participant.participation_type === 'role_based' ? 'Role-based' :
                          'Team Member'}
                       </span>
-                      <span className={`text-xs ${getStatusColor(participant.status)}`}>
-                        {participant.status}
-                      </span>
                     </div>
                     
                     {lastMessage && (
@@ -395,11 +618,11 @@ const TeamsStyleMessaging = ({
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {selectedParticipant ? (
           <>
             {/* Chat Header */}
-            <div className="p-4 border-b border-border bg-card">
+            <div className="p-4 border-b border-border bg-card flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg">
@@ -428,9 +651,6 @@ const TeamsStyleMessaging = ({
                          selectedParticipant.participation_type === 'role_based' ? 'Role-based' :
                          'Team Member'}
                       </span>
-                      <span className={`text-sm ${getStatusColor(selectedParticipant.status)}`}>
-                        {selectedParticipant.status}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -447,7 +667,7 @@ const TeamsStyleMessaging = ({
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
               {loadingConversations ? (
                 <div className="flex items-center justify-center h-32 text-muted-foreground">
                   <div className="text-center">
@@ -513,7 +733,7 @@ const TeamsStyleMessaging = ({
             </div>
 
             {/* Message Input */}
-            <div className="border-t border-border p-4">
+            <div className="border-t border-border p-4 flex-shrink-0">
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
                   <label className="flex items-center space-x-1 text-sm">

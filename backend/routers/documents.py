@@ -234,7 +234,9 @@ async def get_land_documents(
     base_query = """
         SELECT d.document_id, d.land_id, d.document_type, d.file_name,
                d.file_path, d.file_size, d.uploaded_by, d.created_at,
-               d.mime_type, d.is_draft,
+               d.mime_type, d.is_draft, d.status, d.version_status, 
+               d.version_number, d.is_latest_version, d.doc_slot,
+               d.review_locked_at, d.review_locked_by,
                u.first_name || ' ' || u.last_name as uploader_name,
                l.title as land_title
         FROM documents d
@@ -295,7 +297,14 @@ async def get_land_documents(
             uploaded_by=row.uploaded_by,
             created_at=row.created_at,
             mime_type=row.mime_type,
-            is_draft=row.is_draft
+            is_draft=row.is_draft,
+            status=getattr(row, 'status', 'pending'),
+            version_status=getattr(row, 'version_status', 'active'),
+            version_number=getattr(row, 'version_number', 1),
+            is_latest_version=getattr(row, 'is_latest_version', True),
+            doc_slot=getattr(row, 'doc_slot', 'D1'),
+            review_locked_at=getattr(row, 'review_locked_at', None),
+            review_locked_by=getattr(row, 'review_locked_by', None)
         )
         for row in results
     ]
