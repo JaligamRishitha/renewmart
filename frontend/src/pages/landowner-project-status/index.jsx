@@ -75,17 +75,19 @@ const LandownerProjectStatus = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header userRole="landowner" notifications={{ dashboard: 0, projects: 0 }} />
-        <WorkflowBreadcrumbs />
-        <main className="pt-4 pb-20">
-          <div className="max-w-9xl mx-auto px-4 lg:px-6">
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading project status...</p>
+        <div className="pt-16">
+          <WorkflowBreadcrumbs />
+          <main className="pb-20">
+            <div className="max-w-9xl mx-auto px-4 lg:px-6">
+              <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading project status...</p>
+                </div>
               </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     );
   }
@@ -93,10 +95,10 @@ const LandownerProjectStatus = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="landowner" notifications={{ dashboard: 0, projects: 0 }} />
-      <WorkflowBreadcrumbs />
-      
-      <main className="pt-4 pb-20">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className="pb-20">
+          <div className="max-w-7xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
@@ -260,6 +262,7 @@ const LandownerProjectStatus = () => {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 };

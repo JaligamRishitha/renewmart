@@ -96,7 +96,7 @@ export const getSimpleDashboardRoute = (user) => {
   } else if (userRoles.includes('landowner')) {
     return '/landowner/dashboard';
   } else if (userRoles.includes('investor')) {
-    return '/investor/portal';
+    return '/investor/dashboard';
   } else if (userRoles.includes('re_sales_advisor')) {
     return '/sales-advisor/dashboard';
   } else if (userRoles.includes('re_analyst')) {

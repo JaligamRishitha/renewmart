@@ -109,10 +109,10 @@ const AdminInvestorInterests = () => {
         isCollapsed={sidebarCollapsed} 
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
-      <WorkflowBreadcrumbs />
-      
-      <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
-        <div className="max-w-9xl mx-auto px-4 lg:px-6">
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
+          <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
           <div className="mb-6">
             <div className="flex items-center justify-between">
@@ -357,6 +357,7 @@ const AdminInvestorInterests = () => {
           </div>
         </div>
       </main>
+      </div>
       
       {/* Investor Details Modal */}
       <InvestorDetailsModal

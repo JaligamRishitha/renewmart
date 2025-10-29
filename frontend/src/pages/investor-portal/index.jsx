@@ -284,9 +284,10 @@ const InvestorPortal = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="investor" notifications={{ opportunities: sortedProjects?.length }} />
-      <WorkflowBreadcrumbs />
-      <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
-        {/* Page Header */}
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
+        {/* Investment Opportunities View */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="font-heading font-bold text-3xl text-foreground">
@@ -458,6 +459,7 @@ const InvestorPortal = () => {
           />
         </div>
       </main>
+      </div>
       {/* Notifications */}
       <NotificationIndicator
         notifications={notifications}

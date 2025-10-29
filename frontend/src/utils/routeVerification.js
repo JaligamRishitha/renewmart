@@ -142,7 +142,7 @@ export const checkDashboardRoutes = (user) => {
   const expectedDashboards = {
     administrator: '/admin/dashboard',
     landowner: '/landowner/dashboard',
-    investor: '/investor/portal',
+    investor: '/investor/dashboard',
     re_sales_advisor: '/sales-advisor/dashboard',
     re_analyst: '/analyst/dashboard',
     re_governance_lead: '/governance/dashboard',

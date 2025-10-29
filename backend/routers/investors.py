@@ -835,3 +835,189 @@ async def get_visibility_options(
     """Get list of all visibility options."""
     # Return standard visibility options
     return ["public", "investors_only", "private"]
+
+# Dashboard endpoints
+@router.get("/dashboard/metrics")
+async def get_dashboard_metrics(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get investor dashboard metrics."""
+    user_roles = current_user.get("roles", [])
+    
+    if "investor" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only investors can view dashboard metrics"
+        )
+    
+    user_id = current_user.get("user_id")
+    
+    try:
+        # Get total interests count
+        interests_query = text("""
+            SELECT COUNT(*) as total_interests
+            FROM investor_interests
+            WHERE investor_id::text = :user_id
+        """)
+        interests_result = db.execute(interests_query, {"user_id": str(user_id)}).fetchone()
+        total_interests = interests_result.total_interests if interests_result else 0
+        
+        # Get recent interests (last 7 days)
+        recent_interests_query = text("""
+            SELECT COUNT(*) as recent_interests
+            FROM investor_interests
+            WHERE investor_id::text = :user_id
+            AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+        """)
+        recent_result = db.execute(recent_interests_query, {"user_id": str(user_id)}).fetchone()
+        recent_interests = recent_result.recent_interests if recent_result else 0
+        
+        # Get total dollars invested (estimate based on capacity * price_per_mwh for approved interests)
+        # This is an approximation - actual investment amounts would be stored separately
+        investment_query = text("""
+            SELECT 
+                COALESCE(SUM(
+                    CASE 
+                        WHEN l.price_per_mwh IS NOT NULL AND l.capacity_mw IS NOT NULL 
+                        THEN l.price_per_mwh * l.capacity_mw
+                        ELSE 0
+                    END
+                ), 0) as total_invested
+            FROM investor_interests ii
+            JOIN lands l ON ii.land_id = l.land_id
+            WHERE ii.investor_id::text = :user_id
+            AND ii.status IN ('approved', 'contacted', 'pending')
+        """)
+        investment_result = db.execute(investment_query, {"user_id": str(user_id)}).fetchone()
+        total_invested = float(investment_result.total_invested) if investment_result else 0.0
+        
+        # Get interests by status
+        status_query = text("""
+            SELECT 
+                COUNT(CASE WHEN ii.status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN ii.status = 'approved' THEN 1 END) as approved,
+                COUNT(CASE WHEN ii.status = 'contacted' THEN 1 END) as contacted,
+                COUNT(CASE WHEN ii.status = 'rejected' THEN 1 END) as rejected
+            FROM investor_interests ii
+            WHERE ii.investor_id::text = :user_id
+        """)
+        status_result = db.execute(status_query, {"user_id": str(user_id)}).fetchone()
+        
+        # Get monthly interest trends (last 6 months)
+        trends_query = text("""
+            SELECT 
+                TO_CHAR(ii.created_at, 'YYYY-MM') as month,
+                COUNT(*) as count
+            FROM investor_interests ii
+            WHERE ii.investor_id::text = :user_id
+            AND ii.created_at >= CURRENT_DATE - INTERVAL '6 months'
+            GROUP BY TO_CHAR(ii.created_at, 'YYYY-MM')
+            ORDER BY month ASC
+        """)
+        trends_results = db.execute(trends_query, {"user_id": str(user_id)}).fetchall()
+        monthly_trends = [
+            {"month": row.month, "count": row.count}
+            for row in trends_results
+        ]
+        
+        # Get interests by project type
+        project_type_query = text("""
+            SELECT 
+                COALESCE(l.energy_key, 'Unknown') as project_type,
+                COUNT(*) as count
+            FROM investor_interests ii
+            JOIN lands l ON ii.land_id = l.land_id
+            WHERE ii.investor_id::text = :user_id
+            GROUP BY l.energy_key
+            ORDER BY count DESC
+        """)
+        project_type_results = db.execute(project_type_query, {"user_id": str(user_id)}).fetchall()
+        interest_by_type = [
+            {"type": row.project_type, "count": row.count}
+            for row in project_type_results
+        ]
+        
+        return {
+            "total_interests": total_interests,
+            "recent_interests": recent_interests,
+            "total_invested": total_invested,
+            "pending_interests": status_result.pending if status_result else 0,
+            "approved_interests": status_result.approved if status_result else 0,
+            "contacted_interests": status_result.contacted if status_result else 0,
+            "rejected_interests": status_result.rejected if status_result else 0,
+            "monthly_trends": monthly_trends,
+            "interest_by_type": interest_by_type
+        }
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_dashboard_metrics: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch dashboard metrics: {str(e)}"
+        )
+
+@router.get("/dashboard/interests")
+async def get_dashboard_interests(
+    limit: int = 5,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get recent investor interests for dashboard."""
+    user_roles = current_user.get("roles", [])
+    
+    if "investor" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only investors can view their interests"
+        )
+    
+    user_id = current_user.get("user_id")
+    
+    try:
+        query = text("""
+            SELECT 
+                ii.interest_id,
+                ii.land_id,
+                ii.status,
+                ii.created_at,
+                l.title as project_title,
+                l.location_text as project_location,
+                l.energy_key as project_type,
+                l.capacity_mw,
+                l.price_per_mwh
+            FROM investor_interests ii
+            JOIN lands l ON ii.land_id = l.land_id
+            WHERE ii.investor_id::text = :user_id
+            ORDER BY ii.created_at DESC
+            LIMIT :limit
+        """)
+        
+        results = db.execute(query, {"user_id": str(user_id), "limit": limit}).fetchall()
+        
+        interests = []
+        for row in results:
+            interests.append({
+                "interest_id": str(row.interest_id),
+                "land_id": str(row.land_id),
+                "status": row.status,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "project_title": row.project_title,
+                "project_location": row.project_location,
+                "project_type": row.project_type,
+                "capacity_mw": float(row.capacity_mw) if row.capacity_mw else None,
+                "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None
+            })
+        
+        return interests
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_dashboard_interests: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch dashboard interests: {str(e)}"
+        )

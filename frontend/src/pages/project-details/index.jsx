@@ -192,16 +192,17 @@ const ProjectDetailsPage = () => {
           isCollapsed={sidebarCollapsed} 
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
         />
-        <WorkflowBreadcrumbs />
-        
-        <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
-          <div className="max-w-9xl mx-auto px-4 lg:px-6">
-            <div className="flex items-center justify-center h-64">
-              <Icon name="Loader" size={32} className="animate-spin text-blue-600 mr-3" />
-              <span className="text-lg text-muted-foreground">Loading project details...</span>
+        <div className="pt-16">
+          <WorkflowBreadcrumbs />
+          <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
+            <div className="max-w-9xl mx-auto px-4 lg:px-6">
+              <div className="flex items-center justify-center h-64">
+                <Icon name="Loader" size={32} className="animate-spin text-blue-600 mr-3" />
+                <span className="text-lg text-muted-foreground">Loading project details...</span>
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     );
   }
@@ -214,25 +215,26 @@ const ProjectDetailsPage = () => {
           isCollapsed={sidebarCollapsed} 
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
         />
-        <WorkflowBreadcrumbs />
-        
-        <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
-          <div className="max-w-9xl mx-auto px-4 lg:px-6">
-            <div className="flex flex-col items-center justify-center h-64">
-              <Icon name="AlertCircle" size={48} className="text-red-600 mb-4" />
-              <h2 className="text-xl font-semibold text-foreground mb-2">Project Not Found</h2>
-              <p className="text-muted-foreground mb-4">{error || 'The requested project could not be found.'}</p>
-              <Button
-                variant="default"
-                onClick={() => navigate(-1)}
-                iconName="ArrowLeft"
-                iconSize={16}
-              >
-                Go Back
-              </Button>
+        <div className="pt-16">
+          <WorkflowBreadcrumbs />
+          <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
+            <div className="max-w-9xl mx-auto px-4 lg:px-6">
+              <div className="flex flex-col items-center justify-center h-64">
+                <Icon name="AlertCircle" size={48} className="text-red-600 mb-4" />
+                <h2 className="text-xl font-semibold text-foreground mb-2">Project Not Found</h2>
+                <p className="text-muted-foreground mb-4">{error || 'The requested project could not be found.'}</p>
+                <Button
+                  variant="default"
+                  onClick={() => navigate(-1)}
+                  iconName="ArrowLeft"
+                  iconSize={16}
+                >
+                  Go Back
+                </Button>
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     );
   }
@@ -244,10 +246,10 @@ const ProjectDetailsPage = () => {
         isCollapsed={sidebarCollapsed} 
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
-      <WorkflowBreadcrumbs />
-      
-      <main className={`pt-4 pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
-        <div className="max-w-9xl mx-auto px-4 lg:px-6">
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
+          <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
           <div className="mb-6">
             <div className="flex items-center justify-between">
@@ -685,6 +687,7 @@ const ProjectDetailsPage = () => {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 };

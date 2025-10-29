@@ -30,6 +30,7 @@ import MyPublishedProjects from './pages/admin-marketplace/MyPublishedProjects';
 import AdminInvestorInterests from './pages/admin-investor-interests';
 import ProjectReviewersPage from './pages/admin-dashboard/project-reviewers';
 import InvestorPortal from './pages/investor-portal';
+import InvestorDashboardPage from './pages/investor-dashboard';
 import MyInterests from './pages/investor-portal/MyInterests';
 import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
@@ -219,7 +220,7 @@ const Routes = () => {
         {/* ========================================== */}
         <Route path="/investor/dashboard" element={
           <InvestorRoute>
-            <InvestorPortal />
+            <InvestorDashboardPage />
           </InvestorRoute>
         } />
         <Route path="/investor/portal" element={

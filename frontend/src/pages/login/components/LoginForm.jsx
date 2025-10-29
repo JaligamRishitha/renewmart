@@ -102,7 +102,7 @@ const LoginForm = () => {
           } else if (userRoles.includes('landowner')) {
             navigate('/landowner/dashboard');
           } else if (userRoles.includes('investor')) {
-            navigate('/investor/portal');
+            navigate('/investor/dashboard');
           } else if (userRoles.includes('re_sales_advisor')) {
             navigate('/sales-advisor/dashboard');
           } else if (userRoles.includes('re_analyst')) {

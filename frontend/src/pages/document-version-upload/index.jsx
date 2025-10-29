@@ -197,11 +197,13 @@ const DocumentVersionUpload = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header userRole="landowner" />
-        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Loading project details...</p>
+        <div className="pt-16">
+          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading project details...</p>
+              </div>
             </div>
           </div>
         </div>
@@ -213,19 +215,21 @@ const DocumentVersionUpload = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header userRole="landowner" />
-        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
-          <div className="text-center">
-            <Icon name="AlertCircle" size={48} className="text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">Error</h2>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button
-              variant="default"
-              onClick={() => navigate('/landowner/dashboard')}
-              iconName="ArrowLeft"
-              iconPosition="left"
-            >
-              Back to Dashboard
-            </Button>
+        <div className="pt-16">
+          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
+            <div className="text-center">
+              <Icon name="AlertCircle" size={48} className="text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-foreground mb-2">Error</h2>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button
+                variant="default"
+                onClick={() => navigate('/landowner/dashboard')}
+                iconName="ArrowLeft"
+                iconPosition="left"
+              >
+                Back to Dashboard
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -235,8 +239,8 @@ const DocumentVersionUpload = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="landowner" />
-      
-      <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
+      <div className="pt-16">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-4">
@@ -457,6 +461,7 @@ const DocumentVersionUpload = () => {
           onClose={() => setShowVersions(false)}
         />
       )}
+      </div>
     </div>
   );
 };

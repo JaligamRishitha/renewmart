@@ -282,17 +282,19 @@ const LandownerDashboard = () => {
             projects: 0
           }} 
         />
-        <WorkflowBreadcrumbs />
-        <main className="pt-4 pb-20">
-          <div className="max-w-9xl mx-auto px-4 lg:px-6">
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading dashboard...</p>
+        <div className="pt-16">
+          <WorkflowBreadcrumbs />
+          <main className="pb-20">
+            <div className="max-w-9xl mx-auto px-4 lg:px-6">
+              <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading dashboard...</p>
+                </div>
               </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     );
   }
@@ -306,9 +308,10 @@ const LandownerDashboard = () => {
           projects: 2
         }} 
       />
-      <WorkflowBreadcrumbs />
-      <main className="pt-4 pb-20">
-        <div className="max-w-9xl mx-auto px-4 lg:px-6">
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className="pb-20">
+          <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Error State */}
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -379,6 +382,7 @@ const LandownerDashboard = () => {
           )}
         </div>
       </main>
+      </div>
       {/* Notifications */}
       <NotificationIndicator
         notifications={notifications}

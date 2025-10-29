@@ -210,8 +210,9 @@ const MyInterests = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="investor" notifications={{ interests: interests.length }} />
-      <WorkflowBreadcrumbs />
-      <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
+      <div className="pt-16">
+        <WorkflowBreadcrumbs />
+        <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
         {/* Page Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
@@ -367,6 +368,7 @@ const MyInterests = () => {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 };
