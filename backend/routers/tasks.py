@@ -358,43 +358,52 @@ async def get_tasks(
             """)
             subtasks_result = db.execute(subtasks_query, {"task_id": str(row.task_id)}).fetchall()
             
-            # Convert subtasks to dict format
+            # Convert subtasks to SubtaskResponse format
+            from models.schemas import SubtaskResponse
             subtasks = [
-                {
-                    "subtask_id": str(subtask.subtask_id),
-                    "task_id": str(subtask.task_id),
-                    "title": subtask.title,
-                    "description": subtask.description,
-                    "status": subtask.status,
-                    "assigned_to": str(subtask.assigned_to) if subtask.assigned_to else None,
-                    "created_at": subtask.created_at,
-                    "updated_at": subtask.updated_at
-                }
+                SubtaskResponse(
+                    subtask_id=subtask.subtask_id,
+                    task_id=subtask.task_id,
+                    title=subtask.title,
+                    description=subtask.description,
+                    status=subtask.status,
+                    assigned_to=str(subtask.assigned_to) if subtask.assigned_to else None,
+                    created_at=subtask.created_at,
+                    updated_at=subtask.updated_at,
+                    created_by=None,
+                    completed_at=None,
+                    order_index=None,
+                    assigned_user=None,
+                    creator=None
+                )
                 for subtask in subtasks_result
             ]
             
-            # Create task response with subtasks
-            task_response = {
-                "task_id": str(row.task_id),
-                "land_id": str(row.land_id),
-                "task_type": row.task_type,
-                "description": row.description,
-                "assigned_to": str(row.assigned_to) if row.assigned_to else None,
-                "assigned_by": str(row.assigned_by) if row.assigned_by else None,
-                "status": row.status,
-                "priority": row.priority,
-                "assigned_role": row.assigned_role,
-                "start_date": row.start_date,
-                "end_date": row.end_date,
-                "due_date": row.due_date,
-                "completion_notes": row.completion_notes,
-                "created_at": row.created_at,
-                "updated_at": row.updated_at,
-                "land_title": row.land_title,
-                "assigned_to_name": row.assigned_to_name,
-                "assigned_by_name": row.assigned_by_name,
-                "subtasks": subtasks
-            }
+            # Create TaskResponse object with subtasks
+            task_response = TaskResponse(
+                task_id=row.task_id,
+                land_id=row.land_id,
+                task_type=row.task_type,
+                description=row.description,
+                assigned_to=str(row.assigned_to) if row.assigned_to else None,
+                created_by=str(row.assigned_by) if row.assigned_by else None,
+                status=row.status,
+                priority=row.priority,
+                assigned_role=row.assigned_role,
+                start_date=row.start_date,
+                end_date=row.end_date,
+                due_date=row.due_date,
+                completion_notes=row.completion_notes,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                land_title=row.land_title,
+                assigned_to_name=row.assigned_to_name,
+                assigned_by_name=row.assigned_by_name,
+                subtasks=subtasks,
+                assigned_user=None,
+                history=None,
+                land_section_id=None
+            )
             task_responses.append(task_response)
         
         return task_responses
@@ -405,17 +414,21 @@ async def get_tasks(
                 land_id=row.land_id,
                 task_type=row.task_type,
                 description=row.description,
-                assigned_to=row.assigned_to,
-                assigned_by=row.assigned_by,
+                assigned_to=str(row.assigned_to) if row.assigned_to else None,
+                created_by=str(row.assigned_by) if row.assigned_by else None,
                 status=row.status,
                 priority=row.priority,
+                assigned_role=row.assigned_role,
+                start_date=row.start_date,
+                end_date=row.end_date,
                 due_date=row.due_date,
                 completion_notes=row.completion_notes,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 land_title=row.land_title,
                 assigned_to_name=row.assigned_to_name,
-                assigned_by_name=row.assigned_by_name
+                assigned_by_name=row.assigned_by_name,
+                land_section_id=None
             )
             for row in results
         ]

@@ -60,9 +60,9 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
     },
     {
       label: 'Account',
-      path: '/register',
+      path: '/account',
       icon: 'User',
-      roles: ['landowner', 'admin', 'investor'],
+      roles: ['landowner', 'admin', 'investor', 'reviewer'],
       badge: notifications?.account || 0
     }
   ];

@@ -39,6 +39,7 @@ import DocumentVersionUpload from './pages/document-version-upload';
 import LandownerDashboard from './pages/landowner-dashboard';
 import LandownerProjectStatus from './pages/landowner-project-status';
 import ProjectReviewPage from './pages/landowner-project-status/components/ProjectReviewPage';
+import Account from './pages/account';
 import LandownerProjectReview from './pages/landowner-project-status/components/LandownerProjectReview';
 import ReviewerDashboard from './pages/reviewer-dashboard';
 import ReviewerProjects from './pages/reviewer-projects';
@@ -394,6 +395,13 @@ const Routes = () => {
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        {/* Account Page - Available to all authenticated users */}
+        <Route path="/account" element={
+          <ProtectedRoute>
+            <Account />
           </ProtectedRoute>
         } />
         

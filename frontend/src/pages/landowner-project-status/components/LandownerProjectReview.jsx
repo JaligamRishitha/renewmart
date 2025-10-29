@@ -20,6 +20,7 @@ const LandownerProjectReview = () => {
   const [reviewers, setReviewers] = useState({});
   const [expandedRoles, setExpandedRoles] = useState({});
   const [expandedTasks, setExpandedTasks] = useState({});
+  const [expandedSubtasks, setExpandedSubtasks] = useState({});
 
   const tabs = [
     { id: 'overview', label: 'Review Progress', icon: 'LayoutGrid' },
@@ -36,13 +37,35 @@ const LandownerProjectReview = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch all tasks for this land
-      const tasksResponse = await taskAPI.getTasks({ land_id: landId });
-      console.log('All tasks for project:', tasksResponse);
+      // Fetch all tasks for this land - try with include_subtasks first, fallback if it fails
+      let tasksResponse;
+      try {
+        tasksResponse = await taskAPI.getTasks({ 
+          land_id: landId,
+          include_subtasks: true 
+        });
+        console.log('All tasks for project (with subtasks):', tasksResponse);
+      } catch (err) {
+        // Fallback to fetching without include_subtasks if backend doesn't support it
+        console.warn('Failed to fetch tasks with subtasks, falling back:', err);
+        tasksResponse = await taskAPI.getTasks({ 
+          land_id: landId
+        });
+        console.log('All tasks for project (without subtasks):', tasksResponse);
+      }
 
-      // Fetch subtasks for each task
+      // Fetch subtasks for each task if not already included in response
       const tasksWithSubtasks = await Promise.all(
         tasksResponse.map(async (task) => {
+          // If subtasks are already included in the response (even if empty), use them
+          // But ensure we copy the array to avoid reference issues
+          if (task.subtasks !== undefined && Array.isArray(task.subtasks)) {
+            return {
+              ...task,
+              subtasks: [...task.subtasks] // Copy array to avoid reference sharing
+            };
+          }
+          // Otherwise, fetch subtasks separately
           try {
             const subtasks = await taskAPI.getSubtasks(task.task_id);
             return { ...task, subtasks: subtasks || [] };
@@ -55,37 +78,29 @@ const LandownerProjectReview = () => {
 
       setAllTasks(tasksWithSubtasks);
 
-      // Fetch unique reviewers - normalize UUIDs to strings for consistent lookup
-      // Note: User fetching may fail due to permissions (403), but we can still use task.assigned_role
-      const uniqueUserIds = [...new Set(
-        tasksWithSubtasks
-          .map(t => t.assigned_to ? String(t.assigned_to) : null)
-          .filter(Boolean)
-      )];
-      
-      console.log('Unique reviewer user IDs:', uniqueUserIds);
+      // Build reviewer data from task response - use assigned_to_name from API
+      // This avoids permission issues (403) when trying to fetch users individually
       const reviewerData = {};
-      
-      // Try to fetch user details, but don't block if it fails (403 errors are expected)
-      const userFetchPromises = uniqueUserIds.map(async (userId) => {
-        try {
-          const userData = await usersAPI.getUserById(userId);
-          reviewerData[String(userId)] = userData;
-          console.log(`Fetched reviewer ${userId}:`, userData);
-        } catch (err) {
-          // 403 errors are expected for landowners viewing reviewers
-          if (err.response?.status === 403) {
-            console.log(`Skipping user ${userId} due to permissions (expected for landowners)`);
-          } else {
-            console.error(`Failed to fetch user ${userId}:`, err);
+      tasksWithSubtasks.forEach((task) => {
+        if (task.assigned_to) {
+          const userId = String(task.assigned_to);
+          if (!reviewerData[userId]) {
+            // Parse name from assigned_to_name if available
+            const assignedToName = task.assigned_to_name || '';
+            const nameParts = assignedToName.trim().split(' ');
+            reviewerData[userId] = {
+              user_id: userId,
+              first_name: nameParts[0] || '',
+              last_name: nameParts.slice(1).join(' ') || '',
+              email: task.assigned_to_email || null,
+              full_name: assignedToName || null
+            };
           }
-          // Store minimal info with just the user_id
-          reviewerData[String(userId)] = { user_id: userId };
         }
       });
-      
-      // Wait for all user fetches but don't block the UI
-      await Promise.allSettled(userFetchPromises);
+
+      // Also add reviewers from documents (uploaded_by) - we'll fetch documents later
+      // But for now, we'll handle this in the documents tab display
       
       console.log('Reviewer data object:', reviewerData);
       setReviewers(reviewerData);
@@ -97,11 +112,43 @@ const LandownerProjectReview = () => {
           const taskDocs = await documentsAPI.getTaskDocuments(task.task_id);
           if (taskDocs && taskDocs.length > 0) {
             reviewerDocuments.push(...taskDocs);
+            
+            // Add document uploaders to reviewer data if not already present
+            taskDocs.forEach((doc) => {
+              if (doc.uploaded_by) {
+                const uploaderId = String(doc.uploaded_by);
+                if (!reviewerData[uploaderId]) {
+                  // Try to get name from task if uploader is the task assignee
+                  if (task.assigned_to && String(task.assigned_to) === uploaderId && task.assigned_to_name) {
+                    const nameParts = task.assigned_to_name.trim().split(' ');
+                    reviewerData[uploaderId] = {
+                      user_id: uploaderId,
+                      first_name: nameParts[0] || '',
+                      last_name: nameParts.slice(1).join(' ') || '',
+                      email: null,
+                      full_name: task.assigned_to_name || null
+                    };
+                  } else {
+                    // Add placeholder - name will be "Unknown Reviewer" but at least we track the user
+                    reviewerData[uploaderId] = {
+                      user_id: uploaderId,
+                      first_name: '',
+                      last_name: '',
+                      email: null,
+                      full_name: null
+                    };
+                  }
+                }
+              }
+            });
           }
         } catch (err) {
           console.error(`Failed to fetch documents for task ${task.task_id}:`, err);
         }
       }
+      
+      // Update reviewers with any new uploaders we found
+      setReviewers(reviewerData);
       setDocuments(reviewerDocuments);
 
       // If project data not in location state, fetch land details
@@ -352,94 +399,166 @@ const LandownerProjectReview = () => {
                   <Icon name="Inbox" size={48} className="mx-auto mb-2 opacity-50" />
                   <p>No reviewers assigned to this project yet</p>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {allTasks.map((task) => {
-                    // Normalize assigned_to to string for lookup
-                    const reviewerKey = task.assigned_to ? String(task.assigned_to) : null;
-                    const reviewer = reviewerKey ? reviewers[reviewerKey] : null;
-                    const progress = getProgressPercentage(task);
-                    
-                    // Try multiple possible fields for role
-                    let taskRole = task.assigned_role || task.role || task.role_key || task.reviewer_role;
-                    
-                    // If no role in task, try to infer from task content
-                    if (!taskRole) {
-                      taskRole = inferRoleFromTask(task);
-                    }
-                    
-                    const roleLabel = getRoleLabel(taskRole);
-                    console.log('Task role info:', { 
-                      task_id: task.task_id, 
-                      assigned_role: task.assigned_role, 
-                      task_type: task.task_type,
-                      title: task.title,
-                      inferred_role: taskRole,
-                      roleLabel 
-                    });
-                    
-                    // Determine display name - prioritize role label, then reviewer name
-                    let displayName = roleLabel;
-                    if (!displayName) {
-                      // If no role, try to get from reviewer's roles
-                      if (reviewer && reviewer.roles && reviewer.roles.length > 0) {
-                        displayName = getRoleLabel(reviewer.roles[0]) || null;
-                      }
-                      // Fallback to reviewer name
-                      if (!displayName && reviewer && reviewer.first_name && reviewer.last_name) {
-                        displayName = `${reviewer.first_name} ${reviewer.last_name}`;
-                      }
-                      // Last fallback - try to infer from task one more time
-                      if (!displayName) {
-                        const inferred = inferRoleFromTask(task);
-                        displayName = inferred || 'Reviewer';
-                      }
-                    }
-                    
-                    return (
-                      <div key={task.task_id} className="bg-background rounded-lg p-4 border border-border">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
+              ) : (() => {
+                // Group tasks by role
+                const tasksByRole = {};
+                allTasks.forEach((task) => {
+                  const reviewerKey = task.assigned_to ? String(task.assigned_to) : null;
+                  const reviewer = reviewerKey ? reviewers[reviewerKey] : null;
+                  
+                  // Try multiple possible fields for role
+                  let taskRole = task.assigned_role || task.role || task.role_key || task.reviewer_role;
+                  
+                  // If no role in task, try to infer from task content
+                  if (!taskRole) {
+                    taskRole = inferRoleFromTask(task);
+                  }
+                  
+                  const roleLabel = getRoleLabel(taskRole) || 'Unknown Role';
+                  
+                  if (!tasksByRole[roleLabel]) {
+                    tasksByRole[roleLabel] = [];
+                  }
+                  
+                  // Ensure subtasks are properly isolated for each task to avoid reference issues
+                  const taskWithIsolatedSubtasks = {
+                    ...task,
+                    subtasks: task.subtasks && Array.isArray(task.subtasks) ? [...task.subtasks] : [],
+                    roleLabel,
+                    reviewerKey,
+                    reviewer
+                  };
+                  tasksByRole[roleLabel].push(taskWithIsolatedSubtasks);
+                });
+
+                // Calculate stats for each role
+                const roleStats = Object.keys(tasksByRole).map(role => {
+                  const tasks = tasksByRole[role];
+                  const totalProgress = tasks.reduce((sum, t) => sum + getProgressPercentage(t), 0);
+                  const avgProgress = tasks.length > 0 ? Math.round(totalProgress / tasks.length) : 0;
+                  const completedCount = tasks.filter(t => t.status === 'completed').length;
+                  
+                  return {
+                    role,
+                    tasks,
+                    taskCount: tasks.length,
+                    avgProgress,
+                    completedCount
+                  };
+                });
+
+                return (
+                  <div className="space-y-4">
+                    {roleStats.map(({ role, tasks, taskCount, avgProgress, completedCount }) => (
+                      <div key={role} className="bg-background border border-border rounded-lg overflow-hidden">
+                        {/* Role Accordion Header */}
+                        <button
+                          onClick={() => setExpandedRoles(prev => ({
+                            ...prev,
+                            [role]: !prev[role]
+                          }))}
+                          className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                              <Icon name="User" size={20} className="text-primary" />
+                              <Icon name="Users" size={20} className="text-primary" />
                             </div>
-                            <div>
-                              <h3 className="font-medium text-foreground">
-                                {displayName}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {roleLabel || 'Role not specified'}
-                              </p>
+                            <div className="text-left">
+                              <h3 className="text-lg font-semibold text-foreground">{role}</h3>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="text-sm text-muted-foreground">
+                                  {taskCount} task{taskCount !== 1 ? 's' : ''}
+                                </span>
+                                <span className="text-sm text-muted-foreground">•</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {avgProgress}% avg progress
+                                </span>
+                                {completedCount > 0 && (
+                                  <>
+                                    <span className="text-sm text-muted-foreground">•</span>
+                                    <span className="text-sm text-green-600 font-medium">
+                                      {completedCount} completed
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(task.status)}`}>
-                              {task.status?.replace('_', ' ')}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Progress</span>
-                            <span className="font-medium text-foreground">{progress}%</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div 
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${progress}%` }}
+                          <div className="flex items-center gap-3">
+                            <Icon 
+                              name={expandedRoles[role] ? "ChevronUp" : "ChevronDown"} 
+                              size={20} 
+                              className="text-muted-foreground" 
                             />
                           </div>
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>{task.subtasks?.filter(st => st.status === 'completed').length || 0} completed</span>
-                            <span>{task.subtasks?.length || 0} total subtasks</span>
+                        </button>
+
+                        {/* Role Accordion Content */}
+                        {expandedRoles[role] && (
+                          <div className="border-t border-border p-4 space-y-3">
+                            {tasks.map((task) => {
+                              const progress = getProgressPercentage(task);
+                              const reviewer = task.reviewer;
+                              
+                              // Determine reviewer display name - use full_name, then first_name + last_name, then assigned_to_name
+                              let reviewerName = 'Unknown Reviewer';
+                              if (reviewer?.full_name) {
+                                reviewerName = reviewer.full_name;
+                              } else if (reviewer?.first_name || reviewer?.last_name) {
+                                reviewerName = `${reviewer.first_name || ''} ${reviewer.last_name || ''}`.trim();
+                              } else if (task.assigned_to_name) {
+                                reviewerName = task.assigned_to_name;
+                              }
+                              
+                              return (
+                                <div key={task.task_id} className="bg-card rounded-lg p-4 border border-border">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                        <Icon name="User" size={20} className="text-primary" />
+                                      </div>
+                                      <div>
+                                        <h3 className="font-medium text-foreground">
+                                          {reviewerName}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">
+                                          {task.task_type || task.title || 'Task'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(task.status)}`}>
+                                        {task.status?.replace('_', ' ')}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Progress</span>
+                                      <span className="font-medium text-foreground">{progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-muted rounded-full h-2">
+                                      <div 
+                                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${progress}%` }}
+                                      />
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                      <span>{task.subtasks?.filter(st => st.status === 'completed').length || 0} completed</span>
+                                      <span>{task.subtasks?.length || 0} total subtasks</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -467,7 +586,15 @@ const LandownerProjectReview = () => {
               tasksByRole[roleLabel] = [];
             }
             
-            tasksByRole[roleLabel].push({ ...task, roleLabel, reviewerKey, reviewer });
+            // Ensure subtasks are properly isolated for each task to avoid reference issues
+            const taskWithIsolatedSubtasks = {
+              ...task,
+              subtasks: task.subtasks && Array.isArray(task.subtasks) ? [...task.subtasks] : [],
+              roleLabel,
+              reviewerKey,
+              reviewer
+            };
+            tasksByRole[roleLabel].push(taskWithIsolatedSubtasks);
           });
 
           // Calculate stats for each role
@@ -563,11 +690,15 @@ const LandownerProjectReview = () => {
                               const progress = getProgressPercentage(task);
                               const reviewer = task.reviewer;
                               
-                              // Determine reviewer display name
+                              // Determine reviewer display name - use full_name, then first_name + last_name, then assigned_to_name
                               let reviewerName = 'Unknown Reviewer';
-                              if (reviewer && reviewer.first_name && reviewer.last_name) {
-                                reviewerName = `${reviewer.first_name} ${reviewer.last_name}`;
-                              } else if (reviewer && reviewer.email) {
+                              if (reviewer?.full_name) {
+                                reviewerName = reviewer.full_name;
+                              } else if (reviewer?.first_name || reviewer?.last_name) {
+                                reviewerName = `${reviewer.first_name || ''} ${reviewer.last_name || ''}`.trim();
+                              } else if (task.assigned_to_name) {
+                                reviewerName = task.assigned_to_name;
+                              } else if (reviewer?.email) {
                                 reviewerName = reviewer.email;
                               }
 
@@ -690,104 +821,380 @@ const LandownerProjectReview = () => {
         })()}
 
         {/* Documents Tab */}
-        {activeTab === 'documents' && (
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                  <Icon name="FileText" size={24} />
-                  Reviewer Documents
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Documents uploaded by reviewers during their review process - View and download available
-                </p>
-              </div>
-              <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg">
-                <span className="text-2xl font-bold">{documents.length}</span>
-                <span className="text-sm ml-2">Reviewer Documents</span>
-              </div>
-            </div>
+        {activeTab === 'documents' && (() => {
+          // Create task lookup map
+          const taskMap = {};
+          allTasks.forEach((task) => {
+            if (task.task_id) {
+              taskMap[String(task.task_id)] = task;
+            }
+          });
+
+          // Create subtask lookup map from allTasks
+          const subtaskMap = {};
+          allTasks.forEach((task) => {
+            if (task.subtasks && Array.isArray(task.subtasks)) {
+              task.subtasks.forEach((subtask) => {
+                if (subtask.subtask_id) {
+                  subtaskMap[String(subtask.subtask_id)] = {
+                    ...subtask,
+                    task: task, // Keep reference to parent task for context
+                    reviewerKey: task.assigned_to ? String(task.assigned_to) : null
+                  };
+                }
+              });
+            }
+          });
+
+          // Group documents by role and subtask
+          const documentsByRole = {};
+          
+          documents.forEach((doc) => {
+            // Try to find task from task_id if subtask_id is missing
+            let task = null;
+            let subtask = null;
+            let subtaskKey = null;
             
-            {documents.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Icon name="FileX" size={64} className="mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No task documents uploaded by reviewers</p>
-                <p className="text-sm mt-2">Reviewers haven't uploaded any documents yet during their review process</p>
+            if (doc.subtask_id) {
+              subtaskKey = String(doc.subtask_id);
+              subtask = subtaskMap[subtaskKey] || null;
+              task = subtask?.task || null;
+              
+              // If subtask not found in map but we have task_id, search in task's subtasks
+              if (!subtask && doc.task_id) {
+                task = taskMap[String(doc.task_id)] || null;
+                if (task && task.subtasks && Array.isArray(task.subtasks)) {
+                  subtask = task.subtasks.find(st => String(st.subtask_id) === subtaskKey) || null;
+                  if (subtask) {
+                    // Update subtaskMap for future lookups
+                    subtaskMap[subtaskKey] = {
+                      ...subtask,
+                      task: task,
+                      reviewerKey: task.assigned_to ? String(task.assigned_to) : null
+                    };
+                  }
+                }
+              }
+            }
+            
+            // If no subtask found yet, try to get task from task_id
+            if (!task && doc.task_id) {
+              task = taskMap[String(doc.task_id)] || null;
+            }
+            
+            // Determine role from task
+            let taskRole = task?.assigned_role || task?.role || task?.role_key || task?.reviewer_role;
+            if (!taskRole && task) {
+              taskRole = inferRoleFromTask(task);
+            }
+            
+            // If still no role, try to infer from document metadata or find task by uploaded_by
+            if (!taskRole && doc.uploaded_by) {
+              // Try to find reviewer and get their role
+              const docReviewer = Object.values(reviewers).find(r => r.user_id === doc.uploaded_by);
+              if (docReviewer && docReviewer.roles && docReviewer.roles.length > 0) {
+                taskRole = docReviewer.roles[0];
+              }
+            }
+            
+            const roleLabel = getRoleLabel(taskRole) || 'Unknown Role';
+            
+            // Initialize role if not exists
+            if (!documentsByRole[roleLabel]) {
+              documentsByRole[roleLabel] = {};
+            }
+            
+            // Initialize subtask group if not exists
+            // Try multiple sources for subtask name
+            let subtaskName = 'General Documents';
+            if (subtask?.title) {
+              subtaskName = subtask.title;
+            } else if (doc.subtask_id && task) {
+              // If we have subtask_id but couldn't find the subtask, try searching one more time
+              if (task.subtasks && Array.isArray(task.subtasks)) {
+                const foundSubtask = task.subtasks.find(st => String(st.subtask_id) === String(doc.subtask_id));
+                if (foundSubtask?.title) {
+                  subtaskName = foundSubtask.title;
+                } else {
+                  // Fallback: show document type or task info
+                  subtaskName = doc.document_type ? `${doc.document_type.replace(/-|_/g, ' ')} Documents` : `${task.task_type || task.title || 'Task'} Documents`;
+                }
+              } else {
+                subtaskName = doc.document_type ? `${doc.document_type.replace(/-|_/g, ' ')} Documents` : `${task.task_type || task.title || 'Task'} Documents`;
+              }
+            } else if (task) {
+              subtaskName = `${task.task_type || task.title || 'Task'} Documents`;
+            }
+            
+            const subtaskId = subtaskKey || (doc.task_id ? `task-${doc.task_id}` : 'general');
+            
+            // Debug logging
+            if (doc.subtask_id && !subtask) {
+              console.warn('Document has subtask_id but subtask not found:', {
+                document_id: doc.document_id,
+                subtask_id: doc.subtask_id,
+                task_id: doc.task_id,
+                task: task ? task.task_id : null
+              });
+            }
+            
+            if (!documentsByRole[roleLabel][subtaskId]) {
+              documentsByRole[roleLabel][subtaskId] = {
+                subtaskId,
+                subtaskName,
+                subtask: subtask || null,
+                task: task || null,
+                documents: []
+              };
+            }
+            
+            documentsByRole[roleLabel][subtaskId].documents.push(doc);
+          });
+
+          // Calculate stats for each role
+          const roleStats = Object.keys(documentsByRole).map(role => {
+            const subtaskGroups = Object.values(documentsByRole[role]);
+            const totalDocs = subtaskGroups.reduce((sum, group) => sum + group.documents.length, 0);
+            
+            return {
+              role,
+              subtaskGroups,
+              documentCount: totalDocs
+            };
+          });
+
+          const toggleRoleAccordion = (role) => {
+            setExpandedRoles(prev => ({
+              ...prev,
+              [role]: !prev[role]
+            }));
+          };
+
+          const toggleSubtaskAccordion = (subtaskKey) => {
+            setExpandedSubtasks(prev => ({
+              ...prev,
+              [subtaskKey]: !prev[subtaskKey]
+            }));
+          };
+
+          return (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                    <Icon name="FileText" size={24} />
+                    Reviewer Documents
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Documents grouped by role and subtask - View and download available
+                  </p>
+                </div>
+                <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg">
+                  <span className="text-2xl font-bold">{documents.length}</span>
+                  <span className="text-sm ml-2">Documents</span>
+                </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {documents.map((doc) => {
-                  // Find the reviewer who uploaded this document
-                  const reviewer = Object.values(reviewers).find(r => r.user_id === doc.uploaded_by);
-                  const reviewerName = reviewer ? `${reviewer.first_name} ${reviewer.last_name}` : 'Unknown Reviewer';
-                  
-                  return (
-                    <div
-                      key={doc.document_id}
-                      className="bg-background border border-border rounded-lg p-4 hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="flex-shrink-0">
-                          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                            <Icon 
-                              name={doc.mime_type?.includes('pdf') ? 'FileText' : doc.mime_type?.includes('image') ? 'Image' : 'File'} 
-                              size={24} 
-                              className="text-primary" 
-                            />
+              
+              {documents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Icon name="FileX" size={64} className="mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No task documents uploaded by reviewers</p>
+                  <p className="text-sm mt-2">Reviewers haven't uploaded any documents yet during their review process</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {roleStats.map(({ role, subtaskGroups, documentCount }) => (
+                    <div key={role} className="bg-background border border-border rounded-lg overflow-hidden">
+                      {/* Role Accordion Header */}
+                      <button
+                        onClick={() => toggleRoleAccordion(role)}
+                        className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <Icon name="Users" size={20} className="text-primary" />
                           </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h5 className="font-medium text-foreground text-sm mb-1 truncate" title={doc.file_name}>
-                            {doc.file_name || 'Unnamed Document'}
-                          </h5>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">
-                              <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded">
-                                {doc.document_type?.replace(/-|_/g, ' ').toUpperCase() || 'DOCUMENT'}
+                          <div className="text-left">
+                            <h3 className="text-lg font-semibold text-foreground">{role}</h3>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-sm text-muted-foreground">
+                                {documentCount} document{documentCount !== 1 ? 's' : ''}
                               </span>
-                            </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Icon name="User" size={12} />
-                              Uploaded by: {reviewerName}
-                            </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Icon name="HardDrive" size={12} />
-                              {formatFileSize(doc.file_size)}
-                            </p>
-                            {doc.created_at && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Icon name="Calendar" size={12} />
-                                {new Date(doc.created_at).toLocaleDateString()}
-                              </p>
-                            )}
+                              <span className="text-sm text-muted-foreground">•</span>
+                              <span className="text-sm text-muted-foreground">
+                                {subtaskGroups.length} subtask{subtaskGroups.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      {/* Action Buttons */}
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                        <button
-                          onClick={() => handleViewDocument(doc)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground rounded-md text-xs font-medium transition-colors"
-                        >
-                          <Icon name="Eye" size={14} />
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleDownloadDocument(doc)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted-foreground/20 text-foreground rounded-md text-xs font-medium transition-colors"
-                        >
-                          <Icon name="Download" size={14} />
-                          Download
-                        </button>
-                      </div>
+                        <div className="flex items-center gap-3">
+                          <Icon 
+                            name={expandedRoles[role] ? "ChevronUp" : "ChevronDown"} 
+                            size={20} 
+                            className="text-muted-foreground" 
+                          />
+                        </div>
+                      </button>
+
+                      {/* Role Accordion Content */}
+                      {expandedRoles[role] && (
+                        <div className="border-t border-border p-4 space-y-3">
+                          {subtaskGroups.map(({ subtaskId, subtaskName, subtask, task, documents: subtaskDocs }) => {
+                            // Get reviewer info - prefer task assignee, fallback to document uploader
+                            const reviewerKey = task?.assigned_to ? String(task.assigned_to) : null;
+                            const reviewer = reviewerKey ? reviewers[reviewerKey] : null;
+                            
+                            // Determine reviewer display name - try multiple sources
+                            let reviewerName = 'Unknown Reviewer';
+                            if (reviewer?.full_name) {
+                              reviewerName = reviewer.full_name;
+                            } else if (reviewer?.first_name || reviewer?.last_name) {
+                              reviewerName = `${reviewer.first_name || ''} ${reviewer.last_name || ''}`.trim();
+                            } else if (task?.assigned_to_name) {
+                              reviewerName = task.assigned_to_name;
+                            } else if (subtaskDocs.length > 0) {
+                              // Fallback to first document's uploader if task assignee not available
+                              const firstDocUploader = subtaskDocs[0]?.uploaded_by;
+                              if (firstDocUploader) {
+                                const docUploader = reviewers[String(firstDocUploader)];
+                                if (docUploader?.full_name) {
+                                  reviewerName = docUploader.full_name;
+                                } else if (docUploader?.first_name || docUploader?.last_name) {
+                                  reviewerName = `${docUploader.first_name || ''} ${docUploader.last_name || ''}`.trim();
+                                }
+                              }
+                            }
+
+                            return (
+                              <div key={subtaskId} className="bg-card border border-border rounded-lg overflow-hidden">
+                                {/* Subtask Accordion Header */}
+                                <button
+                                  onClick={() => toggleSubtaskAccordion(subtaskId)}
+                                  className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                                      <Icon name="FileText" size={16} className="text-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-medium text-foreground truncate mb-1">
+                                        {subtaskName}
+                                      </h4>
+                                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                        <span>{subtaskDocs.length} document{subtaskDocs.length !== 1 ? 's' : ''}</span>
+                                        <span>•</span>
+                                        <span>Uploaded by: {reviewerName}</span>
+                                        {subtask?.status && (
+                                          <>
+                                            <span>•</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(subtask.status)}`}>
+                                              {subtask.status}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Icon 
+                                    name={expandedSubtasks[subtaskId] ? "ChevronUp" : "ChevronDown"} 
+                                    size={18} 
+                                    className="text-muted-foreground ml-3 flex-shrink-0" 
+                                  />
+                                </button>
+
+                                {/* Subtask Accordion Content */}
+                                {expandedSubtasks[subtaskId] && (
+                                  <div className="border-t border-border p-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {subtaskDocs.map((doc) => {
+                                        // Find the reviewer who uploaded this document
+                                        const docReviewer = Object.values(reviewers).find(r => r.user_id === doc.uploaded_by);
+                                        // Determine reviewer display name
+                                        let docReviewerName = 'Unknown Reviewer';
+                                        if (docReviewer?.full_name) {
+                                          docReviewerName = docReviewer.full_name;
+                                        } else if (docReviewer?.first_name || docReviewer?.last_name) {
+                                          docReviewerName = `${docReviewer.first_name || ''} ${docReviewer.last_name || ''}`.trim();
+                                        }
+                                        
+                                        return (
+                                          <div
+                                            key={doc.document_id}
+                                            className="bg-background border border-border rounded-lg p-4 hover:shadow-md transition-all"
+                                          >
+                                            <div className="flex items-start gap-3 mb-3">
+                                              <div className="flex-shrink-0">
+                                                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                                                  <Icon 
+                                                    name={doc.mime_type?.includes('pdf') ? 'FileText' : doc.mime_type?.includes('image') ? 'Image' : 'File'} 
+                                                    size={24} 
+                                                    className="text-primary" 
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <h5 className="font-medium text-foreground text-sm mb-1 truncate" title={doc.file_name}>
+                                                  {doc.file_name || 'Unnamed Document'}
+                                                </h5>
+                                                <div className="space-y-1">
+                                                  <p className="text-xs text-muted-foreground">
+                                                    <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded">
+                                                      {doc.document_type?.replace(/-|_/g, ' ').toUpperCase() || 'DOCUMENT'}
+                                                    </span>
+                                                  </p>
+                                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                                    <Icon name="User" size={12} />
+                                                    Uploaded by: {docReviewerName}
+                                                  </p>
+                                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                                    <Icon name="HardDrive" size={12} />
+                                                    {formatFileSize(doc.file_size)}
+                                                  </p>
+                                                  {doc.created_at && (
+                                                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                                      <Icon name="Calendar" size={12} />
+                                                      {new Date(doc.created_at).toLocaleDateString()}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Action Buttons */}
+                                            <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                                              <button
+                                                onClick={() => handleViewDocument(doc)}
+                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground rounded-md text-xs font-medium transition-colors"
+                                              >
+                                                <Icon name="Eye" size={14} />
+                                                View
+                                              </button>
+                                              <button
+                                                onClick={() => handleDownloadDocument(doc)}
+                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted-foreground/20 text-foreground rounded-md text-xs font-medium transition-colors"
+                                              >
+                                                <Icon name="Download" size={14} />
+                                                Download
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
