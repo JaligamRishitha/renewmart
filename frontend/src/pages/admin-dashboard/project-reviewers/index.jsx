@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from '../../../components/ui/Header';
 import Sidebar from '../../../components/ui/Sidebar';
-import WorkflowBreadcrumbs from '../../../components/ui/WorkflowBreadcrumbs';
 import Button from '../../../components/ui/Button';
 import Icon from '../../../components/AppIcon';
 import AssignReviewerModal from '../components/AssignReviewerModal';
@@ -201,7 +200,7 @@ const ProjectReviewersPage = () => {
           isCollapsed={sidebarCollapsed} 
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
         />
-        <div className="pt-16">
+        <div className="pt-19">
           <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
             <div className="max-w-7xl mx-auto px-4 lg:px-6">
               <div className="bg-error/10 border border-error/20 rounded-lg p-4">
@@ -230,8 +229,8 @@ const ProjectReviewersPage = () => {
         isCollapsed={sidebarCollapsed} 
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
-      <div className="pt-16">
-        <WorkflowBreadcrumbs />
+      <div className="pt-20">
+       
         <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
           <div className="max-w-7xl mx-auto px-4 lg:px-6">
           {/* Page Header */}

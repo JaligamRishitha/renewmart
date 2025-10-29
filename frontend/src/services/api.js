@@ -144,8 +144,20 @@ export const usersAPI = {
   },
   
   createUser: async (userData, roles = []) => {
-    const response = await api.post('/users/admin/create', { ...userData, roles });
-    return response.data;
+    console.log('Creating user with data:', { ...userData, roles });
+    try {
+      const response = await api.post('/users/admin/create', { ...userData, roles }, {
+        timeout: 30000 // 30 second timeout
+      });
+      console.log('User created successfully:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timed out. Please check if the database is accessible.');
+      }
+      throw error;
+    }
   },
   
   getAvailableRoles: async () => {
@@ -177,6 +189,12 @@ export const landsAPI = {
   },
   
   getLandById: async (landId) => {
+    const response = await api.get(`/lands/${landId}`);
+    return response.data;
+  },
+  
+  // Alias for getLandById for compatibility
+  getLand: async (landId) => {
     const response = await api.get(`/lands/${landId}`);
     return response.data;
   },
@@ -360,7 +378,7 @@ export const documentsAPI = {
 
   // Document Version Management
   getDocumentVersions: async (landId, documentType) => {
-    const response = await api.get(`/documents/land/${landId}/versions/${documentType}`);
+    const response = await api.get(`/document-versions/land/${landId}/document-type/${documentType}`);
     return response.data;
   },
 
@@ -422,7 +440,7 @@ export const documentsAPI = {
   // Document version operations
   getDocumentVersions: async (landId, documentType) => {
     console.log('API: Getting document versions for:', { landId, documentType });
-    const response = await api.get(`/documents/land/${landId}/versions/${documentType}`);
+    const response = await api.get(`/document-versions/land/${landId}/document-type/${documentType}`);
     console.log('API: Document versions response:', response);
     return response.data;
   },
@@ -713,6 +731,12 @@ export const taskAPI = {
     return response.data;
   },
 
+  // Get subtasks assigned to current user (collaboration work)
+  getAssignedSubtasks: async () => {
+    const response = await api.get('/tasks/subtasks/assigned-to-me');
+    return response.data;
+  },
+
   // Get task status by project/land for investor view
   getTaskStatusByProject: async (landId) => {
     console.log('🔧 API: Fetching tasks for landId:', landId);
@@ -940,6 +964,39 @@ export const reviewerAPI = {
 export const healthAPI = {
   check: async () => {
     const response = await api.get('/health');
+    return response.data;
+  }
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getNotifications: async (params = {}) => {
+    const response = await api.get('/notifications', { params });
+    return response.data;
+  },
+  
+  createNotification: async (notificationData) => {
+    const response = await api.post('/notifications', notificationData);
+    return response.data;
+  },
+  
+  markAsRead: async (notificationId) => {
+    const response = await api.put(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+  
+  markAllAsRead: async () => {
+    const response = await api.put('/notifications/read-all');
+    return response.data;
+  },
+  
+  deleteNotification: async (notificationId) => {
+    const response = await api.delete(`/notifications/${notificationId}`);
+    return response.data;
+  },
+  
+  getUnreadCount: async () => {
+    const response = await api.get('/notifications/unread-count');
     return response.data;
   }
 };

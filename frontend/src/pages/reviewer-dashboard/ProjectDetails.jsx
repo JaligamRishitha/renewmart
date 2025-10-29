@@ -8,6 +8,7 @@ import SubtaskManager from './SubtaskManager';
 import ReviewPanelCompact from './ReviewPanelCompact';
 import TaskPanel from './TaskPanel';
 import TeamsStyleMessaging from './components/TeamsStyleMessaging';
+import CollaborationWork from './components/CollaborationWork';
 import toast from 'react-hot-toast';
 
 const ProjectDetails = () => {
@@ -46,6 +47,7 @@ const ProjectDetails = () => {
     { id: 'overview', label: 'Overview', icon: 'LayoutGrid' },
     { id: 'all-tasks', label: 'All Tasks & Reviewers', icon: 'Users' },
     { id: 'documents', label: 'Documents', icon: 'FileText' },
+    { id: 'collaboration', label: 'Collaboration Work', icon: 'Handshake' },
     { id: 'messaging', label: 'Messaging', icon: 'MessageSquare' }
   ];
 
@@ -357,7 +359,7 @@ const ProjectDetails = () => {
         
         // Find the document that's under review in this slot
         sortedSlotDocs.forEach((doc, index) => {
-          const versionNumber = index + 1; // Version numbers start from 1
+          const versionNumber = doc.version_number || (index + 1); // Use actual version_number if available, otherwise calculate
           const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
           
           if (isUnderReview) {
@@ -1094,6 +1096,12 @@ const handleReleaseFromReview = async (doc) => {
         )}
 
         {/* Messaging Tab */}
+        {activeTab === 'collaboration' && (
+          <div className="bg-card border border-border rounded-lg p-6">
+            <CollaborationWork />
+          </div>
+        )}
+
         {activeTab === 'messaging' && (
           <div className="bg-card border border-border rounded-lg overflow-hidden h-[600px]">
             <TeamsStyleMessaging 

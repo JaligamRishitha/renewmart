@@ -74,36 +74,62 @@ async def create_default_subtasks_for_task(task_id: str, assigned_role: str, cre
         print(f"No default subtasks found for role: {assigned_role}")
         return
     
-    # Create subtasks in bulk
-    for template in templates:
+    # Create subtasks in bulk using savepoints to handle individual failures
+    successful_count = 0
+    for i, template in enumerate(templates):
         try:
-            subtask_id = uuid.uuid4()
-            insert_query = text("""
-                INSERT INTO subtasks (
-                    subtask_id, task_id, title, description, status,
-                    created_by, order_index
-                ) VALUES (
-                    CAST(:subtask_id AS uuid), CAST(:task_id AS uuid), :title, :description, :status,
-                    CAST(:created_by AS uuid), :order_index
-                )
-            """)
+            # Use savepoint for each subtask so failures don't abort the whole transaction
+            savepoint_name = f"sp_subtask_{i}"
+            savepoint = db.begin_nested()  # Creates a savepoint
             
-            db.execute(insert_query, {
-                "subtask_id": str(subtask_id),
-                "task_id": task_id,
-                "title": template["title"],
-                "description": f"{template['section']} - {template['title']}",
-                "status": "pending",
-                "created_by": created_by,
-                "order_index": template["order"]
-            })
+            try:
+                subtask_id = uuid.uuid4()
+                insert_query = text("""
+                    INSERT INTO subtasks (
+                        subtask_id, task_id, title, description, status,
+                        created_by, order_index
+                    ) VALUES (
+                        CAST(:subtask_id AS uuid), CAST(:task_id AS uuid), :title, :description, :status,
+                        CAST(:created_by AS uuid), :order_index
+                    )
+                """)
+                
+                db.execute(insert_query, {
+                    "subtask_id": str(subtask_id),
+                    "task_id": task_id,
+                    "title": template["title"],
+                    "description": f"{template['section']} - {template['title']}",
+                    "status": "pending",
+                    "created_by": created_by,
+                    "order_index": template["order"]
+                })
+                
+                # Release savepoint on success
+                savepoint.commit()
+                successful_count += 1
+            except Exception as e:
+                # Rollback to savepoint on failure, then continue
+                savepoint.rollback()
+                print(f"Error creating subtask {template['title']}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
         except Exception as e:
             print(f"Error creating subtask {template['title']}: {str(e)}")
-            # Continue with other subtasks even if one fails
+            import traceback
+            traceback.print_exc()
             continue
     
-    db.commit()
-    print(f"Created {len(templates)} default subtasks for task {task_id}")
+    try:
+        db.commit()
+        print(f"Created {successful_count}/{len(templates)} default subtasks for task {task_id}")
+    except Exception as commit_error:
+        print(f"Error committing subtasks: {str(commit_error)}")
+        try:
+            db.rollback()
+        except:
+            pass
+        raise  # Re-raise to be caught by caller
 
 def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> bool:
     """Check if user can access a task"""
@@ -235,13 +261,117 @@ async def create_task(
         })
         
         db.commit()
+        logger.info(f"Task {task_id} created and committed successfully")
         
         # Auto-create default subtasks if task has assigned_role
         if task_data.assigned_role:
-            await create_default_subtasks_for_task(task_id, task_data.assigned_role, str(current_user["user_id"]), db)
+            try:
+                logger.info(f"Creating default subtasks for task {task_id} with role {task_data.assigned_role}")
+                await create_default_subtasks_for_task(task_id, task_data.assigned_role, str(current_user["user_id"]), db)
+                logger.info(f"Default subtasks created successfully for task {task_id}")
+            except Exception as e:
+                logger.error(f"Error creating default subtasks (non-critical): {str(e)}", exc_info=True)
+                # Rollback any failed subtask transaction
+                try:
+                    db.rollback()
+                except:
+                    pass
+                # Continue - subtask creation failure shouldn't prevent task creation
+        
+        # Create notification if task is assigned to a user
+        print(f"DEBUG: Task creation notification check - assigned_to={task_data.assigned_to}")
+        if task_data.assigned_to:
+            print(f"DEBUG: Task has assigned_to={task_data.assigned_to}, creating notification...")
+            try:
+                from utils.notifications import notify_task_assigned
+                assigned_to_str = str(task_data.assigned_to)
+                task_title = task_data.task_type.replace('_', ' ').title()
+                land_id_str = str(task_data.land_id)
+                assigned_by_str = str(current_user["user_id"])
+                
+                print(f"DEBUG: Calling notify_task_assigned with task_id={task_id}, assigned_to={assigned_to_str}")
+                logger.info(f"Creating notification for task {task_id} assignment to {assigned_to_str}")
+                logger.info(f"Task details: title={task_title}, land_id={land_id_str}, assigned_by={assigned_by_str}")
+                
+                notify_task_assigned(
+                    db=db,
+                    task_id=task_id,
+                    assigned_to=assigned_to_str,
+                    task_title=task_title,
+                    land_id=land_id_str,
+                    assigned_by=assigned_by_str
+                )
+                print(f"DEBUG: notify_task_assigned returned successfully")
+                logger.info(f"Notification created successfully for task {task_id}")
+            except Exception as e:
+                print(f"DEBUG: ERROR creating task notification: {str(e)}")
+                logger.error(f"Error creating task assignment notification (non-critical): {str(e)}", exc_info=True)
+                import traceback
+                traceback.print_exc()
+                # Rollback notification transaction if it failed
+                try:
+                    db.rollback()
+                except:
+                    pass
+                # Continue - notification failure shouldn't prevent task creation
+        else:
+            print(f"DEBUG: Task has no assigned_to, skipping notification")
         
         # Fetch the created task
-        return await get_task(UUID(task_id), current_user, db)
+        # Ensure we use a fresh query to avoid transaction issues
+        try:
+            logger.info(f"Fetching created task {task_id}")
+            return await get_task(UUID(task_id), current_user, db)
+        except Exception as fetch_error:
+            logger.error(f"Error fetching created task {task_id}: {str(fetch_error)}", exc_info=True)
+            # If get_task fails, try to rollback and create a simple response
+            try:
+                db.rollback()
+            except:
+                pass
+            
+            # Return task data directly from what we know
+            query = text("""
+                SELECT t.task_id, t.land_id, t.title as task_type, t.description,
+                       t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
+                       t.assigned_role, t.due_date, t.completion_notes, t.created_at, t.updated_at,
+                       l.title as land_title, l.landowner_id,
+                       u1.first_name || ' ' || u1.last_name as assigned_to_name,
+                       u2.first_name || ' ' || u2.last_name as assigned_by_name
+                FROM tasks t
+                JOIN lands l ON t.land_id = l.land_id
+                LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+                LEFT JOIN "user" u2 ON t.created_by = u2.user_id
+                WHERE t.task_id = CAST(:task_id AS uuid)
+            """)
+            
+            result = db.execute(query, {"task_id": str(task_id)}).fetchone()
+            
+            if not result:
+                # Task was created but can't be retrieved - return error
+                raise HTTPException(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    detail=f"Task created successfully (ID: {task_id}) but failed to retrieve: {str(fetch_error)}"
+                )
+            
+            return TaskResponse(
+                task_id=result.task_id,
+                land_id=result.land_id,
+                task_type=result.task_type,
+                description=result.description,
+                assigned_to=str(result.assigned_to) if result.assigned_to else None,
+                created_by=str(result.assigned_by) if result.assigned_by else None,
+                status=result.status,
+                priority=result.priority,
+                assigned_role=result.assigned_role,
+                due_date=result.due_date,
+                completion_notes=result.completion_notes,
+                created_at=result.created_at,
+                updated_at=result.updated_at,
+                land_title=result.land_title,
+                assigned_to_name=result.assigned_to_name,
+                assigned_by_name=result.assigned_by_name
+            )
         
     except IntegrityError as e:
         db.rollback()
@@ -1187,6 +1317,26 @@ async def create_subtask(
         
         db.commit()
         
+        # Create notification if subtask is assigned to a different user (collaboration)
+        if subtask_data.assigned_to and str(subtask_data.assigned_to) != str(current_user["user_id"]):
+            try:
+                from utils.notifications import notify_subtask_assigned
+                logger.info(f"Creating notification for new subtask {result.subtask_id} assigned to {subtask_data.assigned_to}")
+                
+                notify_subtask_assigned(
+                    db=db,
+                    subtask_id=str(result.subtask_id),
+                    task_id=str(task_id),
+                    subtask_title=subtask_data.title,
+                    assigned_to=str(subtask_data.assigned_to),
+                    land_id=str(task.land_id) if hasattr(task, 'land_id') else None
+                )
+                logger.info(f"Notification created successfully for new subtask {result.subtask_id}")
+            except Exception as e:
+                logger.error(f"Error creating subtask assignment notification: {str(e)}", exc_info=True)
+                import traceback
+                traceback.print_exc()
+        
         return SubtaskResponse(
             subtask_id=result.subtask_id,
             task_id=result.task_id,
@@ -1306,10 +1456,16 @@ async def update_subtask(
 ):
     """Update a subtask."""
     try:
-        # Verify subtask exists
+        # Verify subtask exists - explicitly select columns to avoid naming conflicts
         subtask_query = """
-            SELECT s.*, t.assigned_to as task_assigned_to, t.created_by as task_created_by,
-                   l.landowner_id
+            SELECT 
+                s.subtask_id, s.task_id, s.title, s.description, s.status,
+                s.assigned_to as subtask_assigned_to, s.created_by as subtask_created_by,
+                s.created_at, s.updated_at, s.completed_at, s.order_index,
+                t.assigned_to as task_assigned_to, 
+                t.created_by as task_created_by,
+                l.landowner_id,
+                l.land_id
             FROM subtasks s
             JOIN tasks t ON s.task_id = t.task_id
             JOIN lands l ON t.land_id = l.land_id
@@ -1331,23 +1487,39 @@ async def update_subtask(
         user_id = str(current_user["user_id"])
         is_admin = "administrator" in user_roles
         is_task_assigned = str(subtask.task_assigned_to) == user_id if subtask.task_assigned_to else False
-        is_task_creator = str(subtask.task_created_by) == user_id
-        is_landowner = str(subtask.landowner_id) == user_id
+        is_task_creator = str(subtask.task_created_by) == user_id if subtask.task_created_by else False
+        is_landowner = str(subtask.landowner_id) == user_id if subtask.landowner_id else False
+        # IMPORTANT: Allow user assigned to the subtask itself (for collaboration)
+        # Use aliased column name to avoid conflicts
+        is_subtask_assigned = str(subtask.subtask_assigned_to) == user_id if subtask.subtask_assigned_to else False
+        
+        # Debug logging
+        print(f"Permission check - User: {user_id}, Task assigned: {is_task_assigned}, Subtask assigned: {is_subtask_assigned}, Admin: {is_admin}, Task creator: {is_task_creator}, Landowner: {is_landowner}")
+        print(f"Subtask assigned_to value: {subtask.subtask_assigned_to}")
         
         # Check if admin is trying to update status
-        if is_admin and subtask_data.status is not None and not (is_task_assigned or is_task_creator or is_landowner):
+        if is_admin and subtask_data.status is not None and not (is_task_assigned or is_subtask_assigned or is_task_creator or is_landowner):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="Administrators can only view subtasks. Only the assigned reviewer can change subtask status."
             )
         
-        # Allow task assigned users (reviewers), task creators, and landowners to update subtasks
-        # Admins can update other fields (like title, description) but not status (checked above)
-        if not (is_admin or is_task_assigned or is_task_creator or is_landowner):
+        # Allow task assigned users, subtask assigned users (collaborators), task creators, and landowners to update subtasks
+        # Admins can update other fields (like title, description, assigned_to) but not status (checked above)
+        if not (is_admin or is_task_assigned or is_subtask_assigned or is_task_creator or is_landowner):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this subtask"
             )
+        
+        # Additional check: If updating status, only allow if user is assigned to subtask OR task
+        if subtask_data.status is not None:
+            can_update_status = is_task_assigned or is_subtask_assigned or is_task_creator or is_landowner
+            if not (is_admin or can_update_status):
+                raise HTTPException(
+                    status_code=http_status.HTTP_403_FORBIDDEN,
+                    detail="Only the assigned reviewer or task owner can change subtask status"
+                )
         
         # Build update query
         update_fields = []
@@ -1397,6 +1569,58 @@ async def update_subtask(
         
         result = db.execute(text(update_query), params).fetchone()
         db.commit()
+        
+        # Create notification AFTER successful update (to avoid transaction abort issues)
+        # Only notify if assignment changed (was None or different user, and now assigned to someone else)
+        original_assigned_to = str(subtask.subtask_assigned_to) if subtask.subtask_assigned_to else None
+        new_assigned_to = str(subtask_data.assigned_to) if subtask_data.assigned_to is not None else None
+        
+        # Notify if:
+        # 1. New assignment is provided AND
+        # 2. It's different from the current user (they're assigning to someone else) AND
+        # 3. It's different from the original assignment (actually changed)
+        should_notify = (
+            new_assigned_to is not None and 
+            new_assigned_to != user_id and 
+            new_assigned_to != original_assigned_to
+        )
+        
+        print(f"DEBUG: Subtask notification check - original={original_assigned_to}, new={new_assigned_to}, user_id={user_id}, should_notify={should_notify}")
+        logger.info(f"Subtask assignment notification check: original={original_assigned_to}, new={new_assigned_to}, current_user={user_id}, should_notify={should_notify}")
+        
+        if should_notify:
+            print(f"DEBUG: Creating subtask notification for {new_assigned_to}")
+            try:
+                from utils.notifications import notify_subtask_assigned
+                logger.info(f"Creating notification for subtask {subtask_id} assignment to {new_assigned_to}")
+                
+                # Get subtask title from result or original subtask
+                subtask_title = result.title if result else (subtask.title if hasattr(subtask, 'title') else 'Subtask')
+                # Get land_id from subtask query result - we added it to the query
+                land_id = str(subtask.land_id) if hasattr(subtask, 'land_id') and subtask.land_id else None
+                
+                print(f"DEBUG: Calling notify_subtask_assigned with subtask_id={subtask_id}, task_id={task_id}, assigned_to={new_assigned_to}")
+                logger.info(f"Notification params: subtask_id={subtask_id}, task_id={task_id}, title={subtask_title}, assigned_to={new_assigned_to}, land_id={land_id}")
+                
+                notify_subtask_assigned(
+                    db=db,
+                    subtask_id=str(subtask_id),
+                    task_id=str(task_id),
+                    subtask_title=subtask_title,
+                    assigned_to=new_assigned_to,
+                    land_id=land_id
+                )
+                print(f"DEBUG: notify_subtask_assigned returned successfully")
+                logger.info(f"Notification created successfully for subtask {subtask_id}")
+            except Exception as e:
+                print(f"DEBUG: ERROR creating subtask notification: {str(e)}")
+                # Log error but don't fail the update - notification is non-critical
+                # The main update already succeeded, so we just log the notification error
+                logger.error(f"Error creating subtask assignment notification (non-critical): {str(e)}", exc_info=True)
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"DEBUG: Not notifying - should_notify=False")
         
         return SubtaskResponse(
             subtask_id=result.subtask_id,
@@ -1476,6 +1700,85 @@ async def delete_subtask(
     db.commit()
     
     return {"message": "Subtask deleted successfully"}
+
+
+@router.get("/subtasks/assigned-to-me", response_model=List[dict])
+async def get_my_assigned_subtasks(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all subtasks assigned to the current user (from other reviewers for collaboration)."""
+    try:
+        user_id = str(current_user["user_id"])
+        
+        # Get subtasks assigned to current user, excluding those from tasks they own
+        query = text("""
+            SELECT 
+                s.subtask_id,
+                s.task_id,
+                s.title,
+                s.description,
+                s.status,
+                s.assigned_to,
+                s.created_by,
+                s.created_at,
+                s.updated_at,
+                s.completed_at,
+                s.order_index,
+                t.land_id,
+                t.title as task_type,
+                t.assigned_role,
+                l.title as land_title,
+                creator.first_name || ' ' || creator.last_name as creator_name,
+                creator.email as creator_email
+            FROM subtasks s
+            JOIN tasks t ON s.task_id = t.task_id
+            JOIN lands l ON t.land_id = l.land_id
+            LEFT JOIN "user" creator ON s.created_by = creator.user_id
+            WHERE s.assigned_to = CAST(:user_id AS uuid)
+              AND t.assigned_to != CAST(:user_id AS uuid)  -- Exclude subtasks from own tasks
+            ORDER BY s.created_at DESC
+        """)
+        
+        results = db.execute(query, {"user_id": user_id}).fetchall()
+        
+        subtasks = []
+        for row in results:
+            subtasks.append({
+                "subtask_id": str(row.subtask_id),
+                "task_id": str(row.task_id),
+                "title": row.title,
+                "description": row.description,
+                "status": row.status,
+                "assigned_to": str(row.assigned_to) if row.assigned_to else None,
+                "created_by": str(row.created_by) if row.created_by else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+                "order_index": row.order_index,
+                "land_id": str(row.land_id),
+                "task": {
+                    "task_id": str(row.task_id),
+                    "task_type": row.task_type,
+                    "assigned_role": row.assigned_role,
+                    "land_id": str(row.land_id)
+                },
+                "creator": {
+                    "first_name": row.creator_name.split()[0] if row.creator_name else None,
+                    "last_name": " ".join(row.creator_name.split()[1:]) if row.creator_name and len(row.creator_name.split()) > 1 else None,
+                    "email": row.creator_email
+                }
+            })
+        
+        return subtasks
+    except Exception as e:
+        print(f"Error fetching assigned subtasks: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch assigned subtasks: {str(e)}"
+        )
 
 
 @router.post("/{task_id}/subtasks/submit")

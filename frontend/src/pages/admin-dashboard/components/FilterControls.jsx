@@ -22,10 +22,9 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
 
   const statusOptions = [
     { value: '', label: 'All Statuses' },
-    { value: 'In Progress', label: 'In Progress' },
-    { value: 'Pending', label: 'Pending' },
-    { value: 'Delayed', label: 'Delayed' },
-    { value: 'Completed', label: 'Completed' }
+    { value: 'published', label: 'Published' },
+    { value: 'under_review', label: 'Under Review' },
+   
   ];
 
   const priorityOptions = [
@@ -54,14 +53,7 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
         )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        <Select
-          label="Reviewer Role"
-          options={reviewerRoleOptions}
-          value={filters?.reviewerRole}
-          onChange={(value) => onFilterChange('reviewerRole', value)}
-          className="min-w-0"
-        />
-
+        
         <Select
           label="Project Type"
           options={projectTypeOptions}
@@ -78,13 +70,7 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
           className="min-w-0"
         />
 
-        <Select
-          label="Priority"
-          options={priorityOptions}
-          value={filters?.priority}
-          onChange={(value) => onFilterChange('priority', value)}
-          className="min-w-0"
-        />
+       
 
         <Input
           label="Start Date From"
@@ -101,9 +87,8 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
           onChange={(e) => onFilterChange('endDateTo', e?.target?.value)}
           className="min-w-0"
         />
-      </div>
-      <div className="mt-4 pt-4 border-t border-border">
-        <Input
+
+    <Input
           label="Search Landowner"
           type="search"
           placeholder="Search by landowner name or location..."
@@ -112,6 +97,9 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
           className="max-w-md"
         />
       </div>
+     
+       
+      
     </div>
   );
 };

@@ -4,6 +4,7 @@ import Button from '../../../components/ui/Button';
 import { taskAPI, documentsAPI } from '../../../services/api';
 import { Checkbox } from '../../../components/ui/Checkbox';
 import ProjectMessaging from './ProjectMessaging';
+import CollaborationTab from './CollaborationTab';
 
 /**
  * ReviewPanel Component
@@ -35,7 +36,8 @@ const ReviewPanel = ({
   onSaveProgress = () => {},
   initialRole = null,                  // Initial role from navigation
   autoSwitchRole = false,              // Flag to auto-switch to initial role
-  initialTaskType = null               // Initial task type from navigation
+  initialTaskType = null,              // Initial task type from navigation
+  onRefreshSubtasks = async () => {}   // Callback to refresh subtasks from parent
 }) => {
 
   // 🔹 Role-specific state management - maintains state per role with localStorage persistence
@@ -292,10 +294,25 @@ const ReviewPanel = ({
   useEffect(() => {
     console.log('🔄 ReviewPanel: Props changed from parent');
     console.log('   → Role:', reviewerRole);
-    console.log('   → Task:', currentTask?.task_id);
+    console.log('   → Task ID:', currentTask?.task_id);
+    console.log('   → Full Task Object:', currentTask);
     console.log('   → Subtasks count:', subtasks?.length);
     console.log('   → State preserved per role');
-  }, [reviewerRole, currentTask, subtasks]);
+    
+    // Log specifically for Task Details tab
+    if (activeTab === 'task') {
+      console.log('📋 Task Details Tab - Current Task Data:', {
+        task_id: currentTask?.task_id,
+        task_type: currentTask?.task_type,
+        description: currentTask?.description,
+        status: currentTask?.status,
+        assigned_to_name: currentTask?.assigned_to_name,
+        assigned_role: currentTask?.assigned_role,
+        hasTask: !!currentTask,
+        taskObject: currentTask
+      });
+    }
+  }, [reviewerRole, currentTask, subtasks, activeTab]);
 
   // 🔹 Fetch template sections based on parent's reviewerRole prop
   useEffect(() => {
@@ -701,47 +718,21 @@ const ReviewPanel = ({
 
   return (
     <div className="flex flex-col h-full bg-card border border-border rounded-lg overflow-hidden">
-      {/* Role Selection Buttons - Always visible */}
+      {/* Messaging Button - Role tabs removed */}
       <div className="p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-muted-foreground">Role:</span>
-            <div className="flex bg-background rounded-lg p-1 border">
-              {reviewerRoles.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => onRoleChange(r.id)}
-                  disabled={isRoleChanging}
-                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm ${
-                    reviewerRole === r.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Icon name={r.icon} size={16} />
-                  <span>{r.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Messaging Button */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowMessaging(!showMessaging)}
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
-                showMessaging
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
-              }`}
-            >
-              <Icon name="MessageCircle" size={16} />
-              <span>Messaging</span>
-            </button>
-          </div>
-          
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => setShowMessaging(!showMessaging)}
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+              showMessaging
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+            }`}
+          >
+            <Icon name="MessageCircle" size={16} />
+            <span>Messaging</span>
+          </button>
         </div>
-     
       </div>
 
       {/* Tabs - Always visible */}
@@ -1247,7 +1238,7 @@ const ReviewPanel = ({
         
         {!showMessaging && activeTab === "task" && (
           <div className="p-4 h-full overflow-y-auto">
-            {hasNoTask ? (
+            {!currentTask || !currentTask.task_id ? (
               <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center max-w-md">
                   <Icon name="AlertCircle" size={64} className="text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -1255,6 +1246,11 @@ const ReviewPanel = ({
                   <p className="text-muted-foreground mb-2">
                     No task has been assigned for the selected reviewer role yet.
                   </p>
+                  {process.env.NODE_ENV === 'development' && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Debug: currentTask = {JSON.stringify(currentTask, null, 2)}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1264,10 +1260,10 @@ const ReviewPanel = ({
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="text-lg font-semibold text-foreground mb-1">
-                        {currentTask?.task_type?.replace(/_/g, ' ').toUpperCase() || 'Task Details'}
+                        {currentTask?.task_type?.replace(/_/g, ' ').toUpperCase() || currentTask?.title || 'Task Details'}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Role: {reviewerRole?.replace(/_/g, ' ').toUpperCase()}
+                        Role: {currentTask?.assigned_role?.replace(/_/g, ' ').toUpperCase() || reviewerRole?.replace(/_/g, ' ').toUpperCase() || 'Not Specified'}
                       </p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
@@ -1281,18 +1277,16 @@ const ReviewPanel = ({
                   </div>
                 </div>
 
-                {/* Task Description */}
-                {currentTask?.description && (
-                  <div className="bg-muted/50 border border-border rounded-lg p-4">
-                    <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <Icon name="FileText" size={18} className="text-primary" />
-                      Description
-                    </h4>
-                    <p className="text-sm text-foreground">
-                      {currentTask.description}
-                    </p>
-                  </div>
-                )}
+                {/* Task Description - Always show section even if empty */}
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <Icon name="FileText" size={18} className="text-primary" />
+                    Description
+                  </h4>
+                  <p className="text-sm text-foreground">
+                    {currentTask?.description || 'No description provided'}
+                  </p>
+                </div>
 
                 {/* Task Timeline */}
                 <div className="bg-muted/50 border border-border rounded-lg p-4">
@@ -1346,19 +1340,21 @@ const ReviewPanel = ({
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">Assigned To</div>
                       <div className="text-sm font-medium text-foreground">
-                        {currentTask?.assigned_to_name || 'Unassigned'}
+                        {currentTask?.assigned_to_name || currentTask?.assigned_user?.name || 'Unassigned'}
                       </div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">Assigned Role</div>
                       <div className="text-sm font-medium text-foreground">
-                        {currentTask?.assigned_role?.replace(/_/g, ' ').toUpperCase() || reviewerRole?.replace(/_/g, ' ').toUpperCase()}
+                        {currentTask?.assigned_role 
+                          ? currentTask.assigned_role.replace(/_/g, ' ').toUpperCase() 
+                          : reviewerRole?.replace(/_/g, ' ').toUpperCase() || 'Not Specified'}
                       </div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">Assigned By</div>
                       <div className="text-sm font-medium text-foreground">
-                        {currentTask?.assigned_by_name || 'N/A'}
+                        {currentTask?.assigned_by_name || currentTask?.created_by?.name || 'N/A'}
                       </div>
                     </div>
                     <div>
@@ -1367,19 +1363,35 @@ const ReviewPanel = ({
                         {currentTask?.task_id || 'N/A'}
                       </div>
                     </div>
+                    {currentTask?.land_title && (
+                      <div className="col-span-2">
+                        <div className="text-sm text-muted-foreground mb-1">Project/Land</div>
+                        <div className="text-sm font-medium text-foreground">
+                          {currentTask.land_title}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Completion Notes */}
-                {currentTask?.completion_notes && (
-                  <div className="bg-muted/50 border border-border rounded-lg p-4">
-                    <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <Icon name="MessageSquare" size={18} className="text-primary" />
-                      Completion Notes
-                    </h4>
-                    <p className="text-sm text-foreground">
-                      {currentTask.completion_notes}
-                    </p>
+                {/* Completion Notes - Always show section */}
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <Icon name="MessageSquare" size={18} className="text-primary" />
+                    Completion Notes
+                  </h4>
+                  <p className="text-sm text-foreground">
+                    {currentTask?.completion_notes || 'No completion notes available'}
+                  </p>
+                </div>
+                
+                {/* Debug Info in Development */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-yellow-600 mb-2">Debug Info (Development Only)</h4>
+                    <pre className="text-xs text-yellow-700 overflow-auto max-h-48">
+                      {JSON.stringify(currentTask, null, 2)}
+                    </pre>
                   </div>
                 )}
               </div>
@@ -1388,7 +1400,7 @@ const ReviewPanel = ({
         )}
         
         {!showMessaging && activeTab === "collaboration" && (
-          <div className="p-4 h-full overflow-y-auto">
+          <div className="h-full overflow-hidden">
             {hasNoTask ? (
               <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center max-w-md">
@@ -1400,11 +1412,12 @@ const ReviewPanel = ({
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8">
-                <Icon name="Users" size={48} className="text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">Collaboration</h3>
-                <p className="text-muted-foreground">Collaboration tools will be displayed here.</p>
-              </div>
+              <CollaborationTab
+                currentTask={currentTask}
+                subtasks={subtasks}
+                currentUser={currentUser}
+                onSubtaskAssignment={onRefreshSubtasks}
+              />
             )}
           </div>
         )}

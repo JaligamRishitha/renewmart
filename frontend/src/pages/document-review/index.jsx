@@ -210,7 +210,26 @@ const DocumentReview = () => {
       const taskId = location.state?.taskId || new URLSearchParams(location.search).get("taskId");
       const landId = projectId || location.state?.landId || new URLSearchParams(location.search).get("landId");
 
-      console.log("[DocumentReview] Fetching Data:", { taskId, landId, projectId });
+      // Try to infer role from URL path if available
+      const pathname = location.pathname;
+      let inferredRole = null;
+      if (pathname.includes('/analyst/')) {
+        inferredRole = 're_analyst';
+      } else if (pathname.includes('/sales-advisor/') || pathname.includes('/sales/')) {
+        inferredRole = 're_sales_advisor';
+      } else if (pathname.includes('/governance/')) {
+        inferredRole = 're_governance_lead';
+      }
+
+      console.log("[DocumentReview] Fetching Data:", { 
+        taskId, 
+        landId, 
+        projectId,
+        pathname,
+        inferredRole,
+        currentReviewerRole: reviewerRole,
+        userId: user?.user_id
+      });
 
       let task = null;
       let land = null;
@@ -224,9 +243,43 @@ const DocumentReview = () => {
       else if (landId) {
         const tasks = await taskAPI.getTasks({ land_id: landId });
         setAllTasksForLand(tasks);
-        task = tasks.find((t) => t.assigned_to === user?.user_id) || tasks[0];
+        console.log("[DocumentReview] All tasks for land:", tasks);
+        
+        // For admin users, prefer tasks matching their current role, otherwise first task
+        // For non-admin users, find their assigned task (match by assigned_to even if role is null)
+        if (user?.role === 'admin') {
+          task = tasks.find((t) => t.assigned_role === reviewerRole || t.assigned_role === inferredRole) || tasks[0];
+        } else {
+          // First, try to find task assigned to current user by user_id
+          task = tasks.find((t) => t.assigned_to === user?.user_id);
+          console.log("[DocumentReview] Task search by user_id:", {
+            userId: user?.user_id,
+            found: !!task,
+            taskId: task?.task_id
+          });
+          
+          // If no task found by user_id, try matching by inferred role from URL
+          if (!task && inferredRole) {
+            console.log("[DocumentReview] No task found by user_id, trying inferred role:", inferredRole);
+            task = tasks.find((t) => t.assigned_role === inferredRole);
+          }
+          
+          // If still no task, try to find any task with null assigned_role (might be unassigned tasks)
+          if (!task) {
+            console.log("[DocumentReview] No task found by role, trying tasks with null assigned_role");
+            task = tasks.find((t) => !t.assigned_role || t.assigned_role === null);
+          }
+          
+          // If still no task, take first available task for this land
+          if (!task && tasks.length > 0) {
+            console.log("[DocumentReview] Using first available task from land");
+            task = tasks[0];
+          }
+        }
+        
+        console.log("[DocumentReview] Selected task:", task);
       }
-      // CASE 3: No params → user’s first assigned task
+      // CASE 3: No params → user's first assigned task
       else {
         const myTasks = await taskAPI.getTasksAssignedToMe();
         if (myTasks.length === 0) {
@@ -238,13 +291,25 @@ const DocumentReview = () => {
       }
 
       if (!task) {
+        console.error("[DocumentReview] No task found after all attempts");
         setError("No valid task found");
         setIsLoading(false);
         return;
       }
 
+      // Set role: prefer task's assigned_role, then inferred role, then current reviewerRole, then default
+      const taskRole = task.assigned_role || inferredRole || reviewerRole || "re_sales_advisor";
       setCurrentTask(task);
-      setReviewerRole(task.assigned_role || "re_sales_advisor");
+      setReviewerRole(taskRole);
+      
+      console.log("[DocumentReview] Task loaded successfully:", {
+        task_id: task.task_id,
+        task_type: task.task_type,
+        assigned_role: task.assigned_role,
+        assigned_to: task.assigned_to,
+        assigned_to_name: task.assigned_to_name,
+        selected_role: taskRole
+      });
 
       // Land + Documents
       if (task.land_id) {
@@ -300,7 +365,7 @@ const DocumentReview = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [location.state, location.search, user]);
+  }, [location.state, location.search, location.pathname, projectId, user, reviewerRole]);
 
   useEffect(() => {
     fetchData();
@@ -385,14 +450,30 @@ const DocumentReview = () => {
       console.log('📋 Fetching tasks for land:', landId);
       const tasksForLand = await taskAPI.getTasks({ land_id: landId });
       console.log('📋 Available tasks for land:', tasksForLand);
-  
-      // Filter for tasks with this role AND assigned to current user
-      const roleTask = tasksForLand.find(
-        t => t.assigned_role === newRole && t.assigned_to === user?.user_id
-      );
+      
+      // Update all tasks for land
+      setAllTasksForLand(tasksForLand);
+
+      // Filter for tasks with this role
+      // For admin users, show tasks for the role regardless of assignment
+      // For non-admin users, only show tasks assigned to them
+      let roleTask;
+      if (user?.role === 'admin') {
+        roleTask = tasksForLand.find(t => t.assigned_role === newRole);
+      } else {
+        roleTask = tasksForLand.find(
+          t => t.assigned_role === newRole && t.assigned_to === user?.user_id
+        );
+      }
       
       console.log('✅ Task found for role:', roleTask);
-  
+      console.log('👤 User role:', user?.role);
+      console.log('🔍 Search criteria:', {
+        role: newRole,
+        userId: user?.user_id,
+        isAdmin: user?.role === 'admin'
+      });
+
       if (!roleTask) {
         setNotifications(prev => [
           ...prev,
@@ -400,13 +481,18 @@ const DocumentReview = () => {
             id: `role-missing-${Date.now()}`,
             type: 'error',
             title: 'No Task',
-            message: `No task assigned for ${newRole} to you`,
+            message: user?.role === 'admin' 
+              ? `No task found for role ${newRole}`
+              : `No task assigned for ${newRole} to you`,
           },
         ]);
         
         // Update role first, then clear task and subtasks
         setReviewerRole(newRole);
         setCurrentTask(null);
+        setSubtasks([]);
+        setIsLoading(false);
+        setIsRoleChanging(false);
         return;
       }
   
@@ -627,6 +713,12 @@ const DocumentReview = () => {
               initialRole={location.state?.reviewerRole}
               autoSwitchRole={location.state?.autoSwitchRole}
               initialTaskType={location.state?.taskType}
+              onRefreshSubtasks={async () => {
+                if (currentTask?.task_id) {
+                  const refreshed = await taskAPI.getSubtasks(currentTask.task_id);
+                  setSubtasks(refreshed);
+                }
+              }}
             />
           </div>
         </div>

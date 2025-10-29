@@ -4,10 +4,13 @@ import Icon from '../AppIcon';
 import Button from './Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { getRoleNavigation } from '../../utils/navigation';
+import NotificationPanel from './NotificationPanel';
+import NotificationBellButton from './NotificationBellButton';
 
 const Header = ({ userRole = 'landowner', notifications = {} }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -16,14 +19,32 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
   const getRoleDisplayName = (roles) => {
     if (!roles || roles.length === 0) return 'Guest';
     
+    // Helper function to format role name (remove underscores, capitalize)
+    const formatRoleName = (role) => {
+      return role
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    };
+    
     // Priority order for role display
     if (roles.includes('administrator')) return 'Admin Portal';
-    if (roles.includes('reviewer')) return 'Reviewer Portal';
     if (roles.includes('investor')) return 'Investor Portal';
     if (roles.includes('landowner')) return 'Landowner Portal';
     
-    // Fallback to first role
-    return roles[0] ? `${roles[0].charAt(0).toUpperCase() + roles[0].slice(1)} Portal` : 'Guest';
+    // Check for reviewer roles
+    const reviewerRoles = roles.filter(role => 
+      ['re_analyst', 're_sales_advisor', 're_governance_lead'].includes(role)
+    );
+    if (reviewerRoles.length > 0) {
+      return `${formatRoleName(reviewerRoles[0])} Portal`;
+    }
+    
+    // Check for generic reviewer role
+    if (roles.includes('reviewer')) return 'Reviewer Portal';
+    
+    // Fallback to first role with formatting
+    return roles[0] ? `${formatRoleName(roles[0])} Portal` : 'Guest';
   };
 
   // Get role-based navigation
@@ -35,14 +56,14 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       path: roleNavigation.dashboard || '/dashboard',
       icon: 'LayoutDashboard',
       roles: ['landowner', 'admin', 'reviewer', 'investor'],
-      badge: notifications?.dashboard || 0
+      badge: 0
     },
     {
       label: 'Projects',
       path: roleNavigation.projectStatus || roleNavigation.dashboard || '/dashboard',
       icon: 'FolderOpen',
       roles: ['landowner', 'admin', 'reviewer'],
-      badge: notifications?.projects || 0
+      badge: 0
     },
     {
       label: 'Opportunities',
@@ -57,28 +78,16 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       icon: 'Heart',
       roles: ['investor'],
       badge: notifications?.interests || 0
-    },
+    }
+  ];
+
+  const moreMenuItems = [
     {
       label: 'Account',
       path: '/account',
       icon: 'User',
       roles: ['landowner', 'admin', 'investor', 'reviewer'],
       badge: notifications?.account || 0
-    }
-  ];
-
-  const moreMenuItems = [
-    {
-      label: 'Help',
-      path: '/help',
-      icon: 'HelpCircle',
-      roles: ['landowner', 'admin', 'investor', 'reviewer']
-    },
-    {
-      label: 'Admin',
-      path: '/admin',
-      icon: 'Shield',
-      roles: ['admin']
     },
     {
       label: 'Logout',
@@ -194,6 +203,9 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
               );
             })}
 
+            {/* Notifications Bell Icon */}
+            <NotificationBellButton onOpen={() => setIsNotificationPanelOpen(true)} />
+
             {/* More Menu */}
             {filteredMoreItems?.length > 0 && (
               <div className="relative more-menu-container">
@@ -293,6 +305,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
           </div>
         </div>
       )}
+
+      {/* Notification Panel Slide-out */}
+      <NotificationPanel 
+        isOpen={isNotificationPanelOpen}
+        onClose={() => setIsNotificationPanelOpen(false)}
+        currentUser={user}
+      />
     </header>
   );
 };

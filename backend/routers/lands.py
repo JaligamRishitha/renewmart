@@ -94,6 +94,7 @@ async def get_admin_projects(
             "landownerPhone": row.phone,
             "location": row.location_text or "Not specified",
             "projectType": row.land_type or "Not specified",
+            "energy_key": row.energy_key or "Not specified",
             "energyType": row.energy_key or "Not specified",
             "capacity": f"{row.capacity_mw} MW" if row.capacity_mw else "Not specified",
             "pricePerMWh": float(row.price_per_mwh) if row.price_per_mwh else 0,
@@ -859,6 +860,34 @@ async def submit_land_for_review(
                 "land_id": str(land_id),
                 "owner_id": current_user["user_id"]
             })
+            
+            # Get project title for notification
+            land_title_query = text("SELECT title FROM lands WHERE land_id = :land_id")
+            land_title_result = db.execute(land_title_query, {"land_id": str(land_id)}).fetchone()
+            project_title = land_title_result.title if land_title_result else "Project"
+            
+            # Get admin users to notify
+            admin_query = text("""
+                SELECT DISTINCT u.user_id
+                FROM "user" u
+                JOIN user_roles ur ON u.user_id = ur.user_id
+                WHERE ur.role_key = 'administrator' AND u.is_active = true
+            """)
+            admin_users = db.execute(admin_query).fetchall()
+            admin_user_ids = [str(row.user_id) for row in admin_users]
+            
+            # Create notifications
+            try:
+                from utils.notifications import notify_project_submitted
+                notify_project_submitted(
+                    db=db,
+                    land_id=str(land_id),
+                    project_title=project_title,
+                    landowner_id=str(current_user["user_id"]),
+                    admin_user_ids=admin_user_ids
+                )
+            except Exception as e:
+                print(f"Error creating project submission notification: {str(e)}")
             
             db.commit()
             return MessageResponse(message="Land submitted for review successfully")

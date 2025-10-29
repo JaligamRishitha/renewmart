@@ -128,6 +128,43 @@ async def upload_document(
         
         db.commit()
         
+        # Create notifications for document upload
+        try:
+            from utils.notifications import notify_document_uploaded
+            
+            # Get reviewer IDs (assigned reviewers for this land)
+            reviewer_query = text("""
+                SELECT DISTINCT u.user_id
+                FROM "user" u
+                JOIN user_roles ur ON u.user_id = ur.user_id
+                WHERE ur.role_key IN ('re_analyst', 're_sales_advisor', 're_governance_lead')
+                AND u.is_active = true
+            """)
+            reviewers = db.execute(reviewer_query).fetchall()
+            reviewer_ids = [str(row.user_id) for row in reviewers]
+            
+            # Get admin user IDs
+            admin_query = text("""
+                SELECT DISTINCT u.user_id
+                FROM "user" u
+                JOIN user_roles ur ON u.user_id = ur.user_id
+                WHERE ur.role_key = 'administrator' AND u.is_active = true
+            """)
+            admins = db.execute(admin_query).fetchall()
+            admin_user_ids = [str(row.user_id) for row in admins]
+            
+            notify_document_uploaded(
+                db=db,
+                document_id=document_id,
+                land_id=str(land_id),
+                document_type=document_type,
+                uploaded_by=str(current_user["user_id"]),
+                reviewer_ids=reviewer_ids,
+                admin_user_ids=admin_user_ids
+            )
+        except Exception as e:
+            print(f"Error creating document upload notification: {str(e)}")
+        
         # Fetch the created document
         return await get_document(UUID(document_id), current_user, db)
         

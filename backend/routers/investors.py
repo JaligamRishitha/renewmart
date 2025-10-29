@@ -4,6 +4,7 @@ from sqlalchemy import text
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+from decimal import Decimal
 import uuid
 
 from database import get_db
@@ -495,69 +496,131 @@ async def get_my_interests(
 @router.get("/land/{land_id}/interests", response_model=List[InterestResponse])
 async def get_land_interests(
     land_id: UUID,
-    status: Optional[str] = None,
+    status_filter: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get interests for a specific land (land owner or admin only)."""
-    # Check if land exists and user has permission
-    land_check = text("SELECT owner_id FROM lands WHERE land_id = :land_id")
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
-    
-    if not land_result:
+    try:
+        # Check if land exists and user has permission
+        land_check = text("SELECT landowner_id FROM lands WHERE land_id = :land_id")
+        land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+        
+        if not land_result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Land not found"
+            )
+        
+        user_roles = current_user.get("roles", [])
+        user_id = str(current_user["user_id"])
+        
+        # Only land owner or admin can view interests for a land
+        landowner_id = str(land_result.landowner_id) if land_result.landowner_id else None
+        if landowner_id != user_id and "administrator" not in user_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions to view interests for this land"
+            )
+        
+        base_query = """
+            SELECT 
+                ii.interest_id, 
+                ii.investor_id, 
+                ii.land_id, 
+                ii.status,
+                ii.comments, 
+                ii.investment_amount,
+                ii.interest_level,
+                ii.contact_preference,
+                ii.created_at, 
+                COALESCE(ii.updated_at, ii.created_at) as updated_at,
+                l.title as land_title, 
+                l.location_text as land_location, 
+                l.landowner_id,
+                u.user_id,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.phone,
+                u.is_active,
+                TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) as investor_name
+            FROM investor_interests ii
+            JOIN lands l ON ii.land_id = l.land_id
+            JOIN "user" u ON ii.investor_id = u.user_id
+            WHERE ii.land_id = CAST(:land_id AS uuid)
+        """
+        
+        params = {"land_id": str(land_id)}
+        
+        if status_filter:
+            base_query += " AND ii.status = :status_filter"
+            params["status_filter"] = status_filter
+        
+        base_query += " ORDER BY ii.created_at DESC"
+        
+        results = db.execute(text(base_query), params).fetchall()
+        
+        from models.schemas import User, InterestResponse
+        
+        interests = []
+        for row in results:
+            # Create User object for investor with all required fields
+            investor_user = User(
+                user_id=row.user_id,
+                first_name=row.first_name or "",
+                last_name=row.last_name or "",
+                email=row.email or "",
+                phone=row.phone,
+                # company field not available in User model, skipping
+                is_active=row.is_active if hasattr(row, 'is_active') else True,
+                # Required fields for User schema
+                created_at=datetime.now(),  # Default value since we don't need exact creation date
+                updated_at=datetime.now()
+            )
+            
+            # Create InterestResponse with all required fields
+            interest_response = InterestResponse(
+                interest_id=row.interest_id,
+                investor_id=row.investor_id,
+                land_id=row.land_id,
+                status=row.status or "pending",
+                interest_level=row.interest_level if hasattr(row, 'interest_level') else "medium",
+                investment_amount=Decimal(str(row.investment_amount)) if row.investment_amount else None,
+                comments=row.comments,
+                contact_preference=row.contact_preference if hasattr(row, 'contact_preference') else None,
+                created_at=row.created_at if row.created_at else datetime.now(),
+                investor=investor_user,
+                land=None  # We don't need full land object for this endpoint
+            )
+            
+            # Convert to dict and add additional fields for frontend compatibility
+            interest_dict = interest_response.model_dump()
+            interest_dict.update({
+                "investor_name": row.investor_name or "Unknown Investor",
+                "investor_email": row.email or "",
+                "phone": row.phone,
+                "first_name": row.first_name or "",
+                "last_name": row.last_name or "",
+                "email": row.email or "",
+                "land_title": row.land_title,
+                "land_location": row.land_location
+            })
+            
+            interests.append(interest_dict)
+        
+        return interests
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_land_interests: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Land not found"
+            status_code=500,
+            detail=f"Failed to fetch land interests: {str(e)}"
         )
-    
-    user_roles = current_user.get("roles", [])
-    
-    # Only land owner or admin can view interests for a land
-    if (str(land_result.owner_id) != current_user["user_id"] and 
-        "administrator" not in user_roles):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to view interests for this land"
-        )
-    
-    base_query = """
-        SELECT ii.interest_id, ii.investor_id, ii.land_id, ii.status,
-               ii.comments, ii.created_at, ii.updated_at,
-               l.title as land_title, l.location_text as land_location, l.landowner_id as owner_id,
-               u.first_name || ' ' || u.last_name as investor_name,
-               u.email as investor_email
-        FROM investor_interests ii
-        JOIN lands l ON ii.land_id = l.land_id
-        JOIN users u ON ii.investor_id = u.user_id
-        WHERE ii.land_id = :land_id
-    """
-    
-    params = {"land_id": str(land_id)}
-    
-    if status:
-        base_query += " AND ii.status = :status"
-        params["status"] = status
-    
-    base_query += " ORDER BY ii.created_at DESC"
-    
-    results = db.execute(text(base_query), params).fetchall()
-    
-    return [
-        InterestResponse(
-            interest_id=row.interest_id,
-            investor_id=row.investor_id,
-            land_id=row.land_id,
-            status=row.status,
-            comments=row.comments,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            land_title=row.land_title,
-            land_location=row.land_location,
-            investor_name=row.investor_name,
-            investor_email=row.investor_email
-        )
-        for row in results
-    ]
 
 # Land visibility management endpoints
 @router.put("/land/{land_id}/visibility", response_model=MessageResponse)

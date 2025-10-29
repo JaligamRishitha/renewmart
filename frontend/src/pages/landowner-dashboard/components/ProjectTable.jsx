@@ -4,7 +4,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 
-const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForReview, onDelete, onViewDocuments }) => {
+const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForReview, onDelete, onViewDocuments, onViewInterest }) => {
   const navigate = useNavigate();
 
   const formatDate = (dateString) => {
@@ -23,6 +23,14 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
       case 'view':
         // Show modal instead of navigation
         onView(project);
+        break;
+      case 'viewInterest':
+        // Show modal with interest tab
+        if (onViewInterest) {
+          onViewInterest(project);
+        } else {
+          onView(project);
+        }
         break;
       case 'documents':
         onViewDocuments(project);
@@ -129,7 +137,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleAction('view', project)}
+                        onClick={() => handleAction('viewInterest', project)}
                         iconName="Users"
                         iconPosition="left"
                       >
@@ -248,7 +256,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleAction('view', project)}
+                  onClick={() => handleAction('viewInterest', project)}
                   iconName="Users"
                   iconPosition="left"
                   fullWidth

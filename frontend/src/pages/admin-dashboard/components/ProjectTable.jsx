@@ -6,7 +6,7 @@ import StatusBadge from "./StatusBadge";
 import { landsAPI } from "../../../services/api";
 
 const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
-  const [sortField, setSortField] = useState("created_at");
+  const [sortField, setSortField] = useState("submittedDate");
   const [sortDirection, setSortDirection] = useState("desc");
   const [publishing, setPublishing] = useState({});
   const navigate = useNavigate();
@@ -24,7 +24,13 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
     let aValue = a?.[sortField];
     let bValue = b?.[sortField];
 
-    if (sortField === "created_at" || sortField === "project_due_date") {
+    // Handle date fields
+    if (sortField === "submittedDate" || sortField === "created_at" || sortField === "project_due_date") {
+      // Fallback to created_at if submittedDate is not available
+      if (sortField === "submittedDate") {
+        aValue = a?.submittedDate || a?.created_at;
+        bValue = b?.submittedDate || b?.created_at;
+      }
       aValue = new Date(aValue);
       bValue = new Date(bValue);
     }
@@ -138,11 +144,11 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
               </th>
               <th
                 className="text-left px-6 py-3 font-body font-medium text-sm text-foreground cursor-pointer hover:bg-muted/70 transition-smooth"
-                onClick={() => handleSort("created_at")}
+                onClick={() => handleSort("submittedDate")}
               >
                 <div className="flex items-center space-x-2">
                   <span>Start Date</span>
-                  <SortIcon field="created_at" />
+                  <SortIcon field="submittedDate" />
                 </div>
               </th>
               <th
@@ -221,7 +227,7 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
                 </td>
                 <td className="px-6 py-4">
                   <p className="font-body text-sm text-foreground">
-                    {formatDate(project?.created_at)}
+                    {formatDate(project?.submittedDate || project?.created_at)}
                   </p>
                 </td>
                 <td className="px-6 py-4">
@@ -328,7 +334,7 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
                   Start Date
                 </p>
                 <p className="font-body text-sm text-foreground">
-                  {formatDate(project?.created_at)}
+                  {formatDate(project?.submittedDate || project?.created_at)}
                 </p>
               </div>
               <div>

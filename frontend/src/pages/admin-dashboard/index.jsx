@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/ui/Header";
 import Sidebar from "../../components/ui/Sidebar";
-import WorkflowBreadcrumbs from "../../components/ui/WorkflowBreadcrumbs";
 import NotificationIndicator from "../../components/ui/NotificationIndicator";
 import QuickActions from "../../components/ui/QuickActions";
 
@@ -145,12 +144,16 @@ const AdminDashboard = () => {
 
   // Filter projects based on current filters
   const filteredProjects = projects?.filter((project) => {
-    if (filters?.projectType && project?.energy_key !== filters?.projectType)
-      return false;
+    if (filters?.projectType) {
+      const projectType = project?.energy_key || project?.energyType || "";
+      if (projectType.toLowerCase() !== filters.projectType.toLowerCase()) {
+        return false;
+      }
+    }
     if (filters?.status && project?.status !== filters?.status) return false;
     if (
       filters?.startDateFrom &&
-      new Date(project.created_at) < new Date(filters.startDateFrom)
+      new Date(project?.submittedDate || project?.created_at) < new Date(filters.startDateFrom)
     )
       return false;
     if (
@@ -228,43 +231,52 @@ const AdminDashboard = () => {
       const diffInHours = (dueDate - now) / (1000 * 60 * 60);
       const diffInDays = diffInHours / 24;
 
+      // Only show alerts for projects that are not completed/published
+      const activeStatuses = ["submitted", "under_review", "approved"];
+      if (!activeStatuses.includes(project.status)) return;
+
+      const energyType = project?.energy_key || project?.energyType || "Project";
+      
       // Overdue projects (critical)
-      if (diffInHours < 0 && project.status !== "completed") {
+      if (diffInHours < 0) {
         alerts.push({
           id: `overdue-${project.id}`,
           projectId: project.id,
+          landId: project.id,
+          taskId: null,
+          taskTitle: project.title,
           projectTitle: project.title,
           deadline: project.project_due_date,
-          description: `${project.title} - ${project.energy_key} project is overdue`,
+          description: `${project.title} - ${energyType} project is overdue`,
           urgency: "critical",
           projectName: project.title,
+          assignedTo: project.landownerName || "Unassigned",
         });
       }
       // Due within 24 hours (critical)
-      else if (
-        diffInHours > 0 &&
-        diffInHours <= 24 &&
-        project.status !== "completed"
-      ) {
+      else if (diffInHours > 0 && diffInHours <= 24) {
         alerts.push({
           id: `urgent-${project.id}`,
           projectId: project.id,
+          landId: project.id,
+          taskId: null,
+          taskTitle: project.title,
           projectTitle: project.title,
           deadline: project.project_due_date,
           description: `${project.title} - Due in less than 24 hours`,
           urgency: "critical",
           projectName: project.title,
+          assignedTo: project.landownerName || "Unassigned",
         });
       }
       // Due within 3 days (warning)
-      else if (
-        diffInDays > 1 &&
-        diffInDays <= 3 &&
-        project.status !== "completed"
-      ) {
+      else if (diffInDays > 1 && diffInDays <= 3) {
         alerts.push({
           id: `warning-${project.id}`,
           projectId: project.id,
+          landId: project.id,
+          taskId: null,
+          taskTitle: project.title,
           projectTitle: project.title,
           deadline: project.project_due_date,
           description: `${project.title} - Due in ${Math.ceil(
@@ -272,17 +284,17 @@ const AdminDashboard = () => {
           )} days`,
           urgency: "warning",
           projectName: project.title,
+          assignedTo: project.landownerName || "Unassigned",
         });
       }
       // Due within 7 days (info)
-      else if (
-        diffInDays > 3 &&
-        diffInDays <= 7 &&
-        project.status !== "completed"
-      ) {
+      else if (diffInDays > 3 && diffInDays <= 7) {
         alerts.push({
           id: `info-${project.id}`,
           projectId: project.id,
+          landId: project.id,
+          taskId: null,
+          taskTitle: project.title,
           projectTitle: project.title,
           deadline: project.project_due_date,
           description: `${project.title} - Due in ${Math.ceil(
@@ -290,6 +302,7 @@ const AdminDashboard = () => {
           )} days`,
           urgency: "info",
           projectName: project.title,
+          assignedTo: project.landownerName || "Unassigned",
         });
       }
     });
@@ -310,64 +323,76 @@ const AdminDashboard = () => {
 
     // Sort projects by most recent update/creation
     const sortedProjects = [...projects].sort((a, b) => {
-      const dateA = new Date(a.updated_at || a.created_at || 0);
-      const dateB = new Date(b.updated_at || b.created_at || 0);
+      const dateA = new Date(a.lastUpdated || a.submittedDate || a.updated_at || a.created_at || 0);
+      const dateB = new Date(b.lastUpdated || b.submittedDate || b.updated_at || b.created_at || 0);
       return dateB - dateA;
     });
 
     // Generate activities from projects (limit to 20 most recent)
     sortedProjects.slice(0, 20).forEach((project) => {
-      const timestamp = project.updated_at || project.created_at;
+      // Use lastUpdated if available, otherwise submittedDate, otherwise fallback to created_at
+      const timestamp = project.lastUpdated || project.submittedDate || project.updated_at || project.created_at;
       if (!timestamp) return;
 
-      // Project submission activity
-      if (project.status === "submitted") {
-        activities.push({
-          id: `submit-${project.id}`,
+      const energyType = project?.energy_key || project?.energyType || "Project";
+
+      // Create activity based on status - avoid duplicates by creating one activity per project based on current status
+      const statusActivityMap = {
+        submitted: {
           type: "project_submitted",
-          user: project.landownerName,
+          user: project.landownerName || "Landowner",
           action: "submitted",
           target: project.title,
-          details: `${project.energy_key} project for review`,
-          timestamp: timestamp,
-        });
-      }
-
-      // Status change activity
-      if (project.status) {
-        const statusLabels = {
-          submitted: "submitted for review",
-          under_review: "marked as under review",
-          approved: "approved",
-          published: "published",
-          rejected: "rejected",
-        };
-
-        activities.push({
-          id: `status-${project.id}`,
-          type:
-            project.status === "approved"
-              ? "project_approved"
-              : "status_changed",
+          details: `${energyType} project for review`,
+        },
+        under_review: {
+          type: "status_changed",
           user: "Admin",
-          action: statusLabels[project.status] || "updated status for",
+          action: "marked as under review",
           target: project.title,
-          details: `${project.energy_key} project`,
+          details: `${energyType} project`,
+        },
+        approved: {
+          type: "project_approved",
+          user: "Admin",
+          action: "approved",
+          target: project.title,
+          details: `${energyType} project`,
+        },
+        published: {
+          type: "status_changed",
+          user: "Admin",
+          action: "published",
+          target: project.title,
+          details: `${energyType} project to marketplace`,
+        },
+        rejected: {
+          type: "status_changed",
+          user: "Admin",
+          action: "rejected",
+          target: project.title,
+          details: `${energyType} project`,
+        },
+      };
+
+      const activityConfig = statusActivityMap[project.status];
+      if (activityConfig) {
+        activities.push({
+          id: `activity-${project.id}-${project.status}`,
+          type: activityConfig.type,
+          user: activityConfig.user,
+          action: activityConfig.action,
+          target: activityConfig.target,
+          details: activityConfig.details,
           timestamp: timestamp,
         });
       }
     });
 
-    // Remove duplicates and sort by timestamp
-    const uniqueActivities = activities
-      .filter(
-        (activity, index, self) =>
-          index === self.findIndex((a) => a.id === activity.id)
-      )
+    // Sort by timestamp and limit to 15 most recent
+    return activities
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 15); // Limit to 15 most recent
-
-    return uniqueActivities;
+      .slice(0, 15);
   }, [projects]);
 
   const handleFilterChange = (key, value) => {
@@ -402,8 +427,8 @@ const AdminDashboard = () => {
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <div className="pt-16">
-        <WorkflowBreadcrumbs />
+      <div className="pt-20">
+       
         <main
           className={`pb-20 transition-all duration-300 ${
             sidebarCollapsed ? "ml-16" : "ml-60"

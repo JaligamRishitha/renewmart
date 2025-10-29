@@ -44,7 +44,10 @@ const DeadlineAlerts = ({ alerts }) => {
   };
 
   const handleViewTask = (alert) => {
-    navigate(`/document-review/${alert.landId}`, { state: { landId: alert.landId, taskId: alert.taskId } });
+    // Navigate to admin project reviewers page
+    if (alert.projectId || alert.landId) {
+      navigate(`/admin/projects/${alert.projectId || alert.landId}/reviewers`);
+    }
   };
 
   return (
@@ -99,7 +102,7 @@ const DeadlineAlerts = ({ alerts }) => {
                           onClick={() => handleViewTask(alert)}
                           className="text-current hover:bg-current/10"
                         >
-                          View Task
+                          View Project
                         </Button>
                       </div>
                     </div>

@@ -92,8 +92,33 @@ const Sidebar = ({ isCollapsed = false, onToggleCollapse }) => {
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-foreground truncate">John Doe</div>
-                <div className="text-xs text-muted-foreground">Project Manager</div>
+                <div className="text-sm font-medium text-foreground truncate">
+                  {user?.first_name && user?.last_name 
+                    ? `${user.first_name} ${user.last_name}`
+                    : user?.email?.split('@')[0] || 'User'
+                  }
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {(() => {
+                    if (!user?.roles || user.roles.length === 0) return 'User';
+                    
+                    // Format role name - remove underscores and capitalize
+                    const formatRole = (role) => {
+                      return role
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                    };
+                    
+                    // If user is administrator, show Administrator
+                    if (user.roles.includes('administrator')) {
+                      return 'Administrator';
+                    }
+                    
+                    // Otherwise show formatted roles
+                    return user.roles.map(formatRole).join(', ');
+                  })()}
+                </div>
               </div>
             )}
           </div>

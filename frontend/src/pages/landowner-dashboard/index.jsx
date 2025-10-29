@@ -36,6 +36,7 @@ const LandownerDashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedProjectForDocuments, setSelectedProjectForDocuments] = useState(null);
+  const [selectedProjectInitialTab, setSelectedProjectInitialTab] = useState('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
 
@@ -150,6 +151,12 @@ const LandownerDashboard = () => {
 
   const handleViewProject = (project) => {
     setSelectedProject(project);
+    setSelectedProjectInitialTab('details');
+  };
+
+  const handleViewInterest = (project) => {
+    setSelectedProject(project);
+    setSelectedProjectInitialTab('interests');
   };
 
   const handleViewDocuments = (project) => {
@@ -369,6 +376,7 @@ const LandownerDashboard = () => {
               projects={filteredProjects}
               onEdit={handleEditProject}
               onView={handleViewProject}
+              onViewInterest={handleViewInterest}
               onViewDocuments={handleViewDocuments}
               onContinueDraft={handleContinueDraft}
               onSubmitForReview={handleSubmitForReview}
@@ -403,7 +411,11 @@ const LandownerDashboard = () => {
       {selectedProject && (
         <ProjectDetailModal
           project={selectedProject}
-          onClose={() => setSelectedProject(null)}
+          onClose={() => {
+            setSelectedProject(null);
+            setSelectedProjectInitialTab('details');
+          }}
+          initialTab={selectedProjectInitialTab}
         />
       )}
 

@@ -1,6 +1,5 @@
 import React from 'react';
 import Header from '../../components/ui/Header';
-import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import InvestorDashboard from '../investor-portal/components/InvestorDashboard';
@@ -10,7 +9,7 @@ const InvestorDashboardPage = () => {
     <div className="min-h-screen bg-background">
       <Header userRole="investor" />
       <div className="pt-16">
-        <WorkflowBreadcrumbs />
+      
         <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
           <InvestorDashboard />
         </main>

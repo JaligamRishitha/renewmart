@@ -4,13 +4,14 @@ from sqlalchemy import text
 from typing import List, Optional
 from datetime import timedelta
 from uuid import UUID
-from pydantic import validator
+from pydantic import validator, Field, model_validator, BaseModel
+import re
 import logging
 
 from database import get_db
 from models.schemas import (
     User, UserCreate, UserUpdate, UserLogin, Token, MessageResponse,
-    UserRole, UserRoleCreate, LuRole
+    UserRole, UserRoleCreate, LuRole, UserBase
 )
 from auth import (
     get_password_hash, authenticate_user, create_access_token,
@@ -407,16 +408,32 @@ async def get_available_roles(
         for row in results
     ]
 
-class UserCreateWithRoles(UserCreate):
-    roles: List[str] = []
-    confirm_password: Optional[str] = None  # Optional for admin-created users
+class UserCreateWithRoles(UserBase):
+    """User creation schema for admin with optional confirm_password"""
+    password: str = Field(..., min_length=8, max_length=128)
+    confirm_password: Optional[str] = Field(None)
+    roles: List[str] = Field(default_factory=list)
     
-    @validator('confirm_password', always=True)
-    def set_confirm_password(cls, v, values):
-        # If confirm_password not provided, automatically set it to password
-        if v is None and 'password' in values:
-            return values['password']
-        return v
+    @model_validator(mode='after')
+    def validate_and_set_confirm_password(self):
+        # Auto-set confirm_password to password if not provided
+        if self.confirm_password is None:
+            self.confirm_password = self.password
+        # Validate passwords match
+        if self.password != self.confirm_password:
+            raise ValueError('Passwords do not match')
+        # Validate password complexity
+        if len(self.password) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', self.password):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', self.password):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', self.password):
+            raise ValueError('Password must contain at least one digit')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', self.password):
+            raise ValueError('Password must contain at least one special character')
+        return self
 
 @router.post("/admin/create", response_model=User, status_code=status.HTTP_201_CREATED)
 async def create_user_by_admin(
@@ -426,20 +443,25 @@ async def create_user_by_admin(
 ):
     """Create a new user with roles (admin only)."""
     try:
+        logger.info(f"Admin creating user: {user_data.email}")
+        
         # Check if user already exists
         check_query = text("SELECT user_id FROM \"user\" WHERE email = :email")
         existing_user = db.execute(check_query, {"email": user_data.email}).fetchone()
         
         if existing_user:
+            logger.warning(f"User already exists: {user_data.email}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
         
         # Hash password
+        logger.info("Hashing password...")
         hashed_password = get_password_hash(user_data.password)
         
         # Create user
+        logger.info("Inserting user into database...")
         insert_query = text("""
             INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, is_active)
             VALUES (:email, :password_hash, :first_name, :last_name, :phone, :is_active)
@@ -455,31 +477,55 @@ async def create_user_by_admin(
             "is_active": user_data.is_active if user_data.is_active is not None else True
         }).fetchone()
         
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user - no result returned"
+            )
+        
         user_id = result.user_id
+        logger.info(f"User created with ID: {user_id}")
         
         # Assign roles if provided
         if user_data.roles:
+            logger.info(f"Assigning roles: {user_data.roles}")
             for role_key in user_data.roles:
-                # Verify role exists
-                role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key")
-                if not db.execute(role_check, {"role_key": role_key}).fetchone():
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Invalid role: {role_key}"
-                    )
-                
-                # Assign role
-                role_insert = text("""
-                    INSERT INTO user_roles (user_id, role_key)
-                    VALUES (:user_id, :role_key)
-                    ON CONFLICT (user_id, role_key) DO NOTHING
-                """)
-                db.execute(role_insert, {
-                    "user_id": str(user_id),
-                    "role_key": role_key
-                })
+                try:
+                    # Verify role exists (with timeout protection)
+                    role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key LIMIT 1")
+                    role_result = db.execute(role_check, {"role_key": role_key}).fetchone()
+                    
+                    if not role_result:
+                        logger.warning(f"Role not found: {role_key}")
+                        # Don't fail - just log and continue, or insert role if missing
+                        # For now, we'll raise an error
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid role: {role_key}. Valid roles: re_analyst, re_sales_advisor, re_governance_lead, administrator, landowner, investor, project_manager"
+                        )
+                    
+                    # Assign role
+                    logger.info(f"Assigning role {role_key} to user {user_id}")
+                    role_insert = text("""
+                        INSERT INTO user_roles (user_id, role_key)
+                        VALUES (CAST(:user_id AS uuid), :role_key)
+                        ON CONFLICT (user_id, role_key) DO NOTHING
+                    """)
+                    db.execute(role_insert, {
+                        "user_id": str(user_id),
+                        "role_key": role_key
+                    })
+                    logger.info(f"Role {role_key} assigned successfully")
+                except HTTPException:
+                    raise
+                except Exception as role_error:
+                    logger.error(f"Error assigning role {role_key}: {str(role_error)}")
+                    # Continue with other roles instead of failing completely
+                    continue
         
+        logger.info("Committing transaction...")
         db.commit()
+        logger.info("Transaction committed successfully")
         
         return User(
             user_id=result.user_id,
@@ -492,11 +538,14 @@ async def create_user_by_admin(
             updated_at=result.updated_at
         )
     except HTTPException:
+        logger.error("HTTPException in create_user_by_admin, rolling back...")
         db.rollback()
         raise
     except Exception as e:
+        logger.error(f"Error creating user: {str(e)}", exc_info=True)
         db.rollback()
-        logger.error(f"Error creating user: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create user: {str(e)}"

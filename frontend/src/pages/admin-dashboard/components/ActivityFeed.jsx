@@ -16,6 +16,10 @@ const ActivityFeed = ({ activities }) => {
         return 'Clock';
       case 'task_completed':
         return 'CheckCircle';
+      case 'project_submitted':
+        return 'FileText';
+      case 'project_approved':
+        return 'CheckCircle';
       default:
         return 'Activity';
     }
@@ -34,6 +38,10 @@ const ActivityFeed = ({ activities }) => {
       case 'deadline_approaching':
         return 'text-error';
       case 'task_completed':
+        return 'text-success';
+      case 'project_submitted':
+        return 'text-primary';
+      case 'project_approved':
         return 'text-success';
       default:
         return 'text-muted-foreground';

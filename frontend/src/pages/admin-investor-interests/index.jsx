@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
 import Sidebar from '../../components/ui/Sidebar';
-import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import Button from '../../components/ui/Button';
 import { landsAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
@@ -109,8 +108,8 @@ const AdminInvestorInterests = () => {
         isCollapsed={sidebarCollapsed} 
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
-      <div className="pt-16">
-        <WorkflowBreadcrumbs />
+      <div className="pt-20">
+       
         <main className={`pb-20 transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
           <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Page Header */}
