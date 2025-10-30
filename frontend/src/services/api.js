@@ -86,23 +86,38 @@ export const authAPI = {
   },
   
   register: async (userData) => {
-    // Transform frontend form data to backend format
-    const registrationData = {
-      email: userData.email,
-      password: userData.password,
-      confirm_password: userData.confirm_password || userData.confirmPassword || userData.password,
-      first_name: userData.first_name || userData.firstName,
-      last_name: userData.last_name || userData.lastName,
-      phone: userData.phone || null
-    };
+    try {
+      console.log('API: Registration data received:', { ...userData, password: '***' });
+      
+      // Transform frontend form data to backend format
+      const registrationData = {
+        email: userData.email,
+        password: userData.password,
+        confirm_password: userData.confirm_password || userData.confirmPassword || userData.password,
+        first_name: userData.first_name || userData.firstName,
+        last_name: userData.last_name || userData.lastName,
+        phone: userData.phone || null
+      };
 
-    // Only include roles when user selected a role; otherwise rely on backend default
-    if (userData.role) {
-      registrationData.roles = [userData.role];
+      // Only include roles when user selected a role; otherwise rely on backend default
+      if (userData.role) {
+        registrationData.roles = [userData.role];
+      }
+      
+      console.log('API: Sending registration request to:', `${api.defaults.baseURL}/auth/register`);
+      console.log('API: Registration payload:', { ...registrationData, password: '***' });
+      
+      const response = await api.post('/auth/register', registrationData);
+      console.log('API: Registration successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Registration error:', error);
+      console.error('API: Error response:', error.response?.data);
+      console.error('API: Error status:', error.response?.status);
+      console.error('API: Request URL:', error.config?.url);
+      console.error('API: Request baseURL:', error.config?.baseURL);
+      throw error;
     }
-    
-    const response = await api.post('/auth/register', registrationData);
-    return response.data;
   },
   
   logout: async () => {

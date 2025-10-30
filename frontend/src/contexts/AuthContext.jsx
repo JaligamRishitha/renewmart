@@ -134,7 +134,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Invalid response from server');
       }
 
-      // Store in localStorage
+      // Store in localStorage (use roles returned by backend)
       localStorage.setItem('authToken', access_token);
       localStorage.setItem('user', JSON.stringify(user));
 

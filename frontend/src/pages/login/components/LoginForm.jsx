@@ -93,7 +93,7 @@ const LoginForm = () => {
         // Show success toast
         showToast('Login successful! Redirecting...', 'success');
         
-        const userRoles = result.user.roles || [];
+        const userRoles = Array.isArray(result.user.roles) ? result.user.roles : [];
         
         // Navigate to appropriate dashboard based on role (hierarchical routes)
         setTimeout(() => {

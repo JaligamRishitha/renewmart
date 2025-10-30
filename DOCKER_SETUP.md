@@ -8,6 +8,46 @@ This guide will help you set up and run the RenewMart application using Docker.
 - Docker Compose v2.0+
 - Git (to clone the repository)
 
+## Folder Structure Setup
+
+All Docker container data is organized under a `renewmart/` folder structure:
+
+```
+renewmart/
+├── data/
+│   ├── postgres/          # PostgreSQL database data (production)
+│   ├── redis/             # Redis data (production)
+│   ├── postgres-dev/      # PostgreSQL database data (development)
+│   └── redis-dev/         # Redis data (development)
+├── uploads/               # Backend uploads (production)
+├── logs/                  # Backend logs (production)
+├── uploads-dev/           # Backend uploads (development)
+└── logs-dev/              # Backend logs (development)
+```
+
+### Create Folders
+
+**Windows:**
+```bash
+setup-renewmart-folders.bat
+```
+
+**Linux/Mac:**
+```bash
+chmod +x setup-renewmart-folders.sh
+./setup-renewmart-folders.sh
+```
+
+Or manually create the folders:
+```bash
+mkdir -p renewmart/data/postgres renewmart/data/redis
+mkdir -p renewmart/data/postgres-dev renewmart/data/redis-dev
+mkdir -p renewmart/uploads renewmart/logs
+mkdir -p renewmart/uploads-dev renewmart/logs-dev
+```
+
+> **Note:** These folders are automatically created by Docker when you first start the containers, but it's recommended to create them beforehand.
+
 ## Quick Start
 
 ### 1. Clone and Navigate
@@ -53,14 +93,19 @@ docker-compose down
 - **Features**: Hot reload in development, optimized build in production
 
 ### Database (Port 5432)
+- **Service Name**: `postgres_db`
 - **Type**: PostgreSQL 15
 - **Database**: renewmart_db
 - **User**: renewmart_user
 - **Password**: renewmart_password
+- **Data Location**: `./renewmart/data/postgres/` (production) or `./renewmart/data/postgres-dev/` (development)
 
 ### Redis (Port 6379)
+- **Service Name**: `redis`
 - **Purpose**: Caching and rate limiting
 - **Version**: Redis 7
+- **Data Location**: `./renewmart/data/redis/` (production) or `./renewmart/data/redis-dev/` (development)
+- **Persistence**: AOF (Append Only File) enabled
 
 ### Nginx (Port 80/443)
 - **Purpose**: Reverse proxy and load balancing
@@ -70,13 +115,15 @@ docker-compose down
 
 ### Backend Environment Variables
 ```bash
-DATABASE_URL=postgresql://renewmart_user:renewmart_password@postgres:5432/renewmart_db
+DATABASE_URL=postgresql://renewmart_user:renewmart_password@postgres_db:5432/renewmart_db
 REDIS_URL=redis://redis:6379/0
 SECRET_KEY=your-secret-key-change-in-production
 DEBUG=true
 LOG_LEVEL=INFO
 ALLOWED_ORIGINS=["http://localhost:3000", "http://localhost:5173"]
 ```
+
+> **Note**: The database host is `postgres_db` (the service name), not `postgres`.
 
 ### Frontend Environment Variables
 ```bash
@@ -111,7 +158,7 @@ docker-compose -f docker-compose.dev.yml exec backend bash
 docker-compose -f docker-compose.dev.yml exec frontend sh
 
 # Database shell
-docker-compose -f docker-compose.dev.yml exec postgres psql -U renewmart_user -d renewmart_db
+docker-compose -f docker-compose.dev.yml exec postgres_db psql -U renewmart_user -d renewmart_db
 ```
 
 ### Database Operations
@@ -123,7 +170,7 @@ docker-compose -f docker-compose.dev.yml exec backend python -m alembic upgrade 
 docker-compose -f docker-compose.dev.yml exec backend python setup_test_data.py
 
 # Reset database
-docker-compose -f docker-compose.dev.yml exec postgres psql -U renewmart_user -d renewmart_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker-compose -f docker-compose.dev.yml exec postgres_db psql -U renewmart_user -d renewmart_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 ```
 
 ## Production Commands
@@ -166,7 +213,7 @@ netstat -tulpn | grep :5173
 #### 2. Database Connection Issues
 ```bash
 # Check database logs
-docker-compose logs postgres
+docker-compose logs postgres_db
 
 # Test database connection
 docker-compose exec backend python -c "from database import engine; print(engine.execute('SELECT 1').fetchone())"
@@ -214,7 +261,7 @@ docker-compose logs -f
 # Specific service logs
 docker-compose logs -f backend
 docker-compose logs -f frontend
-docker-compose logs -f postgres
+docker-compose logs -f postgres_db
 docker-compose logs -f redis
 ```
 
@@ -250,17 +297,25 @@ REDIS_PASSWORD=your-redis-password
 ### Database Backup
 ```bash
 # Create backup
-docker-compose exec postgres pg_dump -U renewmart_user renewmart_db > backup.sql
+docker-compose exec postgres_db pg_dump -U renewmart_user renewmart_db > backup.sql
 
 # Restore backup
-docker-compose exec -T postgres psql -U renewmart_user renewmart_db < backup.sql
+docker-compose exec -T postgres_db psql -U renewmart_user renewmart_db < backup.sql
 ```
 
 ### Volume Backup
 ```bash
-# Backup volumes
-docker run --rm -v renewmart_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz -C /data .
-docker run --rm -v renewmart_redis_data:/data -v $(pwd):/backup alpine tar czf /backup/redis_backup.tar.gz -C /data .
+# Backup PostgreSQL data (bind mount)
+tar czf postgres_backup.tar.gz -C renewmart/data/postgres .
+
+# Backup Redis data (bind mount)
+tar czf redis_backup.tar.gz -C renewmart/data/redis .
+
+# Restore PostgreSQL
+tar xzf postgres_backup.tar.gz -C renewmart/data/postgres
+
+# Restore Redis
+tar xzf redis_backup.tar.gz -C renewmart/data/redis
 ```
 
 ## Performance Optimization

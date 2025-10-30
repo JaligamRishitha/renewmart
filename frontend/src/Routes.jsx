@@ -395,7 +395,7 @@ const Routes = () => {
         } />
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            <Dashboard />
+            <RoleBasedRedirect />
           </ProtectedRoute>
         } />
         

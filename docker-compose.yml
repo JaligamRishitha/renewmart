@@ -2,16 +2,17 @@ version: '3.8'
 
 services:
   # PostgreSQL Database
-  postgres:
+  postgres_db:
     image: postgres:15-alpine
     container_name: renewmart-postgres
     environment:
       POSTGRES_DB: renewmart_db
       POSTGRES_USER: renewmart_user
       POSTGRES_PASSWORD: renewmart_password
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/create_tables.sql:/docker-entrypoint-initdb.d/01-create-tables.sql
+      - ./renewmart/data/postgres:/var/lib/postgresql/data
+      - ./backend/migrations/complete_schema.sql:/docker-entrypoint-initdb.d/01-complete-schema.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -21,15 +22,17 @@ services:
       retries: 5
     networks:
       - renewmart-network
+    restart: unless-stopped
 
   # Redis for caching and rate limiting
   redis:
     image: redis:7-alpine
     container_name: renewmart-redis
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./renewmart/data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -37,6 +40,7 @@ services:
       retries: 5
     networks:
       - renewmart-network
+    restart: unless-stopped
 
   # Backend API
   backend:
@@ -45,19 +49,23 @@ services:
       dockerfile: Dockerfile.backend
     container_name: renewmart-backend
     environment:
-      - DATABASE_URL=postgresql://renewmart_user:renewmart_password@postgres:5432/renewmart_db
+      - DATABASE_URL=postgresql://renewmart_user:renewmart_password@postgres_db:5432/renewmart_db
       - REDIS_URL=redis://redis:6379/0
+      - RENEWMART_REDIS_HOST=redis
+      - RENEWMART_REDIS_PORT=6379
+      - RENEWMART_REDIS_DB=0
+      - RENEWMART_REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-change-in-production
       - DEBUG=true
       - ALLOWED_ORIGINS=["http://localhost:3000", "http://localhost:5173", "http://frontend:5173"]
     volumes:
       - ./backend:/app
-      - backend_uploads:/app/uploads
-      - backend_logs:/app/logs
+      - ./renewmart/uploads:/app/uploads
+      - ./renewmart/logs:/app/logs
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
+      postgres_db:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -73,12 +81,12 @@ services:
   # Frontend
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
     container_name: renewmart-frontend
     environment:
-      - VITE_API_BASE_URL=http://localhost:8000
-      - VITE_API_URL=http://backend:8000
+      - VITE_API_BASE_URL=http://localhost:8000/api
+      - VITE_API_URL=http://backend:8000/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -108,16 +116,6 @@ services:
     restart: unless-stopped
     profiles:
       - production
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  backend_uploads:
-    driver: local
-  backend_logs:
-    driver: local
 
 networks:
   renewmart-network:

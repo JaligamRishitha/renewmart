@@ -134,16 +134,30 @@ async def register_user(
         db.commit()
         db.refresh(db_user)
         
-        # Add roles if provided (make robust in environments where lookup tables may be missing)
+        # Ensure provided roles exist and assign them to the user
         try:
-            for role_key in user_data.roles:
-                role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
-                if role:
-                    user_role = UserRole(user_id=db_user.user_id, role_key=role_key)
-                    db.add(user_role)
-            db.commit()
+            if user_data.roles:
+                for role_key in user_data.roles:
+                    # Upsert role into lookup if missing (to satisfy FK constraints)
+                    role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
+                    if not role:
+                        role = LuRole(
+                            role_key=role_key,
+                            role_name=role_key.replace('_', ' ').title(),
+                            description=f"Auto-created role for {role_key}"
+                        )
+                        db.add(role)
+                        db.flush()
+
+                    # Assign role to user if not already assigned
+                    existing = db.query(UserRole).filter(
+                        UserRole.user_id == db_user.user_id,
+                        UserRole.role_key == role_key
+                    ).first()
+                    if not existing:
+                        db.add(UserRole(user_id=db_user.user_id, role_key=role_key))
+                db.commit()
         except Exception:
-            # If role assignment fails (e.g., lookup table missing), continue without roles
             try:
                 db.rollback()
             except Exception:
@@ -284,6 +298,46 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # If user has no roles, attempt to infer and assign a default based on email pattern
+    try:
+        roles = user.get("roles") or []
+        inferred_role = None
+        email_lc = (user.get("email") or "").lower()
+        if not roles:
+            if email_lc.startswith("admin@"):
+                inferred_role = "administrator"
+            elif email_lc.startswith("landowner@"):
+                inferred_role = "landowner"
+            elif email_lc.startswith("investor@"):
+                inferred_role = "investor"
+
+        if inferred_role:
+            # Ensure role exists in lookup
+            role = db.query(LuRole).filter(LuRole.role_key == inferred_role).first()
+            if not role:
+                role = LuRole(
+                    role_key=inferred_role,
+                    role_name=inferred_role.replace('_', ' ').title(),
+                    description=f"Auto-created role for {inferred_role}"
+                )
+                db.add(role)
+                db.flush()
+            # Assign to user if absent
+            existing = db.query(UserRole).filter(
+                UserRole.user_id == user["user_id"],
+                UserRole.role_key == inferred_role
+            ).first()
+            if not existing:
+                db.add(UserRole(user_id=user["user_id"], role_key=inferred_role))
+            db.commit()
+            # Refresh user with roles
+            user = get_user_by_email(db, user["email"]) or user
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user["user_id"])}, expires_delta=access_token_expires
@@ -407,14 +461,29 @@ async def register_with_verification(
         db.commit()
         db.refresh(db_user)
         
-        # Add roles
+        # Ensure provided roles exist and assign them to the user
         try:
-            for role_key in user_data.roles:
-                role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
-                if role:
-                    user_role = UserRole(user_id=db_user.user_id, role_key=role_key)
-                    db.add(user_role)
-            db.commit()
+            if user_data.roles:
+                for role_key in user_data.roles:
+                    # Upsert role into lookup if missing
+                    role = db.query(LuRole).filter(LuRole.role_key == role_key).first()
+                    if not role:
+                        role = LuRole(
+                            role_key=role_key,
+                            role_name=role_key.replace('_', ' ').title(),
+                            description=f"Auto-created role for {role_key}"
+                        )
+                        db.add(role)
+                        db.flush()
+
+                    # Assign role to user if not already
+                    existing = db.query(UserRole).filter(
+                        UserRole.user_id == db_user.user_id,
+                        UserRole.role_key == role_key
+                    ).first()
+                    if not existing:
+                        db.add(UserRole(user_id=db_user.user_id, role_key=role_key))
+                db.commit()
         except Exception:
             try:
                 db.rollback()

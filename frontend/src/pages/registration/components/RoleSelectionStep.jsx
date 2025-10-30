@@ -18,34 +18,6 @@ const RoleSelectionStep = ({ formData, setFormData, errors }) => {
       features: ['Deal flow management', 'Due diligence tools', 'Portfolio tracking', 'Financial analysis']
     },
     {
-      id: 're_sales_advisor',
-      title: 'RE Sales Advisor',
-      icon: 'Users',
-      description: 'Sales professional managing client relationships',
-      features: ['Market evaluation', 'Investor alignment', 'Land valuation reports', 'Sale contracts']
-    },
-    {
-      id: 're_analyst',
-      title: 'RE Analyst',
-      icon: 'BarChart3',
-      description: 'Technical and financial analysis specialist',
-      features: ['Feasibility analysis', 'Financial models', 'Grid connectivity', 'Technical surveys']
-    },
-    {
-      id: 'project_manager',
-      title: 'Project Manager',
-      icon: 'FolderOpen',
-      description: 'Operations professional overseeing project development',
-      features: ['Project tracking', 'Resource management', 'Timeline management', 'Team coordination']
-    },
-    {
-      id: 're_governance_lead',
-      title: 'RE Governance Lead',
-      icon: 'Shield',
-      description: 'Compliance and regulatory specialist',
-      features: ['Regulatory compliance', 'Environmental assessments', 'Government approvals', 'Risk assessment']
-    },
-    {
       id: 'administrator',
       title: 'Administrator',
       icon: 'Settings',

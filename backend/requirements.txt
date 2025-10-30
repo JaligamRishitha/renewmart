@@ -16,6 +16,7 @@ python-decouple
 # Validation and serialization
 pydantic
 pydantic-settings
+email-validator
 
 # Configuration management
 dynaconf

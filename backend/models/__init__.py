@@ -6,6 +6,7 @@ from .documents import Document
 from .tasks import Task, TaskHistory
 from .investors import InvestorInterest
 from .messages import Message, MessageThread, MessageReaction
+from .document_assignments import DocumentAssignment
 
 __all__ = [
     'User', 'UserRole',
@@ -14,5 +15,6 @@ __all__ = [
     'Document',
     'Task', 'TaskHistory',
     'InvestorInterest',
-    'Message', 'MessageThread', 'MessageReaction'
+    'Message', 'MessageThread', 'MessageReaction',
+    'DocumentAssignment'
 ]
