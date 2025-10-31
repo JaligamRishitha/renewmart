@@ -12,8 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================
 CREATE TABLE IF NOT EXISTS lu_roles (
     role_key      TEXT PRIMARY KEY,
-    role_name     TEXT NOT NULL,
-    description   TEXT
+    label         TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS lu_status (
@@ -35,15 +34,27 @@ CREATE TABLE IF NOT EXISTS lu_energy_types (
 );
 
 -- Seed minimal roles (safe if already present)
-INSERT INTO lu_roles (role_key, role_name, description) VALUES
-  ('administrator','Administrator','Platform administrator')
+INSERT INTO lu_roles (role_key, label) VALUES
+  ('administrator','Administrator')
 ON CONFLICT (role_key) DO NOTHING;
-INSERT INTO lu_roles (role_key, role_name, description) VALUES
-  ('landowner','Landowner','Property owner')
+INSERT INTO lu_roles (role_key, label) VALUES
+  ('landowner','Landowner')
 ON CONFLICT (role_key) DO NOTHING;
-INSERT INTO lu_roles (role_key, role_name, description) VALUES
-  ('investor','Investor','Investor user')
+INSERT INTO lu_roles (role_key, label) VALUES
+  ('investor','Investor')
 ON CONFLICT (role_key) DO NOTHING;
+
+-- Backward compatibility: add label if missing and populate from role_name/role_key
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='lu_roles' AND column_name='label'
+    ) THEN
+        ALTER TABLE lu_roles ADD COLUMN label TEXT;
+        UPDATE lu_roles SET label = COALESCE(label, NULLIF(role_name, ''), role_key);
+        ALTER TABLE lu_roles ALTER COLUMN label SET NOT NULL;
+    END IF;
+END $$;
 
 -- =============================
 -- Users and roles
@@ -55,6 +66,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     first_name    TEXT NOT NULL,
     last_name     TEXT NOT NULL,
     phone         TEXT,
+    primary_role  TEXT REFERENCES lu_roles(role_key),
     is_active     BOOLEAN NOT NULL DEFAULT TRUE,
     is_verified   BOOLEAN NOT NULL DEFAULT FALSE,
     created_at    TIMESTAMPTZ DEFAULT now(),
@@ -69,6 +81,12 @@ DO $$ BEGIN
     ) THEN
         ALTER TABLE "user" ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE;
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='user' AND column_name='primary_role'
+    ) THEN
+        ALTER TABLE "user" ADD COLUMN primary_role TEXT REFERENCES lu_roles(role_key);
+    END IF;
 END $$;
 
 CREATE TABLE IF NOT EXISTS user_roles (
@@ -77,6 +95,24 @@ CREATE TABLE IF NOT EXISTS user_roles (
     assigned_at TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY (user_id, role_key)
 );
+
+-- Backfill primary_role from first available user_roles entry (idempotent)
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='user' AND column_name='primary_role'
+    ) THEN
+        UPDATE "user" u
+        SET primary_role = fr.role_key
+        FROM (
+            SELECT user_id, MIN(role_key) AS role_key
+            FROM user_roles
+            GROUP BY user_id
+        ) fr
+        WHERE u.user_id = fr.user_id
+          AND (u.primary_role IS NULL OR u.primary_role = '');
+    END IF;
+END $$;
 
 -- =============================
 -- Lands and sections

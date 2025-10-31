@@ -118,8 +118,8 @@ def get_user_roles(db: Session, user_id: str) -> List[str]:
 
 def get_user_by_email(db: Session, email: str) -> Optional[dict]:
     """Get user by email address."""
-    # Use SQLite-compatible aggregation when running against SQLite
     is_sqlite = DATABASE_URL.lower().startswith("sqlite")
+
     if is_sqlite:
         query = text(
             """
@@ -138,7 +138,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
             """
             SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
                    u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
-                   COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
+                   COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') AS roles
             FROM "user" u
             LEFT JOIN user_roles ur ON u.user_id = ur.user_id
             WHERE u.email = :email
@@ -146,12 +146,17 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
                      u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
             """
         )
-    
+
     result = db.execute(query, {"email": email}).fetchone()
-    
     if not result:
         return None
-    
+
+    # Convert result to dictionary and normalize roles
+    if is_sqlite:
+        roles_list = [r for r in (result.roles or "").split(",") if r]
+    else:
+        roles_list = list(result.roles or [])
+
     return {
         "user_id": result.user_id,
         "email": result.email,
@@ -163,7 +168,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
         "is_active": result.is_active,
         "created_at": result.created_at,
         "updated_at": result.updated_at,
-        "roles": result.roles
+        "roles": roles_list,
     }
 
 # Import User model from schemas for compatibility

@@ -488,42 +488,25 @@ async def create_user_by_admin(
         
         # Assign roles if provided
         if user_data.roles:
-            logger.info(f"Assigning roles: {user_data.roles}")
             for role_key in user_data.roles:
-                try:
-                    # Verify role exists (with timeout protection)
-                    role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key LIMIT 1")
-                    role_result = db.execute(role_check, {"role_key": role_key}).fetchone()
-                    
-                    if not role_result:
-                        logger.warning(f"Role not found: {role_key}")
-                        # Don't fail - just log and continue, or insert role if missing
-                        # For now, we'll raise an error
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Invalid role: {role_key}. Valid roles: re_analyst, re_sales_advisor, re_governance_lead, administrator, landowner, investor, project_manager"
-                        )
-                    
-                    # Assign role
-                    logger.info(f"Assigning role {role_key} to user {user_id}")
-                    role_insert = text("""
-                        INSERT INTO user_roles (user_id, role_key)
-                        VALUES (CAST(:user_id AS uuid), :role_key)
-                        ON CONFLICT (user_id, role_key) DO NOTHING
-                    """)
-                    db.execute(role_insert, {
-                        "user_id": str(user_id),
-                        "role_key": role_key
-                    })
-                    logger.info(f"Role {role_key} assigned successfully")
-                except HTTPException:
-                    raise
-                except Exception as role_error:
-                    logger.error(f"Error assigning role {role_key}: {str(role_error)}")
-                    # Continue with other roles instead of failing completely
-                    continue
-        
-        logger.info("Committing transaction...")
+                # Verify role exists
+                role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key")
+                if not db.execute(role_check, {"role_key": role_key}).fetchone():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid role: {role_key}"
+                    )
+                
+                # Assign role
+                role_insert = text("""
+                    INSERT INTO user_roles (user_id, role_key)
+                    VALUES (:user_id, :role_key)
+                    ON CONFLICT (user_id, role_key) DO NOTHING
+                """)
+                db.execute(role_insert, {
+                    "user_id": str(user_id),
+                    "role_key": role_key
+                })
         db.commit()
         logger.info("Transaction committed successfully")
         
