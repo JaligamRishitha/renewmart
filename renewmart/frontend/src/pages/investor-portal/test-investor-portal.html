@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investor Portal View Details Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Investor Portal - View Details Functionality Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Fixed Issues</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-green-200 rounded-lg p-4 bg-green-50">
+                    <h3 class="font-medium text-green-900 mb-2">✅ Frontend Script Fixed</h3>
+                    <p class="text-sm text-green-800 mb-2">
+                        Changed from <code>npm run dev</code> to <code>npm start</code>
+                    </p>
+                    <div class="bg-green-100 rounded p-2">
+                        <code class="text-sm text-green-800">cd renewmart/frontend && npm start</code>
+                    </div>
+                </div>
+                
+                <div class="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <h3 class="font-medium text-blue-900 mb-2">✅ View Details Navigation Fixed</h3>
+                    <p class="text-sm text-blue-800 mb-2">
+                        Updated <code>handleViewDetails</code> function to navigate to project details page
+                    </p>
+                    <div class="bg-blue-100 rounded p-2">
+                        <code class="text-sm text-blue-800">navigate(`/project-details/${projectId}`)</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">How to Test</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">1. Start the Frontend</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Run the frontend development server:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">cd renewmart/frontend && npm start</code>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">2. Access Investor Portal</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Navigate to the investor portal:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">http://localhost:3000/investor-portal</code>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">3. Test View Details</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Click "View Details" button on any project card to navigate to:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">/project-details/{projectId}</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold mb-4">Features Available</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Investor Portal</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Browse available projects</li>
+                        <li>• Filter by type, location, capacity</li>
+                        <li>• Express interest in projects</li>
+                        <li>• Add projects to watchlist</li>
+                        <li>• <strong>View detailed project information</strong></li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Project Details Page</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Comprehensive project overview</li>
+                        <li>• Task tracking and progress</li>
+                        <li>• Completion percentages</li>
+                        <li>• Individual task details</li>
+                        <li>• Project metadata</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 bg-yellow-50 rounded-lg p-4">
+            <h3 class="font-medium text-yellow-900 mb-2">Navigation Flow</h3>
+            <p class="text-sm text-yellow-800 mb-3">
+                The complete navigation flow from investor portal to project details:
+            </p>
+            <div class="text-sm text-yellow-800 space-y-1">
+                <div>1. <strong>Investor Portal</strong> → Browse projects</div>
+                <div>2. <strong>Click "View Details"</strong> → Navigate to project details</div>
+                <div>3. <strong>Project Details Page</strong> → View comprehensive information</div>
+                <div>4. <strong>Task Tracking</strong> → See project progress and completion</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

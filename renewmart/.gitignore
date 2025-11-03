@@ -1,0 +1,21 @@
+node_modules
+backend/logs/renewmart_access.log
+
+# Ignore all log files
+*.log
+backend/logs/
+
+# Ignore local virtual envs and system files
+.venv/
+*.env
+.DS_Store
+
+# Ignore Windows NUL device files
+nul
+
+# Ignore Docker data folders (database and Redis persistence)
+renewmart/data/
+renewmart/uploads/
+renewmart/logs/
+renewmart/uploads-dev/
+renewmart/logs-dev/

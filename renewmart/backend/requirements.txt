@@ -1,0 +1,51 @@
+# FastAPI and web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Authentication and security
+python-jose
+passlib[bcrypt]
+python-decouple
+
+# Validation and serialization
+pydantic
+pydantic-settings
+email-validator
+
+# Configuration management
+dynaconf
+
+# CORS and middleware
+fastapi-cors
+
+# Utilities
+python-dotenv
+typing-extensions
+
+# Database migrations
+alembic
+
+# Rate limiting and caching
+slowapi
+redis
+
+# System monitoring
+psutil
+
+# Monitoring and metrics
+prometheus-client
+
+# Development dependencies
+pytest
+pytest-asyncio
+httpx
+pytest-cov
+
+# WebSocket support
+websockets

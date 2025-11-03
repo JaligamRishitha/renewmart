@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Details Routing Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Project Details Routing Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold mb-4">Available Routes</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Project Details Page</h3>
+                    <p class="text-sm text-gray-600 mb-3">
+                        Full-page view of project details with task tracking and completion status.
+                    </p>
+                    <div class="flex space-x-2">
+                        <button 
+                            onclick="simulateNavigation('/project-details/123')"
+                            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                            View Project 123
+                        </button>
+                        <button 
+                            onclick="simulateNavigation('/project-details/456')"
+                            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                            View Project 456
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Navigation Sources</h3>
+                    <p class="text-sm text-gray-600 mb-3">
+                        These routes can be accessed from multiple places in the application:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• <strong>Admin Investor Interests:</strong> Click "View Project Details & Tasks" button</li>
+                        <li>• <strong>Marketplace:</strong> Click "View Details" button on project cards</li>
+                        <li>• <strong>Investor Details Modal:</strong> Click "View Project Details & Tasks" button</li>
+                        <li>• <strong>Direct URL:</strong> Navigate to <code>/project-details/:landId</code></li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Features</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>✅ <strong>Project Overview:</strong> Visual progress indicators and project metadata</li>
+                        <li>✅ <strong>Task Tracking:</strong> Real-time task completion status and progress bars</li>
+                        <li>✅ <strong>Task Details:</strong> Individual task cards with assignees and due dates</li>
+                        <li>✅ <strong>Responsive Design:</strong> Works on desktop and mobile devices</li>
+                        <li>✅ <strong>Navigation:</strong> Back button and breadcrumb navigation</li>
+                        <li>✅ <strong>Error Handling:</strong> Graceful handling of missing projects</li>
+                        <li>✅ <strong>Loading States:</strong> Loading indicators while fetching data</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Route Structure</h3>
+                    <div class="bg-gray-50 rounded p-3">
+                        <code class="text-sm text-gray-800">
+                            /project-details/:landId
+                        </code>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">
+                        Where <code>:landId</code> is the unique identifier for the project/land.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 bg-blue-50 rounded-lg p-4">
+            <h3 class="font-medium text-blue-900 mb-2">Navigation Simulation</h3>
+            <p class="text-sm text-blue-800 mb-3">
+                Click the buttons above to simulate navigation to different project detail pages.
+            </p>
+            <div id="navigationLog" class="text-sm text-blue-700 bg-blue-100 rounded p-2 min-h-20">
+                Navigation log will appear here...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function simulateNavigation(route) {
+            const log = document.getElementById('navigationLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] Navigating to: ${route}\n`;
+            log.textContent += logEntry;
+            log.scrollTop = log.scrollHeight;
+            
+            // Simulate the navigation
+            console.log(`Simulating navigation to: ${route}`);
+            
+            // In a real React app, this would be:
+            // navigate(route);
+        }
+        
+        // Initialize log
+        document.getElementById('navigationLog').textContent = 'Ready to simulate navigation...\n';
+    </script>
+</body>
+</html>

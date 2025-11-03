@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Project Details - Task & Landowner Information</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Enhanced Project Details - Task & Landowner Information</h1>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">✅ Enhanced Features Implemented</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-green-200 rounded-lg p-4 bg-green-50">
+                    <h3 class="font-medium text-green-900 mb-2">🔍 Comprehensive Task Details</h3>
+                    <ul class="text-sm text-green-800 space-y-1">
+                        <li>• <strong>Task Information:</strong> Title, description, status, priority</li>
+                        <li>• <strong>Assignment Details:</strong> Assigned to, created date, due date</li>
+                        <li>• <strong>Subtasks:</strong> Individual subtask breakdown with status</li>
+                        <li>• <strong>Task History:</strong> Recent activity and updates</li>
+                        <li>• <strong>Progress Tracking:</strong> Visual status indicators</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <h3 class="font-medium text-blue-900 mb-2">👤 Complete Landowner Information</h3>
+                    <ul class="text-sm text-blue-800 space-y-1">
+                        <li>• <strong>Contact Details:</strong> Full name, email, phone number</li>
+                        <li>• <strong>Account Information:</strong> User ID, account status</li>
+                        <li>• <strong>Profile Data:</strong> Member since date, activity status</li>
+                        <li>• <strong>Professional Details:</strong> Role and permissions</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                    <h3 class="font-medium text-purple-900 mb-2">📊 Enhanced Data Fetching</h3>
+                    <ul class="text-sm text-purple-800 space-y-1">
+                        <li>• <strong>API Integration:</strong> Multiple API calls for comprehensive data</li>
+                        <li>• <strong>Error Handling:</strong> Graceful handling of missing data</li>
+                        <li>• <strong>Loading States:</strong> Professional loading indicators</li>
+                        <li>• <strong>Data Caching:</strong> Efficient data management</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">🔧 Technical Implementation</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Data Fetching Functions</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">fetchProjectData()</code>
+                            <p class="text-gray-600 mt-1">Fetches project and landowner details</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">fetchProjectTasks()</code>
+                            <p class="text-gray-600 mt-1">Fetches tasks, subtasks, and history</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">getTaskById()</code>
+                            <p class="text-gray-600 mt-1">Gets detailed task information</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">getTaskHistory()</code>
+                            <p class="text-gray-600 mt-1">Retrieves task activity history</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">API Endpoints Used</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">/lands/{landId}</code>
+                            <p class="text-gray-600 mt-1">Project/land information</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">/users/{userId}</code>
+                            <p class="text-gray-600 mt-1">Landowner details</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">/tasks?land_id={landId}</code>
+                            <p class="text-gray-600 mt-1">Project tasks</p>
+                        </div>
+                        <div class="bg-gray-100 rounded p-2">
+                            <code class="text-gray-800">/tasks/{taskId}/history</code>
+                            <p class="text-gray-600 mt-1">Task activity history</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">📱 User Interface Enhancements</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Task Details Card</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Task title and description</li>
+                        <li>• Status and priority badges</li>
+                        <li>• Assignment information</li>
+                        <li>• Due date and creation date</li>
+                        <li>• Subtasks with status indicators</li>
+                        <li>• Recent activity history</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Landowner Information Card</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Full name and contact details</li>
+                        <li>• Email and phone number</li>
+                        <li>• User ID and account status</li>
+                        <li>• Member since date</li>
+                        <li>• Professional information</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">Project Overview</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Project status and metadata</li>
+                        <li>• Creation and update dates</li>
+                        <li>• Project ID and references</li>
+                        <li>• Progress indicators</li>
+                        <li>• Task completion percentages</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold mb-4">🚀 How to Test</h2>
+            
+            <div class="space-y-4">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">1. Access Project Details</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Navigate to any project details page from the investor portal:
+                    </p>
+                    <div class="bg-gray-100 rounded p-2">
+                        <code class="text-sm text-gray-800">http://localhost:5174/project-details/{projectId}</code>
+                    </div>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">2. View Enhanced Information</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        You should now see comprehensive information including:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Detailed task information with subtasks and history</li>
+                        <li>• Complete landowner contact and profile details</li>
+                        <li>• Enhanced project metadata and status</li>
+                        <li>• Visual progress indicators and status badges</li>
+                    </ul>
+                </div>
+                
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-medium text-gray-900 mb-2">3. Data Loading</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        The page will automatically fetch and display:
+                    </p>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Project information from the backend</li>
+                        <li>• Landowner details via user API</li>
+                        <li>• Task details with subtasks and history</li>
+                        <li>• Real-time progress calculations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 bg-yellow-50 rounded-lg p-4">
+            <h3 class="font-medium text-yellow-900 mb-2">⚠️ Important Notes</h3>
+            <ul class="text-sm text-yellow-800 space-y-1">
+                <li>• <strong>Error Handling:</strong> Missing data is handled gracefully without breaking the UI</li>
+                <li>• <strong>Performance:</strong> Multiple API calls are made in parallel for optimal loading</li>
+                <li>• <strong>Fallbacks:</strong> If detailed information is unavailable, basic information is still displayed</li>
+                <li>• <strong>Loading States:</strong> Professional loading indicators while data is being fetched</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
