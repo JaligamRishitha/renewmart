@@ -93,20 +93,32 @@ def _send_email_sync(recipient_email: str, code: str) -> Optional[str]:
     sender = settings.get("EMAIL_FROM")
 
     if not all([host, port, username, password, sender]):
+        error_msg = f"Missing SMTP configuration. host={host}, port={port}, username={bool(username)}, password={bool(password)}, sender={sender}"
+        logger.error(error_msg)
         raise RuntimeError("Missing SMTP configuration (host, port, username, password, sender)")
+
+    # Ensure recipient_email is valid and not empty
+    if not recipient_email or recipient_email.strip() == "":
+        error_msg = "Recipient email is empty or invalid"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Log the email being sent for debugging
+    logger.info(f"Preparing to send verification email to: {recipient_email}")
 
     msg = _build_message(recipient_email, code)
 
     try:
         # Reduced timeout for faster failure
-        with smtplib.SMTP(host, port, timeout=5) as server:
+        with smtplib.SMTP(host, port, timeout=10) as server:
             server.ehlo()
             if use_tls:
                 server.starttls()
                 server.ehlo()
             server.login(username, password)
+            # Send email to the actual recipient
             server.sendmail(sender, [recipient_email], msg.as_string())
-        logger.info(f"Verification email sent successfully to {recipient_email}")
+        logger.info(f"Verification email sent successfully to {recipient_email} from {sender}")
         return None
     except smtplib.SMTPAuthenticationError as e:
         error_msg = "SMTP authentication failed. Please check email credentials."

@@ -4,11 +4,11 @@ Test document versions API endpoint
 """
 import requests
 import json
+import os
 
 def test_document_versions():
     """Test the document versions endpoint"""
-    
-    base_url = "http://127.0.0.1:8000"
+    base_url = os.getenv("API_BASE_URL") or f"http://127.0.0.1:{os.getenv('PORT', os.getenv('BACKEND_HOST_PORT', '1313'))}"
     
     # Test data
     land_id = "ff8f54a7-7e05-4d49-a71d-19a134eb3e5c"

@@ -32,6 +32,7 @@ import ProjectReviewersPage from './pages/admin-dashboard/project-reviewers';
 import InvestorPortal from './pages/investor-portal';
 import InvestorDashboardPage from './pages/investor-dashboard';
 import MyInterests from './pages/investor-portal/MyInterests';
+import LandDetailsPage from './pages/investor-portal/LandDetailsPage';
 import BrowseProperties from './pages/investor/BrowseProperties';
 import DocumentReview from './pages/document-review';
 import AdminDocumentReview from './pages/document-review/AdminDocumentReview';
@@ -46,12 +47,14 @@ import ReviewerDashboard from './pages/reviewer-dashboard';
 import ReviewerProjects from './pages/reviewer-projects';
 import ProjectDetails from './pages/reviewer-dashboard/ProjectDetails';
 import ProjectDetailsPage from './pages/project-details';
+import InvestorInterestsPage from './pages/sales-advisor/InvestorInterestsPage';
 import Register from './pages/register';
 import Unauthorized from './pages/Unauthorized';
 import DocumentVersionsDebug from './pages/DocumentVersionsDebug';
 import AdminDocumentVersions from './pages/admin/AdminDocumentVersions';
 import DocumentVersionsPage from './pages/DocumentVersionsPage';
 import RouteTest from './components/RouteTest';
+import AdminProjectDocuments from './pages/admin-dashboard/components/AdminProjectDocuments';
 
 const Routes = () => {
   return (
@@ -94,6 +97,11 @@ const Routes = () => {
         <Route path="/admin/document-versions/:landId" element={
           <AdminRoute>
             <AdminDocumentVersions />
+          </AdminRoute>
+        } />
+        <Route path="/admin/projects/:projectId/documents" element={
+          <AdminRoute>
+            <AdminProjectDocuments />
           </AdminRoute>
         } />
         <Route path="/admin/marketplace" element={
@@ -243,6 +251,11 @@ const Routes = () => {
             <ProjectDetailsPage />
           </InvestorRoute>
         } />
+        <Route path="/investor/land-details/:landId" element={
+          <InvestorRoute>
+            <LandDetailsPage />
+          </InvestorRoute>
+        } />
         <Route path="/investor/my-interests" element={
           <InvestorRoute>
             <MyInterests />
@@ -280,6 +293,11 @@ const Routes = () => {
         <Route path="/sales-advisor/project-details/:landId" element={
           <SalesAdvisorRoute>
             <ProjectDetailsPage />
+          </SalesAdvisorRoute>
+        } />
+        <Route path="/sales-advisor/investor-interests" element={
+          <SalesAdvisorRoute>
+            <InvestorInterestsPage />
           </SalesAdvisorRoute>
         } />
         

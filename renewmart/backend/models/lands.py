@@ -48,7 +48,7 @@ class Land(Base):
     # Relationships
     landowner = relationship("User", back_populates="lands")
     status_ref = relationship("LuStatus")
-    energy_type = relationship("LuEnergyType")
+    energy_type_ref = relationship("LuEnergyType", foreign_keys=[energy_key])
     sections = relationship("LandSection", back_populates="land", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="land")
     tasks = relationship("Task", back_populates="land")

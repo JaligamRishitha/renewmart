@@ -4,7 +4,7 @@ import json
 
 def assign_investor_role_via_api():
     """Assign investor role to test user via API"""
-    base_url = "http://127.0.0.1:8000"
+    base_url = "http://149.102.158.71:1312"
     
     print("Assigning investor role via API...")
     

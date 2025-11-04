@@ -37,13 +37,48 @@ const ProjectDetails = () => {
 
   // Get user's reviewer role
   const reviewerRole = user?.roles?.find(role => 
-    ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
+['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
   );
+  const isAdmin = user?.roles?.includes('administrator');
+
+  // Document type to roles mapping - matches backend mapping
+  const roleDocumentMapping = {
+    're_sales_advisor': [
+      'land-valuation',
+      'sale-contracts',
+      'topographical-surveys',
+      'grid-connectivity'
+    ],
+    're_analyst': [
+      'financial-models'
+    ],
+    're_governance_lead': [
+      'land-valuation',
+      'ownership-documents',
+      'zoning-approvals',
+      'environmental-impact',
+      'government-nocs'
+    ]
+  };
+
+  // Helper function to check if a document type is allowed for the reviewer role
+  const isDocumentTypeAllowed = (documentType) => {
+    // Admin can see all documents
+    if (isAdmin) return true;
+    
+    // If no reviewer role, don't show any documents
+    if (!reviewerRole) return false;
+    
+    // Check if document type is in the allowed list for this role
+    const allowedTypes = roleDocumentMapping[reviewerRole] || [];
+    return allowedTypes.includes(documentType);
+  };
 
   // Debug: Log user roles
   console.log('Current user:', user);
   console.log('User roles:', user?.roles);
   console.log('Reviewer role found:', reviewerRole);
+  console.log('Is admin:', isAdmin);
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'LayoutGrid' },
@@ -164,10 +199,17 @@ const ProjectDetails = () => {
       }
       setReviewers(reviewerData);
 
-      // Fetch all documents
+      // Fetch all documents (backend already filters by role, but we'll filter client-side too for safety)
       const docsResponse = await documentsAPI.getDocuments(landId);
-      // Filter out subtask documents
-      const filteredDocs = (docsResponse || []).filter(doc => !doc.subtask_id);
+      // Filter out subtask documents and filter by role
+      const filteredDocs = (docsResponse || [])
+        .filter(doc => !doc.subtask_id)
+        .filter(doc => {
+          // Admin can see all documents
+          if (isAdmin) return true;
+          // Filter by reviewer role
+          return isDocumentTypeAllowed(doc.document_type);
+        });
       setDocuments(filteredDocs);
 
       // Fetch slot status summary
@@ -361,16 +403,21 @@ const ProjectDetails = () => {
     const typeMap = new Map();
     
     // Process each document type separately to ensure consistent version numbering
-    // Filter out subtask documents and subtask document types
+    // Filter out subtask documents, subtask document types, and filter by role
     const documentTypes = [...new Set(documents
       .filter(doc => !doc.subtask_id)
       .filter(doc => {
         const docType = doc.document_type || 'unknown';
-        return docType !== 'subtask-document' && 
-               docType !== 'subtask_document' &&
-               !docType.toLowerCase().includes('subtask document') &&
-               !docType.toLowerCase().includes('subtask-document') &&
-               !docType.toLowerCase().includes('subtask_document');
+        // Filter out subtask document types
+        if (docType === 'subtask-document' || 
+            docType === 'subtask_document' ||
+            docType.toLowerCase().includes('subtask document') ||
+            docType.toLowerCase().includes('subtask-document') ||
+            docType.toLowerCase().includes('subtask_document')) {
+          return false;
+        }
+        // Filter by role - only show document types allowed for this reviewer
+        return isDocumentTypeAllowed(docType);
       })
       .map(doc => doc.document_type || 'unknown'))];
     
@@ -513,9 +560,15 @@ const ProjectDetails = () => {
       const docsResponse = await documentsAPI.getDocuments(landId);
       console.log('Raw documents response:', docsResponse);
       
-      // Filter out subtask documents and ensure proper status mapping
+      // Filter out subtask documents, filter by role, and ensure proper status mapping
       const filteredDocs = (docsResponse || [])
         .filter(doc => !doc.subtask_id)
+        .filter(doc => {
+          // Admin can see all documents
+          if (isAdmin) return true;
+          // Filter by reviewer role
+          return isDocumentTypeAllowed(doc.document_type);
+        })
         .map(doc => {
           // Determine if document is under review
           const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';

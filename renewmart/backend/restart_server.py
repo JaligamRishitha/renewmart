@@ -22,17 +22,19 @@ def restart_server():
     
     print("Starting new server...")
     try:
+        host = os.getenv("HOST", "127.0.0.1")
+        port = os.getenv("PORT", os.getenv("BACKEND_HOST_PORT", "1313"))
         # Start the server
         subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
             "main:app", 
-            "--host", "127.0.0.1", 
-            "--port", "8000", 
+            "--host", host, 
+            "--port", str(port), 
             "--reload"
         ], cwd=os.getcwd())
         print("Server started successfully!")
-        print("Server should be available at: http://127.0.0.1:8000")
-        print("API docs at: http://127.0.0.1:8000/docs")
+        print(f"Server should be available at: http://{host}:{port}")
+        print(f"API docs at: http://{host}:{port}/docs")
     except Exception as e:
         print(f"Error starting server: {e}")
 

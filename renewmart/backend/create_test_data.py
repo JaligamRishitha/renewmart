@@ -5,6 +5,7 @@ Create test data to fix the 500 error
 
 import sqlite3
 import uuid
+import os
 from datetime import datetime
 
 def create_test_data():
@@ -129,7 +130,8 @@ def create_test_data():
         
         print("\n🎉 Test data created successfully!")
         print("   Now try the API endpoint again:")
-        print(f"   GET http://127.0.0.1:8000/api/document-versions/land/{land_id}/status-summary")
+        base_url = os.getenv("API_BASE_URL") or f"http://127.0.0.1:{os.getenv('PORT', os.getenv('BACKEND_HOST_PORT', '1313'))}"
+        print(f"   GET {base_url}/api/document-versions/land/{land_id}/status-summary")
         
     except Exception as e:
         print(f"❌ Error: {e}")

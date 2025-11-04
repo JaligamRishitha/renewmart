@@ -131,7 +131,7 @@ async def create_default_subtasks_for_task(task_id: str, assigned_role: str, cre
             pass
         raise  # Re-raise to be caught by caller
 
-def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> bool:
+def can_access_task(user_roles: List[str], user_id: str, task_data: dict, land_status: str = None) -> bool:
     """Check if user can access a task"""
     # Admin can access all tasks
     if "administrator" in user_roles:
@@ -147,6 +147,10 @@ def can_access_task(user_roles: List[str], user_id: str, task_data: dict) -> boo
     
     # Land owner can access tasks for their land
     if str(task_data.get("landowner_id")) == user_id:
+        return True
+    
+    # Investors can access tasks for published lands
+    if "investor" in user_roles and land_status == "published":
         return True
     
     return False
@@ -691,7 +695,7 @@ async def get_task(
         SELECT t.task_id, t.land_id, t.title as task_type, t.description,
                t.assigned_to, t.created_by as assigned_by, t.status, t.priority,
                t.due_date, t.completion_notes, t.created_at, t.updated_at,
-               l.title as land_title, l.landowner_id,
+               l.title as land_title, l.landowner_id, l.status as land_status,
                u1.first_name || ' ' || u1.last_name as assigned_to_name,
                u2.first_name || ' ' || u2.last_name as assigned_by_name
         FROM tasks t
@@ -717,7 +721,9 @@ async def get_task(
         "landowner_id": result.landowner_id
     }
     
-    if not can_access_task(user_roles, current_user["user_id"], task_data):
+    # Pass land_status to can_access_task for investor permission check
+    land_status = result.land_status if result.land_status else None
+    if not can_access_task(user_roles, str(current_user["user_id"]), task_data, land_status):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this task"
@@ -935,7 +941,7 @@ async def get_task_history(
     """Get task history."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.created_by as assigned_by, l.landowner_id
+        SELECT t.assigned_to, t.created_by as assigned_by, l.landowner_id, l.status as land_status
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -956,7 +962,7 @@ async def get_task_history(
         "landowner_id": task_result.landowner_id
     }
     
-    if not can_access_task(user_roles, current_user["user_id"], task_data):
+    if not can_access_task(user_roles, current_user["user_id"], task_data, task_result.land_status):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view task history"
@@ -1375,7 +1381,7 @@ async def get_subtasks(
     try:
         # Verify task exists and user has access
         task_query = """
-            SELECT t.task_id, t.assigned_to, t.created_by, l.landowner_id
+            SELECT t.task_id, t.assigned_to, t.created_by, l.landowner_id, l.status as land_status
             FROM tasks t
             JOIN lands l ON t.land_id = l.land_id
             WHERE t.task_id = CAST(:task_id AS uuid)
@@ -1398,7 +1404,7 @@ async def get_subtasks(
             "landowner_id": task.landowner_id
         }
         
-        if not can_access_task(user_roles, str(current_user["user_id"]), task_dict):
+        if not can_access_task(user_roles, str(current_user["user_id"]), task_dict, task.land_status):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view subtasks for this task"

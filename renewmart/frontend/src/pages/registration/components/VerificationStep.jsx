@@ -2,18 +2,22 @@ import React, { useState, useEffect } from 'react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import Icon from '../../../components/AppIcon';
+import { authAPI } from '../../../services/api';
 
-const VerificationStep = ({ formData, onComplete, errors }) => {
+const VerificationStep = ({ formData, onComplete, errors, setErrors, isUserRegistered }) => {
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [debugCode, setDebugCode] = useState(null);
 
   useEffect(() => {
-    // Simulate sending verification email on component mount
-    setVerificationSent(true);
-    setResendCooldown(60);
-  }, []);
+    // Request verification code when component mounts if user is registered
+    if (isUserRegistered) {
+      requestVerificationCode();
+    }
+  }, [isUserRegistered]);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -22,26 +26,47 @@ const VerificationStep = ({ formData, onComplete, errors }) => {
     }
   }, [resendCooldown]);
 
+  const requestVerificationCode = async () => {
+    try {
+      setIsResending(true);
+      setErrors({});
+      const response = await authAPI.requestVerificationCode(formData.email);
+      setVerificationSent(true);
+      setResendCooldown(60);
+      setVerificationCode('');
+      
+      // Store debug code if provided (for development)
+      if (response?.data?.debug_code) {
+        setDebugCode(response.data.debug_code);
+      }
+    } catch (error) {
+      console.error('Failed to request verification code:', error);
+      setErrors({ general: error.response?.data?.detail || 'Failed to send verification code. Please try again.' });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   const handleVerifyCode = async () => {
-    if (!verificationCode?.trim()) return;
+    if (!verificationCode?.trim() || verificationCode.length !== 6) {
+      setErrors({ general: 'Please enter a 6-digit verification code' });
+      return;
+    }
 
     setIsVerifying(true);
+    setErrors({});
     
-    // For demo purposes, accept any 6-digit code or skip verification
-    if (verificationCode.length >= 6 || verificationCode === 'skip') {
-      await onComplete();
-    } else {
-      alert('Please enter a 6-digit verification code or type "skip" to proceed.');
+    try {
+      await onComplete(verificationCode);
+    } catch (error) {
+      // Error is handled in parent component
       setIsVerifying(false);
     }
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     if (resendCooldown > 0) return;
-    
-    setVerificationSent(true);
-    setResendCooldown(60);
-    setVerificationCode('');
+    await requestVerificationCode();
   };
 
   return (
@@ -55,7 +80,7 @@ const VerificationStep = ({ formData, onComplete, errors }) => {
           We've sent a verification code to <strong>{formData?.email}</strong>
         </p>
         <p className="text-xs text-muted-foreground mt-2">
-          For demo purposes, enter any 6-digit code or type "skip"
+          Please check your inbox and spam folder for the 6-digit code
         </p>
       </div>
       
@@ -85,20 +110,27 @@ const VerificationStep = ({ formData, onComplete, errors }) => {
           type="text"
           placeholder="Enter 6-digit code"
           value={verificationCode}
-          onChange={(e) => setVerificationCode(e?.target?.value?.replace(/\D/g, '')?.slice(0, 6))}
+          onChange={(e) => {
+            const value = e?.target?.value?.replace(/\D/g, '')?.slice(0, 6);
+            setVerificationCode(value);
+            if (errors?.general) {
+              setErrors({});
+            }
+          }}
           description="Enter the 6-digit code sent to your email"
           maxLength={6}
+          error={errors?.general}
         />
 
         <Button
           onClick={handleVerifyCode}
           loading={isVerifying}
-          disabled={!verificationCode?.trim()}
+          disabled={!verificationCode?.trim() || verificationCode.length !== 6}
           fullWidth
           iconName="Shield"
           iconPosition="left"
         >
-          {isVerifying ? 'Creating Account...' : 'Complete Registration'}
+          {isVerifying ? 'Verifying...' : 'Verify Email & Complete Registration'}
         </Button>
 
         <div className="text-center">
@@ -108,24 +140,27 @@ const VerificationStep = ({ formData, onComplete, errors }) => {
           <Button
             variant="ghost"
             onClick={handleResendCode}
-            disabled={resendCooldown > 0}
+            disabled={resendCooldown > 0 || isResending}
+            loading={isResending}
             iconName="RefreshCw"
             iconPosition="left"
           >
-            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+            {isResending ? 'Sending...' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
           </Button>
         </div>
       </div>
-      {/* Demo Instructions */}
-      <div className="bg-muted/50 p-4 rounded-lg">
-        <div className="flex items-start space-x-3">
-          <Icon name="Info" size={16} className="text-primary mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-muted-foreground">
-            <p className="font-medium text-foreground mb-1">Demo Instructions</p>
-            <p>For demonstration purposes, use verification code: <strong className="text-foreground">123456</strong></p>
+      {/* Debug Code Display (only in development) */}
+      {debugCode && (
+        <div className="bg-muted/50 p-4 rounded-lg border border-warning/20">
+          <div className="flex items-start space-x-3">
+            <Icon name="Info" size={16} className="text-warning mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">Development Mode</p>
+              <p>Your verification code is: <strong className="text-foreground font-mono">{debugCode}</strong></p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       {/* Account Summary */}
       <div className="bg-card border border-border rounded-lg p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Account Summary</h3>
@@ -142,10 +177,12 @@ const VerificationStep = ({ formData, onComplete, errors }) => {
             <span className="text-muted-foreground">Role:</span>
             <span className="text-foreground font-medium capitalize">{formData?.role?.replace('_', ' ')}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Company:</span>
-            <span className="text-foreground font-medium">{formData?.companyName}</span>
-          </div>
+          {formData?.address && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Address:</span>
+              <span className="text-foreground font-medium">{formData?.address}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

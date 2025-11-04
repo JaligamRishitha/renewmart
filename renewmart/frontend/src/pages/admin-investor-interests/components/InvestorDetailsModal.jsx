@@ -158,7 +158,7 @@ const InvestorDetailsModal = ({ isOpen, onClose, investorData }) => {
                 </label>
                 <p className="text-sm text-foreground mt-1 flex items-center">
                   <Icon name="DollarSign" size={14} className="text-muted-foreground mr-2" />
-                  ${investorData.projectPrice}/MWh
+                  £{investorData.projectPrice}/MWh
                 </p>
               </div>
             )}

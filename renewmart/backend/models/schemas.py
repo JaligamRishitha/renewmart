@@ -134,12 +134,11 @@ class UserBase(BaseSchema):
         description="User phone number (10-15 digits, international format supported)",
         example="+1234567890"
     )
-    is_active: bool = Field(
-        True, 
-        description="Whether user account is active and can authenticate",
-        example=True
+    address: Optional[str] = Field(
+        None, 
+        description="User address (1-200 characters, letters only)",
+        example="123 Main St, Anytown, USA"
     )
-
     @validator('phone')
     def validate_phone(cls, v):
         if v is not None:
@@ -214,6 +213,7 @@ class UserUpdate(BaseSchema):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     is_active: Optional[bool] = None
 
 class User(UserBase):
@@ -247,10 +247,10 @@ class UserResponse(BaseSchema):
         description="User phone number",
         example="+1234567890"
     )
-    is_active: bool = Field(
-        ..., 
-        description="Whether user account is active",
-        example=True
+    address: Optional[str] = Field(
+        None, 
+        description="User address",
+        example="123 Main St, Anytown, USA"
     )
     is_verified: bool = Field(
         False,
@@ -271,7 +271,7 @@ class UserResponse(BaseSchema):
                 "first_name": "John",
                 "last_name": "Doe",
                 "phone": "+1234567890",
-                "is_active": True,
+                "address": "123 Main St, Anytown, USA",
                 "roles": ["landowner"]
             }
         }
@@ -692,6 +692,8 @@ class InvestorInterestBase(BaseSchema):
     investment_amount: Optional[Decimal] = Field(None, ge=0, le=1000000000, description="Proposed investment amount")
     comments: Optional[str] = Field(None, max_length=1000, description="Investor comments")
     contact_preference: Optional[ContactPreferenceEnum] = Field(None, description="Preferred contact method")
+    nda_accepted: bool = Field(False, description="Non-Disclosure Agreement accepted")
+    cta_accepted: bool = Field(False, description="Consent to Assign accepted")
 
     @validator('investment_amount')
     def validate_investment_amount(cls, v):
@@ -701,10 +703,21 @@ class InvestorInterestBase(BaseSchema):
 
 class InvestorInterestCreate(InvestorInterestBase):
     land_id: UUID
+    
+    @model_validator(mode='after')
+    def validate_both_required(self):
+        # Ensure both NDA and CTA are accepted
+        if not self.nda_accepted or not self.cta_accepted:
+            raise ValueError('Both NDA and CTA must be accepted to express interest')
+        return self
 
 class InvestorInterestUpdate(BaseSchema):
     status: Optional[str] = None
     comments: Optional[str] = None
+
+class MasterSalesAdvisorAssign(BaseSchema):
+    land_id: UUID
+    sales_advisor_id: UUID
 
 # Aliases for router compatibility
 InterestCreate = InvestorInterestCreate
@@ -715,7 +728,11 @@ class InvestorInterest(InvestorInterestBase):
     investor_id: UUID
     land_id: UUID
     status: str
+    master_sales_advisor_id: Optional[UUID] = None
+    approved_by: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
 # ============================================================================
 # INVESTOR LISTING VIEW SCHEMA

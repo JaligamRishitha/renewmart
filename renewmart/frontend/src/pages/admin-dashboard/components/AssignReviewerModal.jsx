@@ -5,11 +5,11 @@ import Select from '../../../components/ui/Select';
 import Input from '../../../components/ui/Input';
 import { usersAPI } from '../../../services/api';
 
-const AssignReviewerModal = ({ project, onClose, onAssign }) => {
+const AssignReviewerModal = ({ project, onClose, onAssign, preselectedRole = null, preselectedTaskType = null }) => {
   const [formData, setFormData] = useState({
-    reviewerRole: '',
+    reviewerRole: preselectedRole || '',
     assignedTo: '',
-    taskType: '',
+    taskType: preselectedTaskType || '',
     description: '',
     dueDate: '',
     priority: 'medium'
@@ -59,6 +59,16 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
     { value: 'high', label: 'High Priority' },
     { value: 'urgent', label: 'Urgent' }
   ];
+
+  // Initialize form with preselected values
+  useEffect(() => {
+    if (preselectedRole) {
+      setFormData(prev => ({ ...prev, reviewerRole: preselectedRole }));
+    }
+    if (preselectedTaskType) {
+      setFormData(prev => ({ ...prev, taskType: preselectedTaskType }));
+    }
+  }, [preselectedRole, preselectedTaskType]);
 
   // Fetch users when reviewer role changes
   useEffect(() => {
@@ -213,7 +223,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
               handleInputChange('assignedTo', ''); // Reset assigned user when role changes
             }}
             required
-            disabled={loading}
+            disabled={loading || !!preselectedRole}
           />
 
           {/* Assigned To */}
@@ -221,11 +231,17 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
             <Select
               label="Assign To *"
               placeholder={loadingUsers ? "Loading users..." : "Select a user"}
-              options={availableUsers}
+              options={availableUsers.map(user => ({
+                value: user.value,
+                label: `${user.label}${user.email ? ` (${user.email})` : ''}`,
+                description: user.email
+              }))}
               value={formData.assignedTo}
               onChange={(value) => handleInputChange('assignedTo', value)}
               required
               disabled={loading || loadingUsers}
+              searchable={true}
+              clearable={true}
             />
           )}
 
@@ -250,7 +266,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign }) => {
               value={formData.taskType}
               onChange={(value) => handleInputChange('taskType', value)}
               required
-              disabled={loading}
+              disabled={loading || !!preselectedTaskType}
             />
           </div>
 

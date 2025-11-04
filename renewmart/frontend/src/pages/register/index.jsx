@@ -616,7 +616,6 @@ const Register = () => {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              <TrustSignals />
               
               {/* Help Section */}
               <div className="bg-card rounded-lg shadow-elevation-1 border border-border p-6">

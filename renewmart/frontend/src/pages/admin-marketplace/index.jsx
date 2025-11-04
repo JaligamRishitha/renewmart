@@ -311,7 +311,7 @@ const AdminMarketplace = () => {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Avg Price</p>
                   <p className="text-2xl font-bold text-foreground mt-1">
-                    ${(filteredProjects.reduce((sum, p) => sum + (parseFloat(p.price_per_mwh) || 0), 0) / (filteredProjects.length || 1)).toFixed(2)}
+                    £{(filteredProjects.reduce((sum, p) => sum + (parseFloat(p.price_per_mwh) || 0), 0) / (filteredProjects.length || 1)).toFixed(2)}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">

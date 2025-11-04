@@ -13,88 +13,35 @@ const HeroSection = () => {
   const platformStats = [
     { value: '2.5GW+', label: 'Projects Facilitated' },
     { value: '500+', label: 'Active Partners' },
-    { value: '$1.2B+', label: 'Transactions Processed' },
+    { value: '£1.2B+', label: 'Transactions Processed' },
     { value: '99.9%', label: 'Platform Uptime' }
   ];
 
   return (
     <div className="h-full flex flex-col justify-between p-8 lg:p-12">
-      {/* Logo and Branding */}
-      <div className="flex items-center space-x-3 mb-8">
-        <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-          <Icon name="Zap" size={24} color="white" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-black">RenewMart</h2>
-          <p className="text-green-800 text-sm">Renewable Energy Marketplace</p>
-        </div>
-      </div>
-      {/* Hero Content */}
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="mb-8">
-          <h1 className="text-4xl lg:text-5xl font-bold text-black mb-6 leading-tight">
-            Accelerating the Energy Transition
-          </h1>
-          <p className="text-xl text-green-800 mb-8 leading-relaxed">
+      <div className="flex-1 flex flex-col justify-center items-center">
+        <div className="mb-8 text-center">
+          {/* Logo and Text on Same Line */}
+          <div className="flex items-center justify-center space-x-3 mb-6">
+            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+              <Icon name="Zap" size={24} color="white" />
+            </div>
+            <h1 className="text-4xl lg:text-5xl font-bold text-black leading-tight">
+              RenewMart
+            </h1>
+          </div>
+          {/* Centered Descriptive Text */}
+          <p className="text-xl text-green-800 mb-8 leading-relaxed text-center max-w-2xl mx-auto">
             Connect landowners, investors, and industry stakeholders through our integrated 
             marketplace and project management ecosystem for renewable energy assets.
           </p>
         </div>
 
-        {/* Platform Statistics */}
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          {platformStats?.map((stat, index) => (
-            <div key={index} className="text-center">
-              <div className="text-2xl font-bold text-black mb-1">{stat?.value}</div>
-              <div className="text-sm text-green-700">{stat?.label}</div>
-            </div>
-          ))}
-        </div>
+       
 
-        {/* Value Propositions */}
-        <div className="space-y-4 mb-8">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <Icon name="Shield" size={16} color="white" />
-            </div>
-            <span className="text-green-800">Enterprise-grade security and compliance</span>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <Icon name="Users" size={16} color="white" />
-            </div>
-            <span className="text-green-800">Multi-stakeholder collaboration platform</span>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <Icon name="BarChart3" size={16} color="white" />
-            </div>
-            <span className="text-green-800">Real-time analytics and reporting</span>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <Icon name="FileText" size={16} color="white" />
-            </div>
-            <span className="text-green-800">End-to-end project lifecycle management</span>
-          </div>
-        </div>
+        
       </div>
-      {/* Trust Signals */}
-      <div className="mt-8">
-        <p className="text-green-800 text-sm mb-4 text-center">Trusted by industry leaders</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {trustSignals?.map((signal, index) => (
-            <div 
-              key={index} 
-              className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center hover:bg-white/20 transition-smooth"
-              title={signal?.description}
-            >
-              <div className="text-black font-semibold text-sm">{signal?.name}</div>
-              <div className="text-green-700 text-xs mt-1">Certified</div>
-            </div>
-          ))}
-        </div>
-      </div>
+     
       {/* Background Image Overlay */}
       <div className="absolute inset-0 -z-10">
         <Image

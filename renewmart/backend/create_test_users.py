@@ -4,6 +4,7 @@ Script to create test users for development
 """
 import requests
 import json
+import os
 
 def create_test_users():
     """Create test users with proper credentials"""
@@ -35,13 +36,14 @@ def create_test_users():
         }
     ]
     
+    base_url = os.getenv("API_BASE_URL") or f"http://127.0.0.1:{os.getenv('PORT', os.getenv('BACKEND_HOST_PORT', '1313'))}"
     print("Creating test users...")
     
     for user in test_users:
         print(f"\nCreating user: {user['email']}")
         try:
             response = requests.post(
-                "http://127.0.0.1:8000/api/auth/register",
+                f"{base_url}/api/auth/register",
                 headers={"Content-Type": "application/json"},
                 json=user
             )
@@ -71,7 +73,7 @@ def test_login():
         print(f"\nTesting login: {creds['username']}")
         try:
             response = requests.post(
-                "http://127.0.0.1:8000/api/auth/token",
+                f"{base_url}/api/auth/token",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data=f"username={creds['username']}&password={creds['password']}"
             )

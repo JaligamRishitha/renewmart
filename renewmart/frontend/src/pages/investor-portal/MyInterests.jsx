@@ -7,6 +7,7 @@ import Icon from '../../components/AppIcon';
 import Image from '../../components/AppImage';
 import { useAuth } from '../../contexts/AuthContext';
 import { investorsAPI } from '../../services/api';
+import toast from 'react-hot-toast';
 
 const MyInterests = () => {
   const navigate = useNavigate();
@@ -18,6 +19,10 @@ const MyInterests = () => {
     status: '',
     search: ''
   });
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [selectedInterest, setSelectedInterest] = useState(null);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [submittingWithdrawal, setSubmittingWithdrawal] = useState(false);
 
   useEffect(() => {
     fetchInterests();
@@ -40,6 +45,36 @@ const MyInterests = () => {
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleWithdrawClick = (interest) => {
+    setSelectedInterest(interest);
+    setWithdrawReason('');
+    setWithdrawModalOpen(true);
+  };
+
+  const handleWithdrawSubmit = async () => {
+    if (!withdrawReason || withdrawReason.trim().length < 10) {
+      toast.error('Please provide a reason (at least 10 characters)');
+      return;
+    }
+
+    if (!selectedInterest) return;
+
+    try {
+      setSubmittingWithdrawal(true);
+      await investorsAPI.requestWithdrawInterest(selectedInterest.interest_id, withdrawReason.trim());
+      toast.success('Withdrawal request submitted. Awaiting approval from master sales advisor.');
+      setWithdrawModalOpen(false);
+      setSelectedInterest(null);
+      setWithdrawReason('');
+      fetchInterests(); // Refresh the list
+    } catch (err) {
+      console.error('Error submitting withdrawal:', err);
+      toast.error(err.response?.data?.detail || 'Failed to submit withdrawal request');
+    } finally {
+      setSubmittingWithdrawal(false);
+    }
   };
 
   const filteredInterests = interests.filter(interest => {
@@ -144,7 +179,7 @@ const MyInterests = () => {
             <div className="bg-muted rounded-lg p-3">
               <div className="text-xs text-muted-foreground mb-1">Price/MWh</div>
               <div className="font-heading font-semibold text-foreground">
-                {interest.price_per_mwh ? `$${interest.price_per_mwh}` : 'N/A'}
+                {interest.price_per_mwh ? `£${interest.price_per_mwh}` : 'N/A'}
               </div>
             </div>
           </div>
@@ -178,20 +213,29 @@ const MyInterests = () => {
             >
               View Project
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // TODO: Implement withdraw interest functionality
-                console.log('Withdraw interest:', interest.interest_id);
-              }}
-              className="flex-1"
-              iconName="X"
-              iconPosition="left"
-              iconSize={14}
-            >
-              Withdraw
-            </Button>
+            {interest.withdrawal_requested ? (
+              <div className="flex-1 flex items-center justify-center px-3 py-2 text-xs border border-yellow-300 rounded-lg bg-yellow-50 text-yellow-800">
+                <Icon name="Clock" size={12} className="mr-1" />
+                <span className="capitalize">
+                  {interest.withdrawal_status === 'pending' ? 'Withdrawal Pending' : 
+                   interest.withdrawal_status === 'approved' ? 'Withdrawal Approved' :
+                   interest.withdrawal_status === 'rejected' ? 'Withdrawal Rejected' : 'Withdrawal Requested'}
+                </span>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleWithdrawClick(interest)}
+                className="flex-1"
+                iconName="X"
+                iconPosition="left"
+                iconSize={14}
+                disabled={interest.withdrawal_requested}
+              >
+                Withdraw
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -369,6 +413,94 @@ const MyInterests = () => {
         </div>
       </main>
       </div>
+
+      {/* Withdrawal Modal */}
+      {withdrawModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-foreground">Withdraw Interest</h2>
+                <button
+                  onClick={() => {
+                    setWithdrawModalOpen(false);
+                    setSelectedInterest(null);
+                    setWithdrawReason('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Icon name="X" size={20} />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">
+                  You are about to withdraw your interest in:
+                </p>
+                <p className="font-medium text-foreground">
+                  {selectedInterest?.project_title || 'Project'}
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Reason for Withdrawal <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="Please provide a detailed reason for withdrawing your interest (minimum 10 characters)..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm resize-none"
+                  maxLength={500}
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs text-muted-foreground">
+                    Minimum 10 characters required
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {withdrawReason.length}/500
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div className="flex items-start">
+                  <Icon name="AlertCircle" size={16} className="text-yellow-600 mr-2 mt-0.5" />
+                  <p className="text-xs text-yellow-800">
+                    Your withdrawal request will be sent to the master sales advisor for approval. 
+                    The interest will be removed from your list only after approval.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setWithdrawModalOpen(false);
+                    setSelectedInterest(null);
+                    setWithdrawReason('');
+                  }}
+                  className="flex-1"
+                  disabled={submittingWithdrawal}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={handleWithdrawSubmit}
+                  className="flex-1"
+                  disabled={submittingWithdrawal || !withdrawReason || withdrawReason.trim().length < 10}
+                  iconName="Send"
+                >
+                  {submittingWithdrawal ? 'Submitting...' : 'Submit Request'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -96,7 +96,8 @@ export const authAPI = {
         confirm_password: userData.confirm_password || userData.confirmPassword || userData.password,
         first_name: userData.first_name || userData.firstName,
         last_name: userData.last_name || userData.lastName,
-        phone: userData.phone || null
+        phone: userData.phone || null,
+        address: userData.address || null
       };
 
       // Only include roles when user selected a role; otherwise rely on backend default
@@ -133,6 +134,30 @@ export const authAPI = {
   refreshToken: async () => {
     const response = await api.post('/auth/refresh');
     return response.data;
+  },
+  
+  requestVerificationCode: async (email) => {
+    try {
+      console.log('API: Requesting verification code for:', email);
+      const response = await api.post('/auth/verify/request', { email });
+      console.log('API: Verification code requested:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Request verification code error:', error);
+      throw error;
+    }
+  },
+  
+  confirmVerificationCode: async (email, code) => {
+    try {
+      console.log('API: Confirming verification code for:', email);
+      const response = await api.post('/auth/verify/confirm', { email, code });
+      console.log('API: Verification confirmed:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Confirm verification code error:', error);
+      throw error;
+    }
   }
 };
 
@@ -297,7 +322,7 @@ export const landsAPI = {
   },
 
   getAdminInvestorInterests: async () => {
-    const response = await api.get('/lands/admin/investor-interests');
+    const response = await api.get('/investors/admin/interests');
     return response.data;
   },
 
@@ -601,6 +626,9 @@ export const investorsAPI = {
   expressInterest: async (landId, interestData) => {
     const response = await api.post(`/investors/interest`, {
       land_id: landId,
+      nda_accepted: interestData.nda_accepted || false,
+      cta_accepted: interestData.cta_accepted || false,
+      comments: interestData.comments || null,
       ...interestData
     });
     return response.data;
@@ -636,6 +664,54 @@ export const investorsAPI = {
 
   getDashboardInterests: async (limit = 5) => {
     const response = await api.get('/investors/dashboard/interests', { params: { limit } });
+    return response.data;
+  },
+
+  // Master Sales Advisor APIs
+  assignMasterSalesAdvisor: async (landId, salesAdvisorId) => {
+    const response = await api.post(`/investors/master-advisor/assign`, {
+      land_id: landId,
+      sales_advisor_id: salesAdvisorId
+    });
+    return response.data;
+  },
+
+  getMasterAdvisorAssignment: async (landId) => {
+    const response = await api.get(`/investors/master-advisor/assignment/${landId}`);
+    return response.data;
+  },
+
+  getMasterAdvisorInterests: async (status = null) => {
+    const params = status ? { status } : {};
+    const response = await api.get('/investors/master-advisor/interests', { params });
+    return response.data;
+  },
+
+  approveInterest: async (interestId) => {
+    const response = await api.post(`/investors/interest/${interestId}/approve`);
+    return response.data;
+  },
+
+  rejectInterest: async (interestId) => {
+    const response = await api.post(`/investors/interest/${interestId}/reject`);
+    return response.data;
+  },
+
+  // Withdrawal APIs
+  requestWithdrawInterest: async (interestId, reason) => {
+    const response = await api.post(`/investors/interest/${interestId}/withdraw`, {
+      reason
+    });
+    return response.data;
+  },
+
+  approveWithdrawal: async (interestId) => {
+    const response = await api.post(`/investors/interest/${interestId}/withdraw/approve`);
+    return response.data;
+  },
+
+  rejectWithdrawal: async (interestId) => {
+    const response = await api.post(`/investors/interest/${interestId}/withdraw/reject`);
     return response.data;
   }
 };

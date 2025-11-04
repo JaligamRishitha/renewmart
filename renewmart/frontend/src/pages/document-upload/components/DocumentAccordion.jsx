@@ -12,7 +12,8 @@ const DocumentAccordion = ({
   expandedSections,
   onSectionToggle,
   onViewVersions,
-  isEditMode = false
+  isEditMode = false,
+  getRolesText
 }) => {
   const [draggedOver, setDraggedOver] = useState(null);
   const [downloading, setDownloading] = useState(null);
@@ -191,9 +192,16 @@ const DocumentAccordion = ({
                   className={getStatusColor(status)}
                 />
                 <div className="flex-1">
-                  <h3 className="font-heading font-semibold text-lg text-foreground">
-                    {section?.title}
-                  </h3>
+                  <div className="flex items-center space-x-2 flex-wrap">
+                    <h3 className="font-heading font-semibold text-lg text-foreground">
+                      {section?.title}
+                    </h3>
+                    {section?.roles && getRolesText && getRolesText(section.roles) && (
+                      <span className="text-xs text-muted-foreground/70">
+                        (Can view: {getRolesText(section.roles)})
+                      </span>
+                    )}
+                  </div>
                   <p className="font-body text-sm text-muted-foreground mt-1">
                     {section?.description}
                   </p>

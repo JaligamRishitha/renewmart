@@ -247,22 +247,24 @@ async def get_land_documents(
     
     params = {"land_id": str(land_id)}
     
-    # Filter documents based on reviewer role (per Workflow.txt)
+    # Filter documents based on reviewer role
+    # Admin can see all documents, so no filtering needed for admin
     if is_reviewer and reviewer_role and not (is_admin or is_owner):
-        # Document type mapping based on Workflow.txt roles_assignment
-        # Using the actual document_type values as stored in database (section IDs)
+        # Document type mapping - each document type is linked to specific roles
+        # Admin can see all documents regardless of this mapping
         role_document_mapping = {
             "re_sales_advisor": [
                 "land-valuation",
-                "ownership-documents",
-                "sale-contracts"
+                "sale-contracts",
+                "topographical-surveys",
+                "grid-connectivity"
             ],
             "re_analyst": [
-                "topographical-surveys",
-                "grid-connectivity",
                 "financial-models"
             ],
             "re_governance_lead": [
+                "land-valuation",
+                "ownership-documents",
                 "zoning-approvals",
                 "environmental-impact",
                 "government-nocs"

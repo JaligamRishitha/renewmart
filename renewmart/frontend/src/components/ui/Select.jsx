@@ -99,7 +99,7 @@ const Select = React.forwardRef(({
     const hasValue = multiple ? value?.length > 0 : value !== undefined && value !== '';
 
     return (
-        <div className={cn("relative", className)}>
+        <div className={cn("relative z-10", className)}>
             {label && (
                 <label
                     htmlFor={selectId}
@@ -173,7 +173,7 @@ const Select = React.forwardRef(({
 
                 {/* Dropdown */}
                 {isOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white text-black border border-border rounded-md shadow-md">
+                    <div className="absolute z-[100] w-full mt-1 bg-white text-black border border-border rounded-md shadow-lg">
                         {searchable && (
                             <div className="p-2 border-b">
                                 <div className="relative">
@@ -188,7 +188,13 @@ const Select = React.forwardRef(({
                             </div>
                         )}
 
-                        <div className="py-1 max-h-60 overflow-auto">
+                        <div 
+                          className="py-1 overflow-y-auto overflow-x-hidden" 
+                          style={{ 
+                            maxHeight: '240px',
+                            WebkitOverflowScrolling: 'touch'
+                          }}
+                        >
                             {filteredOptions?.length === 0 ? (
                                 <div className="px-3 py-2 text-sm text-muted-foreground">
                                     {searchTerm ? 'No options found' : 'No options available'}

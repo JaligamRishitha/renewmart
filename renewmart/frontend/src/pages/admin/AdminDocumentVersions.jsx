@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
 import Header from '../../components/ui/Header';
 import { documentsAPI, reviewerAPI } from '../../services/api';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 const AdminDocumentVersions = () => {
   const { landId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   
   const [documents, setDocuments] = useState([]);
@@ -17,6 +18,53 @@ const AdminDocumentVersions = () => {
   const [forceUpdate, setForceUpdate] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedAccordions, setExpandedAccordions] = useState({});
+
+  // Get reviewer role from location state or user roles
+  const reviewerRole = location.state?.reviewerRole || 
+    user?.roles?.find(role => 
+      ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
+    );
+  const isAdmin = user?.roles?.includes('administrator') || user?.role === 'admin';
+
+  // Document type to roles mapping - matches backend mapping
+  const roleDocumentMapping = {
+    're_sales_advisor': [
+      'land-valuation',
+      'sale-contracts',
+      'topographical-surveys',
+      'grid-connectivity'
+    ],
+    're_analyst': [
+      'financial-models'
+    ],
+    're_governance_lead': [
+      'land-valuation',
+      'ownership-documents',
+      'zoning-approvals',
+      'environmental-impact',
+      'government-nocs'
+    ]
+  };
+
+  // Helper function to check if a document type is allowed for the reviewer role
+  const isDocumentTypeAllowed = (documentType) => {
+    // If viewing as a specific reviewer role (from location state), filter by that role
+    // even if user is admin
+    if (location.state?.reviewerRole && reviewerRole) {
+      const allowedTypes = roleDocumentMapping[reviewerRole] || [];
+      return allowedTypes.includes(documentType);
+    }
+    
+    // Admin can see all documents (when not viewing as a specific reviewer role)
+    if (isAdmin) return true;
+    
+    // If no reviewer role, don't show any documents
+    if (!reviewerRole) return false;
+    
+    // Check if document type is in the allowed list for this role
+    const allowedTypes = roleDocumentMapping[reviewerRole] || [];
+    return allowedTypes.includes(documentType);
+  };
 
   useEffect(() => {
     if (landId) {
@@ -31,13 +79,21 @@ const AdminDocumentVersions = () => {
   const getDocumentTypes = () => {
     const typeMap = new Map();
     
+    // Filter documents by role and process each document type separately
+    const filteredDocuments = documents.filter(doc => {
+      // Filter out subtask documents
+      if (doc.subtask_id) return false;
+      // Filter by reviewer role
+      return isDocumentTypeAllowed(doc.document_type);
+    });
+    
     // Process each document type separately to ensure consistent version numbering
-    const documentTypes = [...new Set(documents.filter(doc => !doc.subtask_id).map(doc => doc.document_type || 'unknown'))];
+    const documentTypes = [...new Set(filteredDocuments.map(doc => doc.document_type || 'unknown'))];
     
     documentTypes.forEach(type => {
-      // Get all documents of this type
-      const docsOfType = documents
-        .filter(doc => (doc.document_type || 'unknown') === type && !doc.subtask_id);
+      // Get all documents of this type (already filtered by role)
+      const docsOfType = filteredDocuments
+        .filter(doc => (doc.document_type || 'unknown') === type);
       
       if (docsOfType.length === 0) return;
       
@@ -150,12 +206,18 @@ const AdminDocumentVersions = () => {
     try {
       setLoading(true);
       console.log('Refreshing documents from server...');
+      console.log('Reviewer role:', reviewerRole, 'Is admin:', isAdmin);
       const docsResponse = await documentsAPI.getDocuments(landId);
       console.log('Raw documents response:', docsResponse);
       
-      // Filter out subtask documents and ensure proper status mapping
+      // Filter out subtask documents, filter by role, and ensure proper status mapping
       const filteredDocs = (docsResponse || [])
-        .filter(doc => !doc.subtask_id)
+        .filter(doc => {
+          // Filter out subtask documents
+          if (doc.subtask_id) return false;
+          // Filter by reviewer role
+          return isDocumentTypeAllowed(doc.document_type);
+        })
         .map(doc => {
           const processedDoc = {
             ...doc,
@@ -165,16 +227,20 @@ const AdminDocumentVersions = () => {
           console.log(`Refreshed document ${doc.file_name}:`, {
             version_status: doc.version_status,
             original_status: doc.status,
-            final_status: processedDoc.status
+            final_status: processedDoc.status,
+            document_type: doc.document_type,
+            allowed: isDocumentTypeAllowed(doc.document_type)
           });
           return processedDoc;
         });
       
-      console.log('Setting documents state:', filteredDocs.map(d => ({
-        file_name: d.file_name,
-        status: d.status,
-        version_status: d.version_status
-      })));
+      console.log('Setting documents state (filtered by role):', {
+        totalDocs: docsResponse?.length || 0,
+        filteredDocs: filteredDocs.length,
+        reviewerRole: reviewerRole,
+        isAdmin: isAdmin,
+        filteredDocTypes: filteredDocs.map(d => d.document_type)
+      });
       
       setDocuments(filteredDocs);
     } catch (error) {
@@ -265,9 +331,9 @@ const AdminDocumentVersions = () => {
       <div className="p-6">
         {/* Page Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-5">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Document Versions</h1>
+              <h1 className="text-3xl font-bold text-foreground mt-8">Document Versions</h1>
               <p className="text-muted-foreground mt-2">
                 View document versions and review status for this project (Read-only)
               </p>

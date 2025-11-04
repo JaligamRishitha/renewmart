@@ -13,13 +13,15 @@ export default defineConfig({
   },
   plugins: [tsconfigPaths(), react(), tagger()],
   server: {
-    port: 1312,
+    port: parseInt(process.env.VITE_PORT || process.env.FRONTEND_HOST_PORT || '1312'),
     host: "0.0.0.0",
     strictPort: false,
     allowedHosts: ['.amazonaws.com', '.builtwithrocket.new'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:1313',
+        target: process.env.VITE_API_BASE_URL?.replace('/api', '') || 
+                process.env.BACKEND_URL || 
+                `http://127.0.0.1:${process.env.BACKEND_HOST_PORT || '1313'}`,
         changeOrigin: true,
         secure: false
       }

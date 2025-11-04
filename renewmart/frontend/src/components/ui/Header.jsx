@@ -52,6 +52,13 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
   const navigationItems = [
     {
+      label: 'Market Place',
+      path: roleNavigation.portal || '/investor/portal',
+      icon: 'Store',
+      roles: ['investor'],
+      badge: notifications?.opportunities || 0
+    },
+    {
       label: 'Dashboard',
       path: roleNavigation.dashboard || '/dashboard',
       icon: 'LayoutDashboard',
@@ -64,13 +71,6 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       icon: 'FolderOpen',
       roles: ['landowner', 'admin', 'reviewer'],
       badge: 0
-    },
-    {
-      label: 'Opportunities',
-      path: roleNavigation.portal || '/investor/portal',
-      icon: 'TrendingUp',
-      roles: ['investor'],
-      badge: notifications?.opportunities || 0
     },
     {
       label: 'My Interest',

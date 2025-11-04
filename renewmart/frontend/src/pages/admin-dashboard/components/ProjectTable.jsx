@@ -241,6 +241,17 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-center space-x-2">
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/projects/${project.id}/documents`);
+                      }}
+                      iconName="FileText"
+                      iconSize={16}
+                      title="View Documents"
+                    />
+                    <Button
                       variant="default"
                       size="sm"
                       onClick={(e) => {
@@ -360,6 +371,17 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
                 Click to assign reviewers
               </span>
               <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/admin/projects/${project.id}/documents`);
+                  }}
+                  iconName="FileText"
+                  iconSize={16}
+                  title="View Documents"
+                />
                 <Button
                   variant="default"
                   size="sm"

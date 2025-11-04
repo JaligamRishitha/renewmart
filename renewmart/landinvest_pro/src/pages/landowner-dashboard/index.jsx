@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
-import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import Button from '../../components/ui/Button';
@@ -227,7 +226,7 @@ const LandownerDashboard = () => {
           projects: 2
         }} 
       />
-      <WorkflowBreadcrumbs />
+      
       <main className="pt-4 pb-20">
         <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Page Header */}

@@ -4,6 +4,7 @@ Create test land data for dashboard testing
 from database import get_db
 from sqlalchemy import text
 import uuid
+import os
 
 def create_test_lands():
     """Create test land data"""
@@ -96,9 +97,10 @@ def create_test_lands():
         db.commit()
         
         print(f"\n[SUCCESS] Created {lands_created} test lands!")
+        base_url = os.getenv("API_BASE_URL") or f"http://localhost:{os.getenv('PORT', os.getenv('BACKEND_HOST_PORT', '1313'))}"
         print(f"\nNow test the endpoints:")
-        print(f"  GET http://localhost:8000/api/lands/dashboard/summary")
-        print(f"  GET http://localhost:8000/api/lands/dashboard/projects")
+        print(f"  GET {base_url}/api/lands/dashboard/summary")
+        print(f"  GET {base_url}/api/lands/dashboard/projects")
         
         return True
         

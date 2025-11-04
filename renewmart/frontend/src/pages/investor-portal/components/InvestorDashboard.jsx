@@ -39,13 +39,13 @@ const InvestorDashboard = () => {
   };
 
   const formatCurrency = (amount) => {
-    if (!amount && amount !== 0) return '$0';
+    if (!amount && amount !== 0) return '£0';
     if (amount >= 1000000) {
-      return `$${(amount / 1000000).toFixed(2)}M`;
+      return `£${(amount / 1000000).toFixed(2)}M`;
     } else if (amount >= 1000) {
-      return `$${(amount / 1000).toFixed(2)}K`;
+      return `£${(amount / 1000).toFixed(2)}K`;
     }
-    return `$${amount.toFixed(2)}`;
+    return `£${amount.toFixed(2)}`;
   };
 
   if (loading) {

@@ -39,9 +39,9 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     
     # Create user
     insert_query = text("""
-        INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, is_active)
-        VALUES (:email, :password_hash, :first_name, :last_name, :phone, :is_active)
-        RETURNING user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
+        INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, address)
+        VALUES (:email, :password_hash, :first_name, :last_name, :phone, :address)
+        RETURNING user_id, email, first_name, last_name, phone,address, created_at, updated_at
     """)
     
     result = db.execute(insert_query, {
@@ -50,7 +50,8 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         "first_name": user_data.first_name,
         "last_name": user_data.last_name,
         "phone": user_data.phone,
-        "is_active": user_data.is_active
+        "address": user_data.address
+        
     }).fetchone()
     
     db.commit()
@@ -61,7 +62,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         first_name=result.first_name,
         last_name=result.last_name,
         phone=result.phone,
-        is_active=result.is_active,
+        address=result.address,
         created_at=result.created_at,
         updated_at=result.updated_at
     )
@@ -106,7 +107,7 @@ async def get_current_user_profile(current_user: dict = Depends(get_current_acti
         first_name=current_user["first_name"],
         last_name=current_user["last_name"],
         phone=current_user["phone"],
-        is_active=current_user["is_active"],
+        address=current_user["address"],
         created_at=current_user["created_at"],
         updated_at=current_user["updated_at"]
     )
@@ -114,7 +115,6 @@ async def get_current_user_profile(current_user: dict = Depends(get_current_acti
 @router.get("/", response_model=List[User])
 async def list_users(
     role: str = None,
-    is_active: bool = None,
     skip: int = 0,
     limit: int = 100,
     current_user: dict = Depends(require_admin),
@@ -135,10 +135,7 @@ async def list_users(
             where_clauses.append("ur.role_key = :role")
             params["role"] = role
         
-        # Add is_active filter
-        if is_active is not None:
-            where_clauses.append("u.is_active = :is_active")
-            params["is_active"] = is_active
+    
         
         # Build WHERE clause
         where_sql = ""
@@ -148,7 +145,7 @@ async def list_users(
         # Complete query
         query = f"""
             SELECT DISTINCT u.user_id, u.email, u.first_name, u.last_name, 
-                   u.phone, u.is_active, u.created_at, u.updated_at
+                   u.phone, u.address, u.created_at, u.updated_at
             FROM "user" u
             {joins}
             {where_sql}
@@ -165,7 +162,7 @@ async def list_users(
                 first_name=row.first_name,
                 last_name=row.last_name,
                 phone=row.phone,
-                is_active=row.is_active,
+                address=row.address,
                 created_at=row.created_at,
                 updated_at=row.updated_at
             )
@@ -213,10 +210,10 @@ async def update_current_user_profile(
         update_fields.append("phone = :phone")
         params["phone"] = user_update.phone
     
-    if user_update.is_active is not None:
-        update_fields.append("is_active = :is_active")
-        params["is_active"] = user_update.is_active
-    
+    if user_update.address is not None:
+        update_fields.append("address = :address")
+        params["address"] = user_update.address
+
     if not update_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,7 +224,7 @@ async def update_current_user_profile(
         UPDATE \"user\" 
         SET {', '.join(update_fields)}, updated_at = now()
         WHERE user_id = :user_id
-        RETURNING user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
+        RETURNING user_id, email, first_name, last_name, phone, address, created_at, updated_at
     """)
     
     result = db.execute(update_query, params).fetchone()
@@ -239,7 +236,7 @@ async def update_current_user_profile(
         first_name=result.first_name,
         last_name=result.last_name,
         phone=result.phone,
-        is_active=result.is_active,
+        address=result.address,
         created_at=result.created_at,
         updated_at=result.updated_at
     )
@@ -279,7 +276,7 @@ async def get_user(
             )
     
     query = text("""
-        SELECT user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
+        SELECT user_id, email, first_name, last_name, phone, address, created_at, updated_at
         FROM \"user\"
         WHERE user_id = CAST(:user_id AS uuid)
     """)
@@ -298,7 +295,7 @@ async def get_user(
         first_name=result.first_name,
         last_name=result.last_name,
         phone=result.phone,
-        is_active=result.is_active,
+        address=result.address,
         created_at=result.created_at,
         updated_at=result.updated_at
     )
@@ -463,9 +460,9 @@ async def create_user_by_admin(
         # Create user
         logger.info("Inserting user into database...")
         insert_query = text("""
-            INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, is_active)
-            VALUES (:email, :password_hash, :first_name, :last_name, :phone, :is_active)
-            RETURNING user_id, email, first_name, last_name, phone, is_active, created_at, updated_at
+            INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, address)
+            VALUES (:email, :password_hash, :first_name, :last_name, :phone, :address)
+            RETURNING user_id, email, first_name, last_name, phone, address, created_at, updated_at
         """)
         
         result = db.execute(insert_query, {
@@ -474,7 +471,7 @@ async def create_user_by_admin(
             "first_name": user_data.first_name,
             "last_name": user_data.last_name,
             "phone": user_data.phone,
-            "is_active": user_data.is_active if user_data.is_active is not None else True
+            "address": user_data.address
         }).fetchone()
         
         if not result:
@@ -516,7 +513,7 @@ async def create_user_by_admin(
             first_name=result.first_name,
             last_name=result.last_name,
             phone=result.phone,
-            is_active=result.is_active,
+            address=result.address,
             created_at=result.created_at,
             updated_at=result.updated_at
         )

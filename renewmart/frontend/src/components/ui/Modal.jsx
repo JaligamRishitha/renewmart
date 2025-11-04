@@ -29,9 +29,9 @@ const Modal = ({
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className={`relative w-full ${sizeClasses[size]} transform overflow-hidden rounded-lg bg-white shadow-xl transition-all`}>
+        <div className={`relative w-full ${sizeClasses[size]} transform overflow-hidden rounded-lg bg-white shadow-xl transition-all max-h-[90vh] flex flex-col`}>
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4 flex-shrink-0">
             <h3 className="text-lg font-semibold text-foreground">
               {title}
             </h3>
@@ -47,7 +47,7 @@ const Modal = ({
           </div>
           
           {/* Content */}
-          <div className="px-6 py-4">
+          <div className="px-6 py-4 overflow-y-auto flex-1">
             {children}
           </div>
         </div>

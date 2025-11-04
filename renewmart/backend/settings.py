@@ -114,11 +114,9 @@ class CORSSettings(BaseSettings):
     """CORS configuration settings."""
     
     allow_origins: List[str] = Field(
-        default=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173"
-           
-           
+        default_factory=lambda: [
+            os.getenv("FRONTEND_URL", f"http://localhost:{os.getenv('FRONTEND_HOST_PORT', '1312')}"),
+            f"http://127.0.0.1:{os.getenv('FRONTEND_HOST_PORT', '1312')}"
         ],
         description="List of allowed origins for CORS"
     )

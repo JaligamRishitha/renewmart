@@ -16,13 +16,6 @@ const RoleSelectionStep = ({ formData, setFormData, errors }) => {
       icon: 'TrendingUp',
       description: 'Investment professional focused on renewable energy assets',
       features: ['Deal flow management', 'Due diligence tools', 'Portfolio tracking', 'Financial analysis']
-    },
-    {
-      id: 'administrator',
-      title: 'Administrator',
-      icon: 'Settings',
-      description: 'System administrator managing platform operations',
-      features: ['User management', 'System configuration', 'Security monitoring', 'Platform analytics']
     }
   ];
 
@@ -36,9 +29,9 @@ const RoleSelectionStep = ({ formData, setFormData, errors }) => {
         <h2 className="text-xl font-semibold text-foreground mb-2">Choose Your Role</h2>
         <p className="text-muted-foreground">Select the role that best describes your involvement in renewable energy</p>
       </div>
-      {errors?.role && (
+      {(errors?.role || errors?.general) && (
         <div className="p-3 bg-error/10 border border-error/20 rounded-lg">
-          <p className="text-sm text-error">{errors?.role}</p>
+          <p className="text-sm text-error">{errors?.role || errors?.general}</p>
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

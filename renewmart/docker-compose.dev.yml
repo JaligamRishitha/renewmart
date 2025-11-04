@@ -70,21 +70,21 @@ services:
       - ./renewmart/uploads-dev:/app/uploads
       - ./renewmart/logs-dev:/app/logs
     ports:
-      - "${BACKEND_HOST_PORT}:8000"
+      - "${BACKEND_HOST_PORT}:1313"
     depends_on:
       postgres_db:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:1313/health"]
       interval: 30s
       timeout: 10s
       retries: 3
     networks:
       - renewmart-dev-network
     restart: unless-stopped
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "1313", "--reload"]
 
   # Frontend (Development)
   frontend:
@@ -96,13 +96,13 @@ services:
       - ./compose.env
       - ./frontend/.env
     environment:
-      - VITE_API_URL=http://backend:8000/api
+      - VITE_API_URL=http://backend:1313/api
       - NODE_ENV=development
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "${FRONTEND_HOST_PORT}:5173"
+      - "${FRONTEND_HOST_PORT}:1312"
     depends_on:
       - backend
     networks:

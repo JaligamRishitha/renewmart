@@ -171,15 +171,6 @@ const UserDetailsModal = ({ isOpen, onClose }) => {
                   </h3>
                   
                   <div className="space-y-3">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Account Status</label>
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-2 h-2 rounded-full ${displayUser?.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <span className="text-foreground">
-                          {displayUser?.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </div>
                     
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">Email Verified</label>

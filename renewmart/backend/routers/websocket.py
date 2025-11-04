@@ -63,7 +63,11 @@ async def websocket_test_page():
                     return;
                 }
                 
-                ws = new WebSocket(`ws://localhost:8000/ws?token=${encodeURIComponent(token)}`);
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsHost = window.location.hostname;
+                const wsPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+                const wsUrl = `${wsProtocol}//${wsHost}${window.location.port ? ':' + wsPort : ''}/ws?token=${encodeURIComponent(token)}`;
+                ws = new WebSocket(wsUrl);
                 
                 ws.onopen = function(event) {
                     addMessage('Connected to WebSocket', 'system');

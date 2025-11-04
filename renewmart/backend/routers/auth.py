@@ -25,6 +25,9 @@ import secrets
 import string
 from logs import log_security_event
 from email_service import send_verification_email_async
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["authentication"],
@@ -67,7 +70,9 @@ async def register_user(
             first_name=user_data.first_name,
             last_name=user_data.last_name,
             phone=user_data.phone,
+            address=user_data.address,
             is_verified=False,  # initially not verified
+            is_active=True
         )
 
         db.add(db_user)
@@ -85,7 +90,8 @@ async def register_user(
         # Optional verification
         if send_verification:
             ttl = getattr(settings, "VERIFICATION_CODE_TTL", 600)
-            code = "123456" if getattr(settings, "DEBUG", True) else "".join(secrets.choice(string.digits) for _ in range(6))
+            # Always generate random 6-digit code for security
+            code = "".join(secrets.choice(string.digits) for _ in range(6))
             key = f"verify:code:{user_data.email.lower()}"
             redis_service.set(key, {"code": code}, expire=ttl)
             background_tasks.add_task(send_verification_email_async, user_data.email, code)
@@ -166,23 +172,77 @@ async def read_users_me(request: Request, current_user: dict = Depends(get_curre
     summary="Request email verification code"
 )
 @enhanced_limiter.limit(RateLimits.AUTH_REGISTER)
-async def request_verification_code(request: Request, background_tasks: BackgroundTasks, payload: VerificationRequest, db: Session = Depends(get_db)):
-    user = get_user_by_email(db, payload.email)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user.get("is_verified"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already verified")
-
-    ttl = getattr(settings, "VERIFICATION_CODE_TTL", 600)
-    code = "123456" if getattr(settings, "DEBUG", True) else "".join(secrets.choice(string.digits) for _ in range(6))
-    key = f"verify:code:{payload.email.lower()}"
-    redis_service.set(key, {"code": code}, expire=ttl)
-    background_tasks.add_task(send_verification_email_async, payload.email, code)
-
-    return SuccessResponse(
-        message="Verification code sent.",
-        data={"ttl_seconds": ttl, "debug_code": code if getattr(settings, "DEBUG", True) else None}
-    )
+async def request_verification_code(
+    request: Request, 
+    background_tasks: BackgroundTasks, 
+    payload: VerificationRequest, 
+    db: Session = Depends(get_db)
+):
+    """
+    Request an email verification code for a registered user.
+    
+    This endpoint:
+    1. Validates that the user exists
+    2. Checks if the user is already verified
+    3. Generates a 6-digit verification code
+    4. Stores it in Redis with TTL
+    5. Sends the code via email
+    """
+    try:
+        # Check if user exists
+        user = get_user_by_email(db, payload.email)
+        if not user:
+            log_security_event("verification_request_failed", {"email": payload.email, "reason": "user_not_found"})
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="User not found. Please register first."
+            )
+        
+        # Check if already verified
+        if user.get("is_verified"):
+            log_security_event("verification_request_failed", {"email": payload.email, "reason": "already_verified"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="User already verified"
+            )
+        
+        # Generate verification code
+        ttl = getattr(settings, "VERIFICATION_CODE_TTL", 600)  # Default 10 minutes
+        # Always generate random 6-digit code for security
+        code = "".join(secrets.choice(string.digits) for _ in range(6))
+        
+        # Store code in Redis with TTL
+        key = f"verify:code:{payload.email.lower()}"
+        redis_service.set(key, {"code": code, "email": payload.email.lower()}, expire=ttl)
+        
+        # Send email asynchronously
+        background_tasks.add_task(send_verification_email_async, payload.email, code)
+        
+        # Log security event
+        log_security_event("verification_code_sent", {"email": payload.email})
+        
+        # Return response (never include code in production for security)
+        response_data = {"ttl_seconds": ttl}
+        # Only include debug code if explicitly enabled via environment variable
+        if getattr(settings, "VERIFICATION_DEBUG_CODE", False):
+            response_data["debug_code"] = code
+            logger.warning(f"DEBUG MODE: Verification code for {payload.email} is {code}")
+        
+        return SuccessResponse(
+            message="Verification code sent to your email. Please check your inbox and spam folder.",
+            data=response_data
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        log_security_event("verification_request_error", {"email": payload.email, "error": str(e)})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification code. Please try again later."
+        )
 
 
 @router.post("/verify/confirm",
@@ -190,33 +250,97 @@ async def request_verification_code(request: Request, background_tasks: Backgrou
     summary="Confirm email verification code"
 )
 @enhanced_limiter.limit(RateLimits.API_WRITE)
-async def confirm_verification_code(request: Request, payload: VerificationConfirm, db: Session = Depends(get_db)):
-    user = get_user_by_email(db, payload.email)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    key = f"verify:code:{payload.email.lower()}"
-    stored = redis_service.get(key)
-    if not stored or stored.get("code") != payload.code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
-
-    db_user = db.query(User).filter(User.user_id == user["user_id"]).first()
-    db_user.is_verified = True
-    db.commit()
-    db.refresh(db_user)
-
-    redis_service.delete(key)
-
-    user_roles = db.query(UserRole).filter(UserRole.user_id == db_user.user_id).all()
-    roles = [ur.role_key for ur in user_roles]
-
-    return UserResponse(
-        user_id=str(db_user.user_id),
-        email=db_user.email,
-        first_name=db_user.first_name,
-        last_name=db_user.last_name,
-        phone=db_user.phone,
-        is_active=db_user.is_active,
-        is_verified=True,
-        roles=roles
-    )
+async def confirm_verification_code(
+    request: Request, 
+    payload: VerificationConfirm, 
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm email verification by validating the code.
+    
+    This endpoint:
+    1. Validates the verification code from Redis
+    2. Marks the user as verified in the database
+    3. Deletes the verification code from Redis
+    4. Returns the updated user information
+    """
+    try:
+        # Check if user exists
+        user = get_user_by_email(db, payload.email)
+        if not user:
+            log_security_event("verification_confirm_failed", {"email": payload.email, "reason": "user_not_found"})
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="User not found"
+            )
+        
+        # Check if already verified
+        if user.get("is_verified"):
+            log_security_event("verification_confirm_failed", {"email": payload.email, "reason": "already_verified"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already verified"
+            )
+        
+        # Validate verification code
+        key = f"verify:code:{payload.email.lower()}"
+        stored = redis_service.get(key)
+        
+        if not stored:
+            log_security_event("verification_confirm_failed", {"email": payload.email, "reason": "code_not_found"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code not found or expired. Please request a new code."
+            )
+        
+        stored_code = stored.get("code")
+        if not stored_code or stored_code != payload.code:
+            log_security_event("verification_confirm_failed", {"email": payload.email, "reason": "invalid_code"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code. Please check and try again."
+            )
+        
+        # Update user verification status
+        db_user = db.query(User).filter(User.user_id == user["user_id"]).first()
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found in database"
+            )
+        
+        db_user.is_verified = True
+        db.commit()
+        db.refresh(db_user)
+        
+        # Delete verification code from Redis
+        redis_service.delete(key)
+        
+        # Get user roles
+        user_roles = db.query(UserRole).filter(UserRole.user_id == db_user.user_id).all()
+        roles = [ur.role_key for ur in user_roles]
+        
+        # Log successful verification
+        log_security_event("email_verified", {"email": payload.email, "user_id": str(db_user.user_id)})
+        
+        return UserResponse(
+            user_id=str(db_user.user_id),
+            email=db_user.email,
+            first_name=db_user.first_name,
+            last_name=db_user.last_name,
+            phone=db_user.phone,
+            is_active=db_user.is_active,
+            is_verified=True,
+            roles=roles
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        log_security_event("verification_confirm_error", {"email": payload.email, "error": str(e)})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify email. Please try again later."
+        )

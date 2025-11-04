@@ -11,6 +11,7 @@ const LoginPage = () => {
         <title>Sign In - RenewMart | Renewable Energy Marketplace</title>
         <meta name="description" content="Sign in to RenewMart, the leading renewable energy marketplace connecting landowners, investors, and industry stakeholders." />
         <meta name="keywords" content="renewable energy, login, marketplace, solar, wind, PPA, power purchase agreement" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </Helmet>
       <div className="min-h-screen bg-background flex">
         {/* Hero Section - Left Panel (60% width on desktop) */}
@@ -39,10 +40,7 @@ const LoginPage = () => {
             {/* Login Form */}
             <LoginForm />
 
-            {/* Security Badges - Desktop Only */}
-            <div className="hidden lg:block">
-              <SecurityBadges />
-            </div>
+            
 
             {/* Mobile Trust Indicators */}
             <div className="lg:hidden mt-8 text-center">

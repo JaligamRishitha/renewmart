@@ -147,8 +147,8 @@ const InvestorPortal = () => {
 
   const handleViewDetails = (projectId) => {
     console.log('View details for project:', projectId);
-    // Navigate to project details page
-    navigate(`/project-details/${projectId}`);
+    // Navigate to investor-specific land details page
+    navigate(`/investor/land-details/${projectId}`);
   };
 
   const handleExpressInterest = (projectId) => {
@@ -291,7 +291,7 @@ const InvestorPortal = () => {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="font-heading font-bold text-3xl text-foreground">
-              Investment Opportunities
+              Market Place
             </h1>
             
             <div className="flex items-center space-x-2">
@@ -334,51 +334,13 @@ const InvestorPortal = () => {
               totalResults={sortedProjects?.length}
             />
             
-            <div className="hidden lg:block">
-              <SavedSearches
-                savedSearches={savedSearches}
-                onLoadSearch={handleLoadSearch}
-                onSaveSearch={handleSaveSearch}
-                onDeleteSearch={handleDeleteSearch}
-                currentFilters={filters}
-              />
-            </div>
-            
-            <div className="hidden lg:block">
-              <WatchlistPanel
-                watchlistItems={watchlistItems}
-                onRemoveFromWatchlist={handleRemoveFromWatchlist}
-                onViewProject={handleViewDetails}
-                onExpressInterest={handleExpressInterest}
-              />
-            </div>
+  
+           
           </div>
 
           {/* Main Content Area */}
           <div className="lg:col-span-3">
-            {/* Results Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <h2 className="font-heading font-semibold text-xl text-foreground">
-                  {sortedProjects?.length} {sortedProjects?.length === 1 ? 'Project' : 'Projects'} Found
-                </h2>
-                
-                {Object.values(filters)?.some(value => 
-                  value && (typeof value === 'string' ? value : Object.values(value)?.some(v => v))
-                ) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearFilters}
-                    iconName="X"
-                    iconPosition="left"
-                    iconSize={14}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
-            </div>
+            
 
             {/* Content Area */}
             {isLoadingProjects ? (
@@ -399,8 +361,7 @@ const InvestorPortal = () => {
                     project={project}
                     onViewDetails={handleViewDetails}
                     onExpressInterest={handleExpressInterest}
-                    onSaveToWatchlist={handleSaveToWatchlist}
-                    isWatchlisted={watchlistItems?.some(item => item?.id === project?.id)}
+                    
                   />
                 ))}
               </div>
@@ -441,23 +402,7 @@ const InvestorPortal = () => {
           </div>
         </div>
 
-        {/* Mobile Saved Content */}
-        <div className="lg:hidden mt-8 space-y-6">
-          <SavedSearches
-            savedSearches={savedSearches}
-            onLoadSearch={handleLoadSearch}
-            onSaveSearch={handleSaveSearch}
-            onDeleteSearch={handleDeleteSearch}
-            currentFilters={filters}
-          />
-          
-          <WatchlistPanel
-            watchlistItems={watchlistItems}
-            onRemoveFromWatchlist={handleRemoveFromWatchlist}
-            onViewProject={handleViewDetails}
-            onExpressInterest={handleExpressInterest}
-          />
-        </div>
+  
       </main>
       </div>
       {/* Notifications */}

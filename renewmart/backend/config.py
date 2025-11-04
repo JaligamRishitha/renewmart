@@ -1,14 +1,21 @@
 from dynaconf import Dynaconf
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Load .env file explicitly
+BASE_DIR = Path(__file__).parent
+env_path = BASE_DIR / '.env'
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
 
 # Initialize Dynaconf
-BASE_DIR = Path(__file__).parent
 settings = Dynaconf(
     envvar_prefix="RENEWMART",
     settings_files=[str(BASE_DIR / 'settings.toml'), str(BASE_DIR / '.secrets.toml')],
     environments=True,
     load_dotenv=True,
+    dotenv_path=str(BASE_DIR / '.env'),
     env_switcher="RENEWMART_ENV",
     merge_enabled=True,
 )
@@ -49,6 +56,14 @@ def is_development() -> bool:
 def is_production() -> bool:
     """Check if running in production environment"""
     return settings.get('ENVIRONMENT', 'development') == "production"
+
+# Override settings with direct environment variables (without prefix) for backward compatibility
+# This ensures .env file values take precedence over settings.toml defaults
+for key in ['SMTP_USERNAME', 'SMTP_PASSWORD', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT', 'EMAIL_USE_TLS', 
+            'DATABASE_URL', 'DATABASE_PASSWORD', 'SECRET_KEY', 'REDIS_PASSWORD', 'REDIS_HOST', 'REDIS_PORT']:
+    env_value = os.getenv(key)
+    if env_value:
+        setattr(settings, key, env_value)
 
 # Ensure directories exist on import
 ensure_directories()

@@ -1,5 +1,7 @@
 [default]
 # Database Configuration
+# Sensitive values are loaded from .env file (automatically via load_dotenv=True)
+# Environment variables override these defaults
 DATABASE_URL = "sqlite:///./renewmart.db"
 DATABASE_HOST = "localhost"
 DATABASE_PORT = 5432
@@ -8,13 +10,14 @@ DATABASE_USER = "renewmart_user"
 DATABASE_PASSWORD = "renewmart_password"
 
 # Security Configuration
+# Sensitive values are loaded from .env file (automatically via load_dotenv=True)
 SECRET_KEY = "your-secret-key-here-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Server Configuration
 HOST = "0.0.0.0"
-PORT = 8000
+PORT = 1313
 DEBUG = true
 RELOAD = true
 
@@ -36,6 +39,7 @@ MAX_FILE_SIZE = 10485760  # 10MB in bytes
 ALLOWED_FILE_TYPES = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"]
 
 # Redis Configuration (for rate limiting and caching)
+# Sensitive values are loaded from .env file (automatically via load_dotenv=True)
 REDIS_HOST = "localhost"
 REDIS_PORT = 1315
 REDIS_DB = 0
@@ -43,11 +47,12 @@ REDIS_PASSWORD = ""
 REDIS_URL = "redis://localhost:1315/0"
 
 # Email Configuration (for verification)
-EMAIL_FROM = "jaligamrishitha@gmail.com"
+# Sensitive values are loaded from .env file (automatically via load_dotenv=True)
+EMAIL_FROM = "no-reply@example.com"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_USERNAME = "jaligamrishitha@gmail.com"
-SMTP_PASSWORD = "yvemzchyptqobuhf"  # Gmail App Password (spaces removed)
+SMTP_USERNAME = ""
+SMTP_PASSWORD = ""
 EMAIL_USE_TLS = true
 VERIFICATION_CODE_TTL = 600  # seconds
 

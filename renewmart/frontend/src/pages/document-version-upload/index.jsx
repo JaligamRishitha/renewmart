@@ -25,65 +25,93 @@ const DocumentVersionUpload = () => {
       title: 'Land Valuation Reports',
       description: 'Professional appraisal and valuation documents',
       icon: 'FileText',
-      required: true
+      required: true,
+      roles: ['administrator', 're_sales_advisor', 're_governance_lead']
     },
     {
       id: 'ownership-documents',
       title: 'Ownership Documents',
       description: 'Legal documents proving ownership',
       icon: 'Scale',
-      required: true
+      required: true,
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'sale-contracts',
       title: 'Sale Contracts',
       description: 'Existing sale agreements or contract templates',
       icon: 'FileText',
-      required: false
+      required: false,
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'topographical-surveys',
       title: 'Topographical Surveys',
       description: 'Detailed land surveys and topographical maps',
       icon: 'Map',
-      required: true
+      required: true,
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'grid-connectivity',
       title: 'Grid Connectivity Details',
       description: 'Electrical grid connection studies',
       icon: 'Zap',
-      required: true
+      required: true,
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'financial-models',
       title: 'Financial Models',
       description: 'Economic analysis and financial projections',
       icon: 'DollarSign',
-      required: false
+      required: false,
+      roles: ['administrator', 're_analyst']
     },
     {
       id: 'zoning-approvals',
       title: 'Zoning Approvals',
       description: 'Municipal zoning permits and land use approvals',
       icon: 'Building',
-      required: true
+      required: true,
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'environmental-impact',
       title: 'Environmental Impact Assessments',
       description: 'Environmental studies and impact assessment reports',
       icon: 'Leaf',
-      required: true
+      required: true,
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'government-nocs',
       title: 'Government NOCs',
       description: 'No Objection Certificates from government authorities',
       icon: 'Shield',
-      required: true
+      required: true,
+      roles: ['administrator', 're_governance_lead']
     }
   ];
+
+  // Helper function to format role names for display
+  const formatRoleName = (role) => {
+    const roleMap = {
+      'administrator': 'Admin',
+      're_sales_advisor': 'Sales Advisor',
+      're_analyst': 'Analyst',
+      're_governance_lead': 'Governance Lead'
+    };
+    return roleMap[role] || role;
+  };
+
+  // Helper function to get roles text for display (excluding admin)
+  const getRolesText = (roles) => {
+    const nonAdminRoles = roles.filter(role => role !== 'administrator');
+    if (nonAdminRoles.length === 0) return 'Admin only';
+    const formattedRoles = nonAdminRoles.map(formatRoleName);
+    return formattedRoles.join(', ');
+  };
 
   useEffect(() => {
     const projectId = location.state?.projectId;
@@ -314,9 +342,16 @@ const DocumentVersionUpload = () => {
                         className={selectedDocumentType?.id === docType.id ? 'text-primary-foreground' : 'text-primary'} 
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {docType.title}
-                        </p>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-medium text-sm truncate">
+                            {docType.title}
+                          </p>
+                          {docType.roles && (
+                            <span className="text-xs text-muted-foreground/70 whitespace-nowrap">
+                              (Can view: {getRolesText(docType.roles)})
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs opacity-75 mt-1">
                           {docType.description}
                         </p>
@@ -339,9 +374,16 @@ const DocumentVersionUpload = () => {
               <div className="bg-card border border-border rounded-lg p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="font-heading font-semibold text-lg text-foreground">
-                      Upload New Version: {selectedDocumentType.title}
-                    </h3>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="font-heading font-semibold text-lg text-foreground">
+                        Upload New Version: {selectedDocumentType.title}
+                      </h3>
+                      {selectedDocumentType.roles && (
+                        <span className="text-xs text-muted-foreground">
+                          (Can view: {getRolesText(selectedDocumentType.roles)})
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground mt-1">
                       {selectedDocumentType.description}
                     </p>

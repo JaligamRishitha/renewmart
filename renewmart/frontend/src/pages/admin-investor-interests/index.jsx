@@ -50,9 +50,9 @@ const AdminInvestorInterests = () => {
 
   const formatCurrency = (amount) => {
     if (!amount) return 'Not specified';
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
@@ -63,6 +63,15 @@ const AdminInvestorInterests = () => {
       'interested': 'bg-purple-100 text-purple-800 border-purple-200',
       'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'contacted': 'bg-blue-100 text-blue-800 border-blue-200',
+      'approved': 'bg-green-100 text-green-800 border-green-200',
+      'rejected': 'bg-red-100 text-red-800 border-red-200'
+    };
+    return colors[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
+  const getWithdrawalStatusColor = (status) => {
+    const colors = {
+      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'approved': 'bg-green-100 text-green-800 border-green-200',
       'rejected': 'bg-red-100 text-red-800 border-red-200'
     };
@@ -274,6 +283,9 @@ const AdminInvestorInterests = () => {
                         Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Withdrawal
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Date
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -304,7 +316,7 @@ const AdminInvestorInterests = () => {
                             </div>
                             {interest.projectCapacity && (
                               <p className="text-xs text-muted-foreground mt-1">
-                                {interest.projectCapacity} MW • ${interest.projectPrice}/MWh
+                                {interest.projectCapacity} MW • £{interest.projectPrice}/MWh
                               </p>
                             )}
                           </div>
@@ -313,6 +325,31 @@ const AdminInvestorInterests = () => {
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(interest.status)}`}>
                             {interest.status || 'interested'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {interest.withdrawal_requested ? (
+                            <div className="space-y-1">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getWithdrawalStatusColor(interest.withdrawal_status)}`}>
+                                {interest.withdrawal_status === 'pending' ? 'Withdrawal Pending' :
+                                 interest.withdrawal_status === 'approved' ? 'Withdrawal Approved' :
+                                 interest.withdrawal_status === 'rejected' ? 'Withdrawal Rejected' : 'Withdrawal Requested'}
+                              </span>
+                              {interest.withdrawal_reason && (
+                                <div className="mt-1">
+                                  <p className="text-xs text-muted-foreground line-clamp-1" title={interest.withdrawal_reason}>
+                                    {interest.withdrawal_reason.substring(0, 50)}...
+                                  </p>
+                                </div>
+                              )}
+                              {interest.withdrawal_requested_at && (
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(interest.withdrawal_requested_at)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">No withdrawal</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-sm text-foreground">{formatDate(interest.createdAt)}</p>

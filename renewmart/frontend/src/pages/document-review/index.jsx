@@ -40,6 +40,39 @@ const DocumentReview = () => {
     { id: "re_governance_lead", label: "RE Governance Lead", icon: "Shield" },
   ];
 
+  // Document type to roles mapping - matches backend mapping
+  const roleDocumentMapping = {
+    're_sales_advisor': [
+      'land-valuation',
+      'sale-contracts',
+      'topographical-surveys',
+      'grid-connectivity'
+    ],
+    're_analyst': [
+      'financial-models'
+    ],
+    're_governance_lead': [
+      'land-valuation',
+      'ownership-documents',
+      'zoning-approvals',
+      'environmental-impact',
+      'government-nocs'
+    ]
+  };
+
+  // Helper function to check if a document type is allowed for the reviewer role
+  const isDocumentTypeAllowed = (documentType, role) => {
+    // Admin can see all documents
+    if (user?.role === 'admin' || user?.roles?.includes('administrator')) return true;
+    
+    // If no reviewer role, don't show any documents
+    if (!role) return false;
+    
+    // Check if document type is in the allowed list for this role
+    const allowedTypes = roleDocumentMapping[role] || [];
+    return allowedTypes.includes(documentType);
+  };
+
 
   /** 🧩 Create Default Subtasks */
   const createDefaultSubtasks = async (taskId, assignedRole, taskType = null) => {
@@ -316,8 +349,31 @@ const DocumentReview = () => {
         land = await landsAPI.getLandById(task.land_id);
         setCurrentLand(land);
         docs = await documentsAPI.getDocuments(task.land_id);
-        setDocuments(docs);
-        if (docs.length > 0) setSelectedDocument(docs[0]);
+        
+        // Filter documents based on reviewer role
+        // Always filter by role if a specific reviewer role is set (even for admins viewing as a reviewer)
+        const isAdmin = user?.role === 'admin' || user?.roles?.includes('administrator');
+        const shouldFilterByRole = taskRole && (taskRole === 're_sales_advisor' || taskRole === 're_analyst' || taskRole === 're_governance_lead');
+        
+        const filteredDocs = (isAdmin && !shouldFilterByRole) ? docs : docs.filter(doc => {
+          // Filter out subtask documents
+          if (doc.subtask_id) return false;
+          
+          // Filter by document type based on reviewer role
+          return isDocumentTypeAllowed(doc.document_type, taskRole);
+        });
+        
+        console.log("[DocumentReview] Documents filtering:", {
+          totalDocs: docs.length,
+          filteredDocs: filteredDocs.length,
+          reviewerRole: taskRole,
+          isAdmin: isAdmin,
+          shouldFilterByRole: shouldFilterByRole,
+          filteredDocTypes: filteredDocs.map(d => d.document_type)
+        });
+        
+        setDocuments(filteredDocs);
+        if (filteredDocs.length > 0) setSelectedDocument(filteredDocs[0]);
       }
 
       // Store auto-switch info for later processing
@@ -521,6 +577,43 @@ const DocumentReview = () => {
       // Update subtasks
       setSubtasks(finalSubtasks);
       
+      // Re-fetch and filter documents based on new role
+      if (roleTask.land_id) {
+        try {
+          const allDocs = await documentsAPI.getDocuments(roleTask.land_id);
+          const isAdmin = user?.role === 'admin' || user?.roles?.includes('administrator');
+          const shouldFilterByRole = newRole && (newRole === 're_sales_advisor' || newRole === 're_analyst' || newRole === 're_governance_lead');
+          
+          const filteredDocs = (isAdmin && !shouldFilterByRole) ? allDocs : allDocs.filter(doc => {
+            // Filter out subtask documents
+            if (doc.subtask_id) return false;
+            // Filter by document type based on new role
+            return isDocumentTypeAllowed(doc.document_type, newRole);
+          });
+          
+          console.log('[DocumentReview] Documents re-fetched and filtered on role change:', {
+            role: newRole,
+            totalDocs: allDocs.length,
+            filteredDocs: filteredDocs.length,
+            isAdmin: isAdmin,
+            filteredDocTypes: filteredDocs.map(d => d.document_type)
+          });
+          
+          setDocuments(filteredDocs);
+          
+          // Update selected document if current one is not in filtered list
+          if (filteredDocs.length > 0) {
+            if (!filteredDocs.find(d => d.document_id === selectedDocument?.document_id)) {
+              setSelectedDocument(filteredDocs[0]);
+            }
+          } else {
+            setSelectedDocument(null);
+          }
+        } catch (err) {
+          console.error('[DocumentReview] Failed to refetch documents on role change:', err);
+        }
+      }
+      
       console.log('💾 State updated - Role:', newRole, 'Task:', roleTask.task_id, 'Subtasks:', finalSubtasks?.length);
       console.log('📊 Final subtasks array:', finalSubtasks);
   
@@ -663,7 +756,12 @@ const DocumentReview = () => {
                     const baseRoute = user?.role === 'admin' ? '/admin' : 
                                     user?.role === 'reviewer' ? '/reviewer' : 
                                     user?.role === 'landowner' ? '/landowner' : '/admin';
-                    navigate(`${baseRoute}/document-versions/${currentLand?.land_id || projectId}`);
+                    navigate(`${baseRoute}/document-versions/${currentLand?.land_id || projectId}`, {
+                      state: {
+                        reviewerRole: reviewerRole,
+                        landId: currentLand?.land_id || projectId
+                      }
+                    });
                   }}
                   className="flex items-center space-x-2"
                 >
@@ -673,22 +771,20 @@ const DocumentReview = () => {
               </div>
               
               {/* Quick Stats */}
-              <div className="grid grid-cols-3 gap-4 mt-4">
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <div className="text-center p-3 bg-muted/20 rounded-lg">
                   <p className="text-2xl font-semibold text-foreground">{documents.length}</p>
                   <p className="text-xs text-muted-foreground">Documents</p>
                 </div>
                 <div className="text-center p-3 bg-muted/20 rounded-lg">
                   <p className="text-2xl font-semibold text-foreground">
-                    {documents.filter(doc => doc.status === 'under_review').length}
+                    {documents.filter(doc => 
+                      doc.status === 'under_review' || 
+                      doc.version_status === 'under_review' ||
+                      doc.review_locked_by !== null
+                    ).length}
                   </p>
                   <p className="text-xs text-muted-foreground">Under Review</p>
-                </div>
-                <div className="text-center p-3 bg-muted/20 rounded-lg">
-                  <p className="text-2xl font-semibold text-foreground">
-                    {documents.filter(doc => doc.status === 'active').length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Active</p>
                 </div>
               </div>
             </div>

@@ -7,9 +7,9 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
   const [isImageLoaded, setIsImageLoaded] = useState(false);
 
   const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })?.format(price);

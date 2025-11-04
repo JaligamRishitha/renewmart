@@ -499,16 +499,27 @@ async def create_land(
             import json
             coordinates_json = json.dumps(coordinates_json)
         
+        # Map energy_key from API to database
+        energy_key_value = None
+        if land_data.energy_key:
+            # Convert to string if it's an enum
+            energy_key_value = str(land_data.energy_key) if hasattr(land_data.energy_key, 'value') else land_data.energy_key
+        
+        # Ensure 'draft' status exists in lu_status table
+        db.execute(text("""
+            INSERT INTO lu_status(status_key, status_name, description) 
+            VALUES ('draft', 'Draft', 'Land in draft status')
+            ON CONFLICT (status_key) DO NOTHING
+        """))
+        
         # Create land with direct INSERT
         insert_query = text("""
             INSERT INTO lands (
                 land_id, landowner_id, title, location_text, coordinates, 
-                area_acres, land_type, energy_key, capacity_mw, price_per_mwh,
-                timeline_text, contract_term_years, developer_name, admin_notes, status
+                area_acres, land_type, energy_key, status
             ) VALUES (
                 :land_id, :landowner_id, :title, :location_text, :coordinates,
-                :area_acres, :land_type, :energy_key, :capacity_mw, :price_per_mwh,
-                :timeline_text, :contract_term_years, :developer_name, :admin_notes, 'draft'
+                :area_acres, :land_type, :energy_key, 'draft'
             )
         """)
         
@@ -520,13 +531,7 @@ async def create_land(
             "coordinates": coordinates_json,
             "area_acres": float(land_data.area_acres) if land_data.area_acres else None,
             "land_type": land_data.land_type,
-            "energy_key": land_data.energy_key,
-            "capacity_mw": float(land_data.capacity_mw) if land_data.capacity_mw else None,
-            "price_per_mwh": float(land_data.price_per_mwh) if land_data.price_per_mwh else None,
-            "timeline_text": land_data.timeline_text,
-            "contract_term_years": land_data.contract_term_years,
-            "developer_name": land_data.developer_name,
-            "admin_notes": land_data.admin_notes
+            "energy_key": energy_key_value
         })
         
         db.commit()
@@ -617,9 +622,14 @@ async def get_land(
     """Get land by ID."""
     query = text("""
         SELECT l.land_id, l.landowner_id, l.title, l.location_text,
-               l.coordinates, l.area_acres, l.land_type, l.status,
+               l.coordinates, 
+               l.area_acres,
+               NULLIF(NULLIF(l.land_type, ''), ' ') as land_type,
+               l.status,
                l.admin_notes, l.energy_key, l.capacity_mw, l.price_per_mwh,
-               l.timeline_text, l.contract_term_years, l.developer_name,
+               l.timeline_text, 
+               l.contract_term_years,
+               l.developer_name,
                l.project_priority, l.project_due_date,
                l.published_at, l.interest_locked_at, l.created_at, l.updated_at
         FROM lands l
@@ -633,6 +643,12 @@ async def get_land(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Land not found"
         )
+    
+    # Debug: Log raw database values
+    print(f"[get_land] Raw DB values for {land_id}:")
+    print(f"  area_acres: {result.area_acres} (type: {type(result.area_acres)})")
+    print(f"  land_type: '{result.land_type}' (type: {type(result.land_type)})")
+    print(f"  contract_term_years: {result.contract_term_years} (type: {type(result.contract_term_years)})")
     
     # Check permissions - compare both as strings to avoid UUID/string mismatch
     user_roles = current_user.get("roles", [])
@@ -649,21 +665,58 @@ async def get_land(
             detail="Not enough permissions to view this land"
         )
     
+    # Handle area_acres - convert to Decimal if not None, handle empty strings and 0
+    area_acres_value = None
+    if result.area_acres is not None:
+        try:
+            # Convert to string first to handle Decimal types from DB
+            area_str = str(result.area_acres).strip()
+            if area_str and area_str != '' and area_str.lower() != 'none':
+                area_acres_value = Decimal(area_str)
+        except (ValueError, TypeError) as e:
+            print(f"[get_land] Error converting area_acres: {e}")
+            area_acres_value = None
+    
+    # Handle land_type - convert empty strings to None
+    land_type_value = None
+    if result.land_type:
+        land_type_str = str(result.land_type).strip()
+        if land_type_str and land_type_str != '' and land_type_str.lower() != 'none':
+            land_type_value = land_type_str
+    
+    # Handle contract_term_years - convert to int if not None
+    contract_term_value = None
+    if result.contract_term_years is not None:
+        try:
+            # Convert to string first to handle Decimal/numeric types from DB
+            term_str = str(result.contract_term_years).strip()
+            if term_str and term_str != '' and term_str.lower() != 'none':
+                contract_term_value = int(float(term_str))  # Handle both int and float
+        except (ValueError, TypeError) as e:
+            print(f"[get_land] Error converting contract_term_years: {e}")
+            contract_term_value = None
+    
+    # Debug: Log processed values
+    print(f"[get_land] Processed values:")
+    print(f"  area_acres_value: {area_acres_value}")
+    print(f"  land_type_value: {land_type_value}")
+    print(f"  contract_term_value: {contract_term_value}")
+    
     return Land(
         land_id=result.land_id,
         landowner_id=result.landowner_id,
         title=result.title,
         location_text=result.location_text,
         coordinates=result.coordinates,
-        area_acres=Decimal(str(result.area_acres)) if result.area_acres else None,
-        land_type=result.land_type,
+        area_acres=area_acres_value,
+        land_type=land_type_value,
         status=result.status,
         admin_notes=result.admin_notes,
         energy_key=result.energy_key,
         capacity_mw=Decimal(str(result.capacity_mw)) if result.capacity_mw else None,
         price_per_mwh=Decimal(str(result.price_per_mwh)) if result.price_per_mwh else None,
         timeline_text=result.timeline_text,
-        contract_term_years=result.contract_term_years,
+        contract_term_years=contract_term_value,
         developer_name=result.developer_name,
         project_priority=result.project_priority,
         project_due_date=result.project_due_date,
@@ -714,11 +767,18 @@ async def update_land(
     
     update_data = land_update.dict(exclude_unset=True)
     for field, value in update_data.items():
+        # Map energy_key field (no column mapping needed - matches database)
+        db_field = field
+        
         # String fields
         if field in ["title", "location_text", "land_type", "admin_notes", "energy_key", 
                      "timeline_text", "developer_name", "project_priority"]:
-            update_fields.append(f"{field} = :{field}")
-            params[field] = value
+            update_fields.append(f"{db_field} = :{field}")
+            # Convert enum to string if needed
+            if field == "energy_key" and value:
+                params[field] = str(value) if hasattr(value, 'value') else value
+            else:
+                params[field] = value
         # Numeric fields
         elif field in ["area_acres", "capacity_mw", "price_per_mwh"]:
             update_fields.append(f"{field} = :{field}")
@@ -748,6 +808,66 @@ async def update_land(
         db.commit()
     
     return await get_land(land_id, current_user, db)
+
+@router.post("/{land_id}/toggle-publish", response_model=Dict[str, Any])
+async def toggle_publish_land(
+    land_id: UUID,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Toggle publish status of a land (admin only)."""
+    # Check if land exists - get status from lands table
+    land_check = text("""
+        SELECT land_id, status, published_at 
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Toggle publish status
+    # If currently published, change to under_review; otherwise publish it
+    current_status = land_result.status
+    new_status = "under_review" if current_status == "published" else "published"
+    published_at = datetime.utcnow() if new_status == "published" else None
+    
+    # Update the land status
+    update_query = text("""
+        UPDATE lands 
+        SET status = :new_status, 
+            published_at = :published_at,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE land_id = :land_id
+        RETURNING land_id, status, published_at, updated_at
+    """)
+    
+    result = db.execute(update_query, {
+        "land_id": str(land_id),
+        "new_status": new_status,
+        "published_at": published_at
+    }).fetchone()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update land status"
+        )
+    
+    db.commit()
+    
+    return {
+        "land_id": str(result.land_id),
+        "status": result.status,
+        "published_at": result.published_at.isoformat() if result.published_at else None,
+        "updated_at": result.updated_at.isoformat() if result.updated_at else None,
+        "message": f"Land {new_status} successfully"
+    }
 
 @router.delete("/{land_id}", response_model=MessageResponse)
 async def delete_land(
@@ -1043,17 +1163,22 @@ async def get_published_lands(
             "coordinates": row.coordinates,
             "capacity": float(row.capacity_mw) if row.capacity_mw else 0,
             "capacityMW": float(row.capacity_mw) if row.capacity_mw else 0,
+            "capacity_mw": float(row.capacity_mw) if row.capacity_mw else None,
             "price": float(row.price_per_mwh) if row.price_per_mwh else 0,
             "pricePerMWh": float(row.price_per_mwh) if row.price_per_mwh else 0,
+            "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
             "areaAcres": float(row.area_acres) if row.area_acres else 0,
+            "area_acres": float(row.area_acres) if row.area_acres else None,
             "timeline": row.timeline_text or "Not specified",
             "contract": f"{row.contract_term_years} years" if row.contract_term_years else "Not specified",
             "contractTerm": row.contract_term_years,
-            "status": "Published",
             "landType": row.land_type,
+            "land_type": row.land_type,
             "developerName": row.developer_name,
             "landownerName": row.landowner_name or row.landowner_email or "Unknown",
-            "publishedAt": row.published_at.isoformat() if row.published_at else row.created_at.isoformat(),
+            "publishedAt": row.published_at.isoformat() if row.published_at else None,
+            "published_at": row.published_at.isoformat() if row.published_at else None,
+            "published_date": row.published_at.isoformat() if row.published_at else None,
             "interestCount": row.interest_count or 0,
             "isAvailable": True
         }

@@ -51,6 +51,7 @@ const ProjectDetailsPage = () => {
     }
   };
 
+
   const fetchProjectTasks = async () => {
     try {
       // Fetch tasks related to this project/land
@@ -254,7 +255,7 @@ const ProjectDetailsPage = () => {
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="font-heading font-bold text-2xl lg:text-3xl text-foreground mb-2">
+                <h1 className="font-heading font-bold text-2xl lg:text-3xl text-foreground mb-2 mt-4">
                   Project Details & Task Tracking
                 </h1>
                 <p className="font-body text-muted-foreground">
@@ -340,7 +341,7 @@ const ProjectDetailsPage = () => {
                     </span>
                   </div>
                   <div className="text-lg font-semibold text-foreground">
-                    ${projectData.price_per_mwh || projectData.price || 'N/A'}/MWh
+                    £{projectData.price_per_mwh || projectData.price || 'N/A'}/MWh
                   </div>
                 </div>
                 
@@ -414,143 +415,6 @@ const ProjectDetailsPage = () => {
             {/* Review Status Panel */}
             <ReviewStatusPanel landId={landId} projectData={projectData} />
 
-            {/* Task Details */}
-            <div className="bg-white rounded-lg border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h4 className="text-lg font-semibold text-foreground flex items-center">
-                  <Icon name="List" size={20} className="text-blue-600 mr-2" />
-                  Task Details
-                </h4>
-              </div>
-              
-              <div className="p-6">
-                {tasks.length === 0 ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Icon name="FileText" size={24} className="text-gray-400 mr-2" />
-                    <span className="text-muted-foreground">No tasks found for this project</span>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {tasks.map((task, index) => {
-                      const detailedTask = taskDetails[task.task_id] || task;
-                      return (
-                        <div key={task.task_id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-3 mb-2">
-                                <h5 className="font-semibold text-foreground">{task.title || 'Untitled Task'}</h5>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(task.status)}`}>
-                                  {task.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
-                                </span>
-                                {task.priority && (
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                                    {task.priority.toUpperCase()}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {task.description && (
-                                <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
-                              )}
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-3">
-                                <div>
-                                  <span className="text-muted-foreground">Assigned to:</span>
-                                  <span className="ml-2 text-foreground">
-                                    {task.assigned_to_name || task.assignee_name || 'Unassigned'}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Created:</span>
-                                  <span className="ml-2 text-foreground">
-                                    {formatDate(task.created_at)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Due Date:</span>
-                                  <span className="ml-2 text-foreground">
-                                    {formatDate(task.due_date) || 'No due date'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Subtasks */}
-                              {detailedTask.subtasks && detailedTask.subtasks.length > 0 && (
-                                <div className="mb-3">
-                                  <div className="flex items-center space-x-2 mb-2">
-                                    <Icon name="List" size={14} className="text-muted-foreground" />
-                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                      Subtasks ({detailedTask.subtasks.length})
-                                    </span>
-                                  </div>
-                                  <div className="space-y-1">
-                                    {detailedTask.subtasks.slice(0, 3).map((subtask, subIndex) => (
-                                      <div key={subIndex} className="flex items-center space-x-2 text-xs">
-                                        <Icon 
-                                          name={subtask.status === 'completed' ? 'CheckCircle' : 'Circle'} 
-                                          size={12} 
-                                          className={subtask.status === 'completed' ? 'text-green-600' : 'text-gray-400'} 
-                                        />
-                                        <span className="text-muted-foreground">{subtask.title}</span>
-                                      </div>
-                                    ))}
-                                    {detailedTask.subtasks.length > 3 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        +{detailedTask.subtasks.length - 3} more subtasks
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Task History */}
-                              {detailedTask.history && detailedTask.history.length > 0 && (
-                                <div className="mb-3">
-                                  <div className="flex items-center space-x-2 mb-2">
-                                    <Icon name="History" size={14} className="text-muted-foreground" />
-                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                      Recent Activity ({detailedTask.history.length})
-                                    </span>
-                                  </div>
-                                  <div className="space-y-1">
-                                    {detailedTask.history.slice(0, 2).map((historyItem, histIndex) => (
-                                      <div key={histIndex} className="text-xs text-muted-foreground">
-                                        <span className="font-medium">{historyItem.action || 'Updated'}</span>
-                                        {historyItem.timestamp && (
-                                          <span className="ml-2">- {formatDate(historyItem.timestamp)}</span>
-                                        )}
-                                      </div>
-                                    ))}
-                                    {detailedTask.history.length > 2 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        +{detailedTask.history.length - 2} more activities
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            
-                            <div className="ml-4 flex items-center space-x-2">
-                              {task.status === 'completed' && (
-                                <Icon name="CheckCircle" size={20} className="text-green-600" />
-                              )}
-                              {task.status === 'in_progress' && (
-                                <Icon name="Clock" size={20} className="text-blue-600" />
-                              )}
-                              {task.status === 'pending' && (
-                                <Icon name="Circle" size={20} className="text-gray-400" />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Project Information */}
             <div className="bg-blue-50 rounded-lg p-6">
               <div className="flex items-center space-x-3 mb-4">
@@ -585,6 +449,41 @@ const ProjectDetailsPage = () => {
                     {projectData.land_id || projectData.id || 'N/A'}
                   </p>
                 </div>
+                
+                {landownerData && (
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Landowner Name
+                      </label>
+                      <p className="text-sm text-foreground mt-1">
+                        {landownerData.first_name && landownerData.last_name 
+                          ? `${landownerData.first_name} ${landownerData.last_name}`
+                          : landownerData.name || landownerData.email || 'N/A'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Landowner Email
+                      </label>
+                      <p className="text-sm text-foreground mt-1">
+                        {landownerData.email || 'N/A'}
+                      </p>
+                    </div>
+                    
+                    {landownerData.phone && (
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Landowner Phone
+                        </label>
+                        <p className="text-sm text-foreground mt-1">
+                          {landownerData.phone}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
                 
                 <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -688,6 +587,7 @@ const ProjectDetailsPage = () => {
         </div>
       </main>
       </div>
+
     </div>
   );
 };

@@ -5,7 +5,6 @@ import RegistrationHeader from './components/RegistrationHeader';
 import StepIndicator from './components/StepIndicator';
 import AccountDetailsStep from './components/AccountDetailsStep';
 import RoleSelectionStep from './components/RoleSelectionStep';
-import CompanyInformationStep from './components/CompanyInformationStep';
 import VerificationStep from './components/VerificationStep';
 import TrustSignals from './components/TrustSignals';
 import NavigationButtons from './components/NavigationButtons';
@@ -46,16 +45,10 @@ const Registration = () => {
     password: '',
     confirmPassword: '',
     phone: '',
+    address: '',
     
     // Step 2: Role Selection
     role: '',
-    
-    // Step 3: Company Information
-    companyName: '',
-    jobTitle: '',
-    companySize: '',
-    website: '',
-    address: '',
     
     // Role-specific fields
     portfolioSize: '',
@@ -70,8 +63,10 @@ const Registration = () => {
     marketingConsent: false,
     industryUpdates: true
   });
+  
+  const [isUserRegistered, setIsUserRegistered] = useState(false);
 
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   const validateStep = (step) => {
     const newErrors = {};
@@ -94,26 +89,11 @@ const Registration = () => {
           newErrors.confirmPassword = 'Passwords do not match';
         }
         if (!formData?.phone?.trim()) newErrors.phone = 'Phone number is required';
+        if (!formData?.address?.trim()) newErrors.address = 'Address is required';
         break;
 
       case 2:
         if (!formData?.role) newErrors.role = 'Please select your role';
-        break;
-
-      case 3:
-        if (!formData?.companyName?.trim()) newErrors.companyName = 'Company name is required';
-        if (!formData?.jobTitle?.trim()) newErrors.jobTitle = 'Job title is required';
-        if (!formData?.companySize) newErrors.companySize = 'Company size is required';
-        if (!formData?.address?.trim()) newErrors.address = 'Company address is required';
-        
-        // Role-specific validation
-        if (formData?.role === 'investor' && !formData?.portfolioSize) {
-          newErrors.portfolioSize = 'Portfolio size is required';
-        }
-        if (formData?.role === 'landowner') {
-          if (!formData?.propertyType) newErrors.propertyType = 'Property type is required';
-          if (!formData?.propertyLocation?.trim()) newErrors.propertyLocation = 'Property location is required';
-        }
         break;
 
       default:
@@ -125,18 +105,73 @@ const Registration = () => {
   };
 
   const handleNext = async () => {
-    if (!validateStep(currentStep)) return;
-
-    setIsLoading(true);
-
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+    if (!validateStep(currentStep)) {
+      console.log('Validation failed for step:', currentStep);
+      return;
     }
 
-    setIsLoading(false);
+    setIsLoading(true);
+    setErrors({}); // Clear previous errors
+
+    try {
+      // If moving to step 3 (verification), register the user first
+      if (currentStep === 2 && !isUserRegistered) {
+        console.log('Registering user before moving to verification step...');
+        // Prepare registration data
+        const registrationData = {
+          email: formData.email,
+          password: formData.password,
+          confirmPassword: formData.confirmPassword || formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+          address: formData.address,
+          role: formData.role
+        };
+        
+        console.log('Registration data:', { ...registrationData, password: '***' });
+        
+        // Register user
+        try {
+          const userResponse = await authAPI.register(registrationData);
+          console.log('User registered successfully:', userResponse);
+          setIsUserRegistered(true);
+          
+          // Request verification code
+          try {
+            console.log('Requesting verification code...');
+            const verifyResponse = await authAPI.requestVerificationCode(formData.email);
+            console.log('Verification code requested:', verifyResponse);
+          } catch (verifyError) {
+            console.error('Failed to request verification code:', verifyError);
+            // Don't block the flow if verification code request fails
+            // The user can manually resend it
+          }
+        } catch (regError) {
+          console.error('Registration error:', regError);
+          // Handle registration errors
+          const errorMessage = regError.response?.data?.detail || 
+                             (regError.response?.status === 400 
+                               ? 'Registration failed. Please check your information and try again.' 
+                               : 'Registration failed. Please try again later.');
+          setErrors({ general: errorMessage });
+          setIsLoading(false);
+          return; // Don't advance to next step if registration fails
+        }
+      }
+
+      // Advance to next step
+      if (currentStep < totalSteps) {
+        console.log('Moving to step:', currentStep + 1);
+        setCurrentStep(currentStep + 1);
+      }
+    } catch (error) {
+      console.error('Unexpected error in handleNext:', error);
+      // Handle unexpected errors
+      setErrors({ general: error.message || 'An unexpected error occurred. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBack = () => {
@@ -146,27 +181,16 @@ const Registration = () => {
     }
   };
 
-  const handleComplete = async () => {
+  const handleComplete = async (verificationCode) => {
     setIsLoading(true);
     setErrors({});
     
     try {
-      // Prepare registration data using frontend keys expected by authAPI.register
-      const registrationData = {
-        email: formData.email,
-        password: formData.password,
-        confirmPassword: formData.confirmPassword || formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phone: formData.phone,
-        role: formData.role
-      };
-      
-      // Register user
-      const user = await authAPI.register(registrationData);
+      // Verify the code
+      const verifiedUser = await authAPI.confirmVerificationCode(formData.email, verificationCode);
       
       // Show success toast
-      setShowToast({ type: 'success', message: 'Account created successfully!' });
+      setShowToast({ type: 'success', message: 'Email verified! Account created successfully!' });
       
       // Wait 1.5 seconds, then show redirecting message
       setTimeout(() => {
@@ -182,15 +206,15 @@ const Registration = () => {
       }, 1500);
       
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error('Verification failed:', error);
       
-      // Handle registration errors
+      // Handle verification errors
       if (error.response?.data?.detail) {
         setErrors({ general: error.response.data.detail });
       } else if (error.response?.status === 400) {
-        setErrors({ general: 'Registration failed. Please check your information and try again.' });
+        setErrors({ general: 'Invalid or expired verification code. Please try again.' });
       } else {
-        setErrors({ general: 'Registration failed. Please try again later.' });
+        setErrors({ general: 'Verification failed. Please try again later.' });
       }
     } finally {
       setIsLoading(false);
@@ -201,12 +225,10 @@ const Registration = () => {
     switch (currentStep) {
       case 1:
         return formData?.firstName && formData?.lastName && formData?.email && 
-               formData?.password && formData?.confirmPassword && formData?.phone;
+               formData?.password && formData?.confirmPassword && formData?.phone && formData?.address;
       case 2:
         return formData?.role;
       case 3:
-        return formData?.companyName && formData?.jobTitle && formData?.companySize && formData?.address;
-      case 4:
         return true;
       default:
         return false;
@@ -230,23 +252,17 @@ const Registration = () => {
             formData={formData}
             setFormData={setFormData}
             errors={errors}
-          />
-        );
-      case 3:
-        return (
-          <CompanyInformationStep
-            formData={formData}
-            setFormData={setFormData}
-            errors={errors}
             setErrors={setErrors}
           />
         );
-      case 4:
+      case 3:
         return (
           <VerificationStep
             formData={formData}
             onComplete={handleComplete}
             errors={errors}
+            setErrors={setErrors}
+            isUserRegistered={isUserRegistered}
           />
         );
       default:
@@ -282,23 +298,20 @@ const Registration = () => {
                   {renderCurrentStep()}
                 </div>
                 
-                <NavigationButtons
-                  currentStep={currentStep}
-                  totalSteps={totalSteps}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  isLoading={isLoading}
-                  canProceed={canProceed()}
-                />
+                {currentStep < 3 && (
+                  <NavigationButtons
+                    currentStep={currentStep}
+                    totalSteps={totalSteps}
+                    onNext={handleNext}
+                    onBack={handleBack}
+                    isLoading={isLoading}
+                    canProceed={canProceed()}
+                  />
+                )}
               </div>
             </div>
 
-            {/* Trust Signals Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="bg-card border border-border rounded-lg shadow-subtle p-6 sticky top-8">
-                <TrustSignals />
-              </div>
-            </div>
+            
           </div>
         </div>
       </div>

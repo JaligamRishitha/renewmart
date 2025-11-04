@@ -13,22 +13,11 @@ const LoginForm = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    role: '',
     rememberMe: false
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-
-  const roleOptions = [
-    { value: 'landowner', label: 'Landowner', description: 'Property owner seeking renewable energy opportunities' },
-    { value: 'investor', label: 'Investor', description: 'Investment professional focused on renewable energy assets' },
-    { value: 're_sales_advisor', label: 'RE Sales Advisor', description: 'Sales professional managing client relationships' },
-    { value: 're_analyst', label: 'RE Analyst', description: 'Technical and financial analysis specialist' },
-    { value: 'project_manager', label: 'Project Manager', description: 'Operations professional overseeing project development' },
-    { value: 're_governance_lead', label: 'RE Governance Lead', description: 'Compliance and regulatory specialist' },
-    { value: 'administrator', label: 'Administrator', description: 'System administrator managing platform operations' }
-  ];
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -52,9 +41,6 @@ const LoginForm = () => {
       newErrors.password = 'Password must be at least 6 characters';
     }
 
-    if (!formData?.role) {
-      newErrors.role = 'Please select your role';
-    }
 
     return newErrors;
   };
@@ -79,11 +65,11 @@ const LoginForm = () => {
     setErrors({});
 
     try {
-      console.log('Attempting login with:', { email: formData.email, role: formData.role });
+      console.log('Attempting login with:', { email: formData.email });
       const result = await login({
         email: formData.email,
-        password: formData.password,
-        role: formData.role
+        password: formData.password
+        
       });
       
       console.log('Login result:', result);
@@ -93,8 +79,6 @@ const LoginForm = () => {
         // Show success toast
         showToast('Login successful! Redirecting...', 'success');
         
-        const userRoles = Array.isArray(result.user.roles) ? result.user.roles : [];
-        
         // Navigate to appropriate dashboard based on role (hierarchical routes)
         setTimeout(() => {
           if (userRoles.includes('administrator')) {
@@ -102,7 +86,7 @@ const LoginForm = () => {
           } else if (userRoles.includes('landowner')) {
             navigate('/landowner/dashboard');
           } else if (userRoles.includes('investor')) {
-            navigate('/investor/dashboard');
+            navigate('/investor/portal');
           } else if (userRoles.includes('re_sales_advisor')) {
             navigate('/sales-advisor/dashboard');
           } else if (userRoles.includes('re_analyst')) {
@@ -126,7 +110,6 @@ const LoginForm = () => {
         setFormData({
           email: '',
           password: '',
-          role: '',
           rememberMe: false
         });
         
@@ -148,7 +131,6 @@ const LoginForm = () => {
       setFormData({
         email: '',
         password: '',
-        role: '',
         rememberMe: false
       });
       
@@ -243,19 +225,6 @@ const LoginForm = () => {
             <Icon name={showPassword ? 'EyeOff' : 'Eye'} size={16} />
           </button>
         </div>
-
-        {/* Role Selection */}
-        <Select
-          label="Select Your Role"
-          placeholder="Choose your role"
-          options={roleOptions}
-          value={formData?.role}
-          onChange={(value) => handleInputChange('role', value)}
-          error={errors?.role}
-          required
-          disabled={loading}
-          searchable
-        />
 
         {/* Remember Me */}
         <Checkbox

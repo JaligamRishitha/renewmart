@@ -154,6 +154,16 @@ const AccountDetailsStep = ({ formData, setFormData, errors, setErrors }) => {
         description="For account security and important notifications"
         required
       />
+      <Input
+        label="Address"
+        type="text"
+        placeholder="Enter your address"
+        value={formData?.address}
+        onChange={(e) => handleInputChange('address', e?.target?.value)}
+        error={errors?.address}
+        description="Your residential or business address"
+        required
+      />
     </div>
   );
 };

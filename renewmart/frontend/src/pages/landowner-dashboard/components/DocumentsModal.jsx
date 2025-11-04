@@ -3,6 +3,40 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import { documentsAPI } from '../../../services/api';
 
+// Document type to roles mapping
+const documentTypeRoles = {
+  'land-valuation': ['administrator', 're_sales_advisor', 're_governance_lead'],
+  'ownership-documents': ['administrator', 're_governance_lead'],
+  'sale-contracts': ['administrator', 're_sales_advisor'],
+  'topographical-surveys': ['administrator', 're_sales_advisor'],
+  'grid-connectivity': ['administrator', 're_sales_advisor'],
+  'financial-models': ['administrator', 're_analyst'],
+  'zoning-approvals': ['administrator', 're_governance_lead'],
+  'environmental-impact': ['administrator', 're_governance_lead'],
+  'government-nocs': ['administrator', 're_governance_lead']
+};
+
+// Helper function to format role names for display
+const formatRoleName = (role) => {
+  const roleMap = {
+    'administrator': 'Admin',
+    're_sales_advisor': 'Sales Advisor',
+    're_analyst': 'Analyst',
+    're_governance_lead': 'Governance Lead'
+  };
+  return roleMap[role] || role;
+};
+
+// Helper function to get roles text for display (excluding admin)
+const getRolesText = (documentType) => {
+  const roles = documentTypeRoles[documentType];
+  if (!roles) return '';
+  const nonAdminRoles = roles.filter(role => role !== 'administrator');
+  if (nonAdminRoles.length === 0) return 'Admin only';
+  const formattedRoles = nonAdminRoles.map(formatRoleName);
+  return formattedRoles.join(', ');
+};
+
 const DocumentsModal = ({ project, onClose }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -261,6 +295,11 @@ const DocumentsModal = ({ project, onClose }) => {
                           <span className="flex items-center space-x-1">
                             <Icon name="Tag" size={12} />
                             <span>{doc.document_type}</span>
+                            {getRolesText(doc.document_type) && (
+                              <span className="text-xs text-muted-foreground/70">
+                                (Can view: {getRolesText(doc.document_type)})
+                              </span>
+                            )}
                           </span>
                         )}
                         {doc.version_number && (

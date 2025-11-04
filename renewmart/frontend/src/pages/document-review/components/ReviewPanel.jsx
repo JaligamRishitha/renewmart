@@ -1428,20 +1428,11 @@ const ReviewPanel = ({
                     <Icon name="MessageSquare" size={18} className="text-primary" />
                     Completion Notes
                   </h4>
-                  <p className="text-sm text-foreground">
-                    {currentTask?.completion_notes || 'No completion notes available'}
-                  </p>
+                  
                 </div>
                 
                 {/* Debug Info in Development */}
-                {process.env.NODE_ENV === 'development' && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-yellow-600 mb-2">Debug Info (Development Only)</h4>
-                    <pre className="text-xs text-yellow-700 overflow-auto max-h-48">
-                      {JSON.stringify(currentTask, null, 2)}
-                    </pre>
-                  </div>
-                )}
+                
               </div>
             )}
           </div>

@@ -16,11 +16,11 @@ class User(Base):
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     phone = Column(String)
+    address = Column(String)
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
     # Relationships
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     lands = relationship("Land", back_populates="landowner")
@@ -39,7 +39,7 @@ class User(Base):
         foreign_keys="Document.uploaded_by",
         back_populates="uploader"
     )
-    investor_interests = relationship("InvestorInterest", back_populates="investor")
+    investor_interests = relationship("InvestorInterest", foreign_keys="InvestorInterest.investor_id", back_populates="investor")
     sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
     received_messages = relationship("Message", foreign_keys="Message.recipient_id", back_populates="recipient")
     created_threads = relationship("MessageThread", back_populates="creator")

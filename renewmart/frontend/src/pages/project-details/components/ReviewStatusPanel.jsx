@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
-import { reviewsAPI, taskAPI } from '../../../services/api';
+import { reviewsAPI, taskAPI, usersAPI } from '../../../services/api';
 
 /**
  * ReviewStatusPanel Component
@@ -17,6 +17,7 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
   const [selectedRole, setSelectedRole] = useState(null);
   const [taskStatusData, setTaskStatusData] = useState({});
   const [loadingTaskData, setLoadingTaskData] = useState(false);
+  const [expandedTasks, setExpandedTasks] = useState({});
 
   // Define the three reviewer roles
   const reviewerRoles = [
@@ -65,80 +66,129 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
   };
 
   // Fetch task status data for detailed view from admin review panel
-  const fetchTaskStatus = async () => {
+  const fetchTaskStatus = async (roleId) => {
     setLoadingTaskData(true);
     try {
-      console.log('🔄 Fetching task status from admin review panel for land:', landId);
+      console.log('🔄 Fetching task status for role:', roleId, 'land:', landId);
       
-      // Fetch real task data from admin review panel
-      const response = await taskAPI.getTaskStatusByProject(landId);
-      console.log('📊 Task status response from admin:', response);
-      
-      // Handle different response structures
-      let tasks = [];
-      if (response && response.tasks && response.tasks.length > 0) {
-        tasks = response.tasks;
-      } else if (response && Array.isArray(response) && response.length > 0) {
-        tasks = response;
-      } else if (response && response.data && response.data.length > 0) {
-        tasks = response.data;
-      }
-      
-      console.log('📊 Extracted tasks:', tasks);
-      console.log('📊 Tasks length:', tasks.length);
-      
-      if (tasks && tasks.length > 0) {
-        console.log('📊 Processing tasks:', tasks);
-        // Process tasks to create role-based structure
-        const processedData = processTasksForRoles(tasks);
-        console.log('📊 Processed data:', processedData);
-        setTaskStatusData(processedData);
-      } else {
-        console.warn('⚠️ No task data received from admin review panel');
-        console.warn('⚠️ Response structure:', response);
-        setTaskStatusData({});
-        
-        // Retry with a fallback approach if no tasks were found
-        try {
-          console.log('🔄 Attempting fallback fetch for tasks...');
-          const fallbackResponse = await taskAPI.getTasks({ 
-            land_id: landId,
-            include_subtasks: true,
-            include_status: true
-          });
-          
-          if (fallbackResponse && Array.isArray(fallbackResponse) && fallbackResponse.length > 0) {
-            console.log('📊 Fallback fetch successful:', fallbackResponse);
-            const processedData = processTasksForRoles(fallbackResponse);
-            setTaskStatusData(processedData);
-          }
-        } catch (fallbackError) {
-          console.error('❌ Fallback fetch also failed:', fallbackError);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error fetching task status from admin review panel:', error);
-      setTaskStatusData({});
-      
-      // Try fallback approach
+      // Fetch tasks for this specific role with subtasks included
+      let response;
       try {
-        console.log('🔄 Attempting fallback fetch after error...');
-        const fallbackResponse = await taskAPI.getTasks({ 
+        // Try to fetch tasks with subtasks included
+        response = await taskAPI.getTasks({ 
           land_id: landId,
-          include_subtasks: true,
-          include_status: true
+          assigned_role: roleId,
+          include_subtasks: true
+        });
+      } catch (err) {
+        // Fallback to fetching without include_subtasks
+        console.warn('Failed to fetch tasks with subtasks, falling back:', err);
+        response = await taskAPI.getTasks({ 
+          land_id: landId,
+          assigned_role: roleId
+        });
+      }
+      
+      console.log('📊 Task response for role:', roleId, response);
+      
+      let tasks = [];
+      if (response && Array.isArray(response) && response.length > 0) {
+        tasks = response;
+      } else if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
+        tasks = response.data;
+      } else if (response && response.tasks && Array.isArray(response.tasks) && response.tasks.length > 0) {
+        tasks = response.tasks;
+      }
+      
+      console.log('📊 Extracted tasks for role:', roleId, tasks);
+      
+      // Fetch subtasks and reviewer info for each task
+      if (tasks && tasks.length > 0) {
+        // Remove duplicates by task_id
+        const uniqueTasks = [];
+        const seenTaskIds = new Set();
+        
+        tasks.forEach(task => {
+          const taskId = task.task_id || task.id;
+          if (taskId && !seenTaskIds.has(taskId)) {
+            seenTaskIds.add(taskId);
+            uniqueTasks.push(task);
+          } else if (!taskId) {
+            // If no task_id, add it anyway (might be a new task)
+            uniqueTasks.push(task);
+          }
         });
         
-        if (fallbackResponse && Array.isArray(fallbackResponse) && fallbackResponse.length > 0) {
-          console.log('📊 Fallback fetch successful:', fallbackResponse);
-          const processedData = processTasksForRoles(fallbackResponse);
-          setTaskStatusData(processedData);
-        }
-      } catch (fallbackError) {
-        console.error('❌ Fallback fetch also failed:', fallbackError);
-        // Show error message to user
-        alert('Unable to fetch task data. Please try again later.');
+        console.log('📊 Unique tasks after deduplication:', uniqueTasks.length, 'out of', tasks.length);
+        
+        const tasksWithSubtasks = await Promise.all(
+          uniqueTasks.map(async (task) => {
+            let subtasks = [];
+            
+            // Check if subtasks are already included in the task response
+            if (task.subtasks !== undefined && Array.isArray(task.subtasks)) {
+              subtasks = [...task.subtasks]; // Use subtasks from response
+              console.log('📊 Using subtasks from task response:', task.task_id || task.id, subtasks.length);
+            } else {
+              // Try to fetch subtasks separately (may fail with 403 for investors)
+              try {
+                subtasks = await taskAPI.getSubtasks(task.task_id || task.id);
+                console.log('📊 Subtasks fetched separately for task:', task.task_id || task.id, subtasks);
+              } catch (subtaskErr) {
+                // Handle 403 and other errors gracefully
+                if (subtaskErr.response?.status === 403) {
+                  console.warn('⚠️ Not authorized to view subtasks for task:', task.task_id || task.id, '- continuing without subtasks');
+                } else {
+                  console.error('Error fetching subtasks for task:', task.task_id || task.id, subtaskErr);
+                }
+                subtasks = []; // Use empty array if fetch fails
+              }
+            }
+            
+            // Fetch reviewer info if assigned_to is available
+            let reviewer = null;
+            if (task.assigned_to) {
+              try {
+                reviewer = await usersAPI.getUserById(task.assigned_to);
+              } catch (reviewerErr) {
+                console.error('Error fetching reviewer for task:', task.task_id || task.id, reviewerErr);
+                // Use assigned_to_name if available as fallback
+                if (task.assigned_to_name) {
+                  reviewer = {
+                    first_name: task.assigned_to_name.split(' ')[0] || '',
+                    last_name: task.assigned_to_name.split(' ').slice(1).join(' ') || '',
+                    email: task.assigned_to_email || ''
+                  };
+                }
+              }
+            } else if (task.assigned_to_name) {
+              // Use assigned_to_name as fallback
+              reviewer = {
+                first_name: task.assigned_to_name.split(' ')[0] || '',
+                last_name: task.assigned_to_name.split(' ').slice(1).join(' ') || '',
+                email: task.assigned_to_email || ''
+              };
+            }
+            
+            return {
+              ...task,
+              subtasks: subtasks || [],
+              reviewer: reviewer
+            };
+          })
+        );
+        
+        // Process tasks to create role-based structure
+        const processedData = processTasksForRoles(tasksWithSubtasks);
+        console.log('📊 Processed data for role:', roleId, processedData);
+        setTaskStatusData(processedData);
+      } else {
+        console.warn('⚠️ No task data found for role:', roleId);
+        setTaskStatusData({});
       }
+    } catch (error) {
+      console.error('❌ Error fetching task status for role:', roleId, error);
+      setTaskStatusData({});
     } finally {
       setLoadingTaskData(false);
     }
@@ -215,13 +265,23 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
         }
         
         // Add task to role's task list with subtasks
-        const taskName = task.title || task.task_name || task.name || 'Untitled Task';
+        // Use task_type first (like admin review panel), then fallback to title/name
+        const getTaskDisplayName = (task) => {
+          if (task.task_type) {
+            return task.task_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          }
+          return task.title || task.task_name || task.name || 'Untitled Task';
+        };
+        
+        const taskName = getTaskDisplayName(task);
         const taskData = {
           id: task.task_id || task.id,
           name: taskName,
           completed: isCompleted,
           description: task.description || '',
-          status: task.status || (isCompleted ? 'completed' : 'pending')
+          status: task.status || (isCompleted ? 'completed' : 'pending'),
+          task_type: task.task_type, // Keep original task_type for reference
+          reviewer: task.reviewer // Include reviewer info
         };
         
         // Add subtasks if they exist
@@ -240,7 +300,7 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
             
             return {
               id: subtask.subtask_id || subtask.id,
-              name: subtask.name || subtask.title || subtask.subtask_name || 'Untitled Subtask',
+              name: subtask.title || subtask.name || subtask.subtask_name || 'Untitled Subtask',
               completed: isSubtaskCompleted,
               description: subtask.description || '',
               status: subtask.status || (isSubtaskCompleted ? 'completed' : 'pending')
@@ -539,7 +599,7 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                       console.log('👁️ Eye icon clicked for role:', role.id);
                       setSelectedRole(role.id);
                       setShowTaskModal(true);
-                      await fetchTaskStatus();
+                      await fetchTaskStatus(role.id);
                     }}
                     className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                     title={`View detailed tasks for ${role.label}`}
@@ -636,6 +696,7 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                   onClick={() => {
                     setShowTaskModal(false);
                     setSelectedRole(null);
+                    setExpandedTasks({}); // Reset expanded tasks when closing modal
                   }}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
@@ -706,145 +767,121 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                           <h4 className="text-sm font-semibold text-gray-900 mb-3">Task Breakdown</h4>
                           
                           {status.tasks && status.tasks.length > 0 ? (
-                            <div className="space-y-4">
-                              {status.tasks.map((task, taskIndex) => (
-                                <div key={task.id || taskIndex} className="border border-gray-200 rounded-lg p-3">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center space-x-2">
-                                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                                        task.completed ? 'bg-green-100' : 'bg-blue-100'
-                                      }`}>
+                            <div className="space-y-2">
+                              {status.tasks.map((task, taskIndex) => {
+                                const taskId = task.id || `task-${taskIndex}`;
+                                const isExpanded = expandedTasks[taskId] || false;
+                                
+                                return (
+                                  <div key={taskId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    {/* Task Header - Accordion */}
+                                    <button
+                                      onClick={() => setExpandedTasks(prev => ({
+                                        ...prev,
+                                        [taskId]: !prev[taskId]
+                                      }))}
+                                      className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <div className="flex items-center space-x-3 flex-1">
+                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                          task.completed ? 'bg-green-100' : task.status === 'in_progress' ? 'bg-blue-100' : 'bg-yellow-100'
+                                        }`}>
+                                          <Icon 
+                                            name={task.completed ? "Check" : task.status === 'in_progress' ? "Clock" : "Circle"} 
+                                            size={12} 
+                                            className={task.completed ? "text-green-600" : task.status === 'in_progress' ? "text-blue-600" : "text-yellow-600"} 
+                                          />
+                                        </div>
+                                        <div className="text-left flex-1">
+                                          <h5 className="font-medium text-gray-900">{task.name}</h5>
+                                          {task.reviewer && (
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                              Reviewer: {task.reviewer.first_name || ''} {task.reviewer.last_name || ''} {task.reviewer.email ? `(${task.reviewer.email})` : ''}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                          task.completed ? 'bg-green-100 text-green-800' : 
+                                          task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : 
+                                          'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                          {task.status?.replace('_', ' ') || (task.completed ? 'Completed' : 'Pending')}
+                                        </span>
                                         <Icon 
-                                          name={task.completed ? "Check" : "Clock"} 
-                                          size={12} 
-                                          className={task.completed ? "text-green-600" : "text-blue-600"} 
+                                          name={isExpanded ? "ChevronUp" : "ChevronDown"} 
+                                          size={16} 
+                                          className="text-gray-400 ml-2"
                                         />
                                       </div>
-                                      <h5 className="font-medium text-gray-900">{task.name}</h5>
-                                    </div>
-                                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                      task.completed ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                                    }`}>
-                                      {task.completed ? 'Completed' : 'In Progress'}
-                                    </span>
-                                  </div>
-                                  
-                                  {task.description && (
-                                    <p className="text-sm text-gray-600 mb-3">{task.description}</p>
-                                  )}
-                                  
-                                  {/* Subtasks */}
-                                  {task.subtasks && task.subtasks.length > 0 && (
-                                    <div className="mt-3 pt-3 border-t border-gray-100">
-                                      <h6 className="text-xs font-medium text-gray-700 mb-2">Subtasks</h6>
-                                      <div className="space-y-2">
-                                        {task.subtasks.map((subtask, subtaskIndex) => (
-                                          <div key={subtask.id || subtaskIndex} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                                            <div className="flex items-center space-x-2">
-                                              <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                                                subtask.completed ? 'bg-green-100' : 'bg-gray-200'
-                                              }`}>
-                                                {subtask.completed && (
-                                                  <Icon name="Check" size={10} className="text-green-600" />
-                                                )}
-                                              </div>
-                                              <span className={`text-xs ${subtask.completed ? 'text-gray-700' : 'text-gray-600'}`}>
-                                                {subtask.name}
-                                              </span>
+                                    </button>
+                                    
+                                    {/* Task Content - Accordion Body */}
+                                    {isExpanded && (
+                                      <div className="px-3 pb-3 border-t border-gray-100">
+                                        {task.description && (
+                                          <p className="text-sm text-gray-600 mt-3 mb-3">{task.description}</p>
+                                        )}
+                                        
+                                        {/* Subtasks */}
+                                        {task.subtasks && task.subtasks.length > 0 ? (
+                                          <div className="mt-3">
+                                            <h6 className="text-xs font-medium text-gray-700 mb-2 flex items-center">
+                                              <Icon name="List" size={14} className="mr-1" />
+                                              Subtasks ({task.subtasks.filter(s => s.completed).length}/{task.subtasks.length})
+                                            </h6>
+                                            <div className="space-y-2">
+                                              {task.subtasks.map((subtask, subtaskIndex) => (
+                                                <div key={subtask.id || subtaskIndex} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                                                  <div className="flex items-center space-x-2 flex-1">
+                                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                                                      subtask.completed ? 'bg-green-100' : 'bg-gray-200'
+                                                    }`}>
+                                                      {subtask.completed && (
+                                                        <Icon name="Check" size={10} className="text-green-600" />
+                                                      )}
+                                                    </div>
+                                                    <span className={`text-xs flex-1 ${subtask.completed ? 'text-gray-700' : 'text-gray-600'}`}>
+                                                      {subtask.name}
+                                                    </span>
+                                                  </div>
+                                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                                    subtask.completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                                  }`}>
+                                                    {subtask.completed ? 'Done' : 'Pending'}
+                                                  </span>
+                                                </div>
+                                              ))}
                                             </div>
-                                            <span className={`text-xs ${
-                                              subtask.completed ? 'text-green-600' : 'text-gray-500'
-                                            }`}>
-                                              {subtask.completed ? 'Done' : 'Pending'}
-                                            </span>
+                                            
+                                            {/* Subtask Progress */}
+                                            {task.completion_percentage !== undefined && (
+                                              <div className="mt-3">
+                                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                                  <span>Subtask Progress</span>
+                                                  <span>{task.completion_percentage}%</span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                  <div
+                                                    className="bg-green-500 h-1.5 rounded-full transition-all"
+                                                    style={{ width: `${task.completion_percentage}%` }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
-                                        ))}
+                                        ) : (
+                                          <p className="text-xs text-gray-500 mt-2">No subtasks available</p>
+                                        )}
                                       </div>
-                                      
-                                      {/* Subtask Progress */}
-                                      {task.completion_percentage !== undefined && (
-                                        <div className="mt-2">
-                                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                            <span>Subtask Progress</span>
-                                            <span>{task.completion_percentage}%</span>
-                                          </div>
-                                          <div className="w-full bg-gray-200 rounded-full h-1">
-                                            <div
-                                              className="bg-green-500 h-1 rounded-full"
-                                              style={{ width: `${task.completion_percentage}%` }}
-                                            />
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
                             <div className="text-center py-6 bg-gray-50 rounded-lg">
                               <Icon name="FileQuestion" size={32} className="text-gray-400 mx-auto mb-2" />
                               <p className="text-gray-500">No tasks found for this role</p>
-                            </div>
-                          )}
-                          {status.tasks && status.tasks.length > 0 ? (
-                            <div className="space-y-3">
-                              {status.tasks.map((task, index) => (
-                                <div key={index} className="border border-gray-200 rounded-lg p-3">
-                                  {/* Task Name as Heading */}
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center space-x-2">
-                                      <Icon 
-                                        name={task.completed ? "CheckCircle" : "Circle"} 
-                                        size={16} 
-                                        className={task.completed ? "text-green-600" : "text-orange-600"} 
-                                      />
-                                      <h5 className="text-sm font-semibold text-gray-800">
-                                        {task.name}
-                                      </h5>
-                                    </div>
-                                    <span className={`text-xs px-2 py-1 rounded-full ${
-                                      task.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                                    }`}>
-                                      {task.completed ? 'Completed' : 'Pending'}
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Subtasks */}
-                                  {task.subtasks && task.subtasks.length > 0 && (
-                                    <div className="ml-6 space-y-1">
-                                      <h6 className="text-xs font-medium text-gray-600 mb-1">Subtasks:</h6>
-                                      {task.subtasks.map((subtask, subIndex) => (
-                                        <div key={subIndex} className="flex items-center justify-between py-1">
-                                          <div className="flex items-center space-x-2">
-                                            <Icon 
-                                              name={subtask.completed ? "Check" : "Circle"} 
-                                              size={12} 
-                                              className={subtask.completed ? "text-green-500" : "text-gray-400"} 
-                                            />
-                                            <span className={`text-xs ${
-                                              subtask.completed ? 'text-green-700 line-through' : 'text-gray-600'
-                                            }`}>
-                                              {subtask.name}
-                                            </span>
-                                          </div>
-                                          <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                            subtask.completed 
-                                              ? 'bg-green-100 text-green-700' 
-                                              : 'bg-gray-100 text-gray-600'
-                                          }`}>
-                                            {subtask.completed ? 'Done' : 'Pending'}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-gray-500">
-                              No detailed task information available
                             </div>
                           )}
                         </div>
@@ -874,7 +911,11 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                 </div>
                 <Button
                   variant="outline"
-                  onClick={() => setShowTaskModal(false)}
+                  onClick={() => {
+                    setShowTaskModal(false);
+                    setSelectedRole(null);
+                    setExpandedTasks({}); // Reset expanded tasks when closing modal
+                  }}
                 >
                   Close
                 </Button>

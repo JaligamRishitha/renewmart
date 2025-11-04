@@ -5,8 +5,7 @@ const StepIndicator = ({ currentStep, totalSteps }) => {
   const steps = [
     { number: 1, title: 'Account Details', description: 'Basic information' },
     { number: 2, title: 'Role Selection', description: 'Choose your role' },
-    { number: 3, title: 'Company Information', description: 'Organization details' },
-    { number: 4, title: 'Verification', description: 'Confirm your account' }
+    { number: 3, title: 'Verification', description: 'Confirm your account' }
   ];
 
   return (

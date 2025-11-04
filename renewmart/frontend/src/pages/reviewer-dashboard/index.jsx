@@ -229,6 +229,16 @@ const ReviewerDashboard = () => {
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                {/* Investor Interests Button - Only for Sales Advisors */}
+                {reviewerRole === 're_sales_advisor' && (
+                  <button
+                    onClick={() => navigate('/sales-advisor/investor-interests')}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Icon name="Users" size={18} />
+                    <span className="text-sm font-medium">Investor Interests</span>
+                  </button>
+                )}
                 {/* User Info */}
                 <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
                   <Icon name="User" size={18} className="text-muted-foreground" />

@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { documentVersionsAPI, documentAssignmentAPI } from '../services/api';
 
 const DocumentVersionsPage = () => {
   const { landId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
   const [documentTypes, setDocumentTypes] = useState([]);
   const [selectedDocumentType, setSelectedDocumentType] = useState(null);
   const [versions, setVersions] = useState([]);
@@ -12,21 +15,65 @@ const DocumentVersionsPage = () => {
   const [error, setError] = useState(null);
   const [expandedAccordions, setExpandedAccordions] = useState({});
 
-  useEffect(() => {
-    if (landId) {
-      loadDocumentData();
-    }
-  }, [landId]);
+  // Get reviewer role from location state or user roles
+  const reviewerRole = location.state?.reviewerRole || 
+    user?.roles?.find(role => 
+      ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
+    );
+  const isAdmin = user?.roles?.includes('administrator') || user?.role === 'admin';
 
-  const loadDocumentData = async () => {
+  // Document type to roles mapping - matches backend mapping
+  const roleDocumentMapping = {
+    're_sales_advisor': [
+      'land-valuation',
+      'sale-contracts',
+      'topographical-surveys',
+      'grid-connectivity'
+    ],
+    're_analyst': [
+      'financial-models'
+    ],
+    're_governance_lead': [
+      'land-valuation',
+      'ownership-documents',
+      'zoning-approvals',
+      'environmental-impact',
+      'government-nocs'
+    ]
+  };
+
+  // Helper function to check if a document type is allowed for the reviewer role
+  const isDocumentTypeAllowed = useCallback((documentType) => {
+    // Admin can see all documents
+    if (isAdmin) return true;
+    
+    // If no reviewer role, don't show any documents
+    if (!reviewerRole) return false;
+    
+    // Check if document type is in the allowed list for this role
+    const allowedTypes = roleDocumentMapping[reviewerRole] || [];
+    return allowedTypes.includes(documentType);
+  }, [isAdmin, reviewerRole]);
+
+  const loadDocumentData = useCallback(async () => {
     try {
       setLoading(true);
       console.log('Loading document data for landId:', landId);
+      console.log('Reviewer role:', reviewerRole, 'Is admin:', isAdmin);
       
       // Get document status summary
       const summary = await documentVersionsAPI.getStatusSummary(landId);
-      console.log('Document status summary:', summary);
-      setDocumentTypes(summary);
+      console.log('Document status summary (unfiltered):', summary);
+      
+      // Filter document types based on reviewer role
+      const filteredSummary = summary.filter(docType => {
+        const isAllowed = isDocumentTypeAllowed(docType.document_type);
+        console.log(`Document type ${docType.document_type}: ${isAllowed ? 'allowed' : 'filtered out'}`);
+        return isAllowed;
+      });
+      
+      console.log('Document status summary (filtered):', filteredSummary);
+      setDocumentTypes(filteredSummary);
       
     } catch (err) {
       console.error('Failed to load document data:', err);
@@ -34,12 +81,27 @@ const DocumentVersionsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [landId, reviewerRole, isAdmin, isDocumentTypeAllowed]);
+
+  useEffect(() => {
+    if (landId) {
+      loadDocumentData();
+    }
+  }, [landId, loadDocumentData]);
 
   const loadVersions = async (documentType) => {
     try {
       setLoading(true);
       console.log('Loading versions for documentType:', documentType, 'landId:', landId);
+      
+      // Double-check that the document type is allowed for this reviewer
+      if (!isDocumentTypeAllowed(documentType)) {
+        console.warn('Document type not allowed for reviewer role:', documentType, reviewerRole);
+        setError(`You don't have permission to view ${documentType} documents.`);
+        setLoading(false);
+        return;
+      }
+      
       const response = await documentVersionsAPI.getDocumentVersions(landId, documentType);
       console.log('Document versions response:', response);
       setVersions(response);

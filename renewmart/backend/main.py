@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 import time
 import logging
+import os
 from pydantic import ValidationError
 from database import engine, Base
 from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health, websocket, messaging_api, document_versions, document_assignments, reviewer, notifications as notifications_router
@@ -79,11 +80,11 @@ app = FastAPI(
     },
     servers=[
         {
-            "url": "http://localhost:8000",
+            "url": os.getenv("API_BASE_URL") or f"http://{settings.HOST}:{settings.PORT}",
             "description": "Development server"
         },
         {
-            "url": "https://api.renewmart.com",
+            "url": os.getenv("API_PRODUCTION_URL") or "https://api.renewmart.com",
             "description": "Production server"
         }
     ]

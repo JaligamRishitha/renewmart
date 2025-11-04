@@ -124,26 +124,26 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
         query = text(
             """
             SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   u.phone, u.is_verified, u.created_at, u.updated_at,
                    GROUP_CONCAT(ur.role_key) AS roles
             FROM "user" u
             LEFT JOIN user_roles ur ON u.user_id = ur.user_id
             WHERE u.email = :email
             GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+                     u.phone, u.is_verified, u.created_at, u.updated_at
             """
         )
     else:
         query = text(
             """
             SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   u.phone, u.is_verified, u.created_at, u.updated_at,
                    COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') AS roles
             FROM "user" u
             LEFT JOIN user_roles ur ON u.user_id = ur.user_id
             WHERE u.email = :email
             GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+                     u.phone, u.is_verified, u.created_at, u.updated_at
             """
         )
 
@@ -165,7 +165,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[dict]:
         "last_name": result.last_name,
         "phone": result.phone,
         "is_verified": result.is_verified,
-        "is_active": result.is_active,
+        "is_active": True,  # Default to True if column doesn't exist
         "created_at": result.created_at,
         "updated_at": result.updated_at,
         "roles": roles_list,

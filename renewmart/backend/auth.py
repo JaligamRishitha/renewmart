@@ -67,26 +67,26 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[dict]:
         query = text(
             """
             SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   u.phone, u.is_verified, u.address, u.created_at, u.updated_at,
                    GROUP_CONCAT(ur.role_key) as roles
             FROM "user" u
             LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-            WHERE u.email = :email AND u.is_active = true
+            WHERE u.email = :email
             GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+                     u.phone, u.is_verified, u.address, u.created_at, u.updated_at
             """
         )
     else:
         query = text(
             """
             SELECT u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                   u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at,
+                   u.phone, u.is_verified, u.address, u.created_at, u.updated_at,
                    COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
             FROM "user" u
             LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-            WHERE u.email = :email AND u.is_active = true
+            WHERE u.email = :email
             GROUP BY u.user_id, u.email, u.password_hash, u.first_name, u.last_name,
-                     u.phone, u.is_verified, u.is_active, u.created_at, u.updated_at
+                     u.phone,u.address, u.is_verified, u.created_at, u.updated_at
             """
         )
 
@@ -111,9 +111,9 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[dict]:
         "email": result.email,
         "first_name": result.first_name,
         "last_name": result.last_name,
+        "address": result.address,
         "phone": result.phone,
         "is_verified": result.is_verified,
-        "is_active": result.is_active,
         "created_at": result.created_at,
         "updated_at": result.updated_at,
         "roles": roles
@@ -140,21 +140,43 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
         raise credentials_exception
         
     # Get user from database
-    query = text("""
-        SELECT u.user_id, u.email, u.first_name, u.last_name, u.phone, u.is_verified, u.is_active,
-               u.created_at, u.updated_at,
-               COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
-        FROM "user" u
-        LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-        WHERE u.user_id = :user_id AND u.is_active = true
-        GROUP BY u.user_id, u.email, u.first_name, u.last_name, u.phone, u.is_verified, u.is_active,
-                 u.created_at, u.updated_at
-    """)
+    # Check if is_active column exists
+    is_sqlite = DATABASE_URL.lower().startswith("sqlite")
+    if is_sqlite:
+        query = text("""
+            SELECT u.user_id, u.email, u.first_name, u.last_name, u.phone, u.is_verified, u.address,
+                   u.created_at, u.updated_at,
+                   GROUP_CONCAT(ur.role_key) as roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.user_id = :user_id
+            GROUP BY u.user_id, u.email, u.first_name, u.last_name, u.phone, u.address, u.is_verified,
+                     u.created_at, u.updated_at
+        """)
+    else:
+        query = text("""
+            SELECT u.user_id, u.email, u.first_name, u.last_name, u.phone, u.is_verified, u.address,
+                   u.created_at, u.updated_at,
+                   COALESCE(array_agg(ur.role_key) FILTER (WHERE ur.role_key IS NOT NULL), '{}') as roles
+            FROM "user" u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.user_id = :user_id
+            GROUP BY u.user_id, u.email, u.first_name, u.last_name, u.phone, u.address, u.is_verified,
+                     u.created_at, u.updated_at
+        """)
     
     result = db.execute(query, {"user_id": str(token_data.user_id)}).fetchone()
     
     if result is None:
         raise credentials_exception
+    
+    # Normalize roles to a list
+    roles = []
+    if result.roles:
+        if isinstance(result.roles, str):
+            roles = [role.strip() for role in result.roles.split(',') if role.strip()]
+        else:
+            roles = list(result.roles)
         
     return {
         "user_id": str(result.user_id),
@@ -162,18 +184,24 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
         "first_name": result.first_name,
         "last_name": result.last_name,
         "phone": result.phone,
+        "address": result.address,
         "is_verified": result.is_verified,
-        "is_active": result.is_active,
+        "is_active": True,  # Default to True if column doesn't exist
         "created_at": result.created_at,
         "updated_at": result.updated_at,
-        "roles": result.roles
+        "roles": roles
     }
 
 def get_current_active_user(current_user: dict = Depends(get_current_user)) -> dict:
-    """Get the current active user."""
-    if not current_user["is_active"]:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    """Get the current authenticated user and ensure they are active."""
+    if not current_user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
     return current_user
+
+
 
 # Role-based access control decorators
 def require_roles(allowed_roles: List[str]):

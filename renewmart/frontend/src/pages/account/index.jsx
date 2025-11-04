@@ -231,17 +231,7 @@ const Account = () => {
                     </h3>
                     
                     <div className="space-y-4">
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground block mb-1">
-                          Account Status
-                        </label>
-                        <div className="flex items-center space-x-2">
-                          <div className={`w-3 h-3 rounded-full ${displayUser?.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <span className="text-foreground text-base">
-                            {displayUser?.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
+                      
                       
                       <div>
                         <label className="text-sm font-medium text-muted-foreground block mb-1">

@@ -38,7 +38,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'doc', 'docx'],
-      maxSize: '10MB'
+      maxSize: '10MB',
+      roles: ['administrator', 're_sales_advisor', 're_governance_lead']
     },
     {
       id: 'ownership-documents',
@@ -47,7 +48,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 2,
       acceptedFormats: ['pdf', 'jpg', 'png'],
-      maxSize: '5MB'
+      maxSize: '5MB',
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'sale-contracts',
@@ -56,7 +58,8 @@ const DocumentUpload = () => {
       required: false,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'doc', 'docx'],
-      maxSize: '10MB'
+      maxSize: '10MB',
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'topographical-surveys',
@@ -65,7 +68,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'jpg', 'png', 'dwg'],
-      maxSize: '20MB'
+      maxSize: '20MB',
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'grid-connectivity',
@@ -74,7 +78,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'doc', 'docx', 'xls', 'xlsx'],
-      maxSize: '15MB'
+      maxSize: '15MB',
+      roles: ['administrator', 're_sales_advisor']
     },
     {
       id: 'financial-models',
@@ -83,7 +88,8 @@ const DocumentUpload = () => {
       required: false,
       requiredFiles: 1,
       acceptedFormats: ['xls', 'xlsx', 'pdf'],
-      maxSize: '10MB'
+      maxSize: '10MB',
+      roles: ['administrator', 're_analyst']
     },
     {
       id: 'zoning-approvals',
@@ -92,7 +98,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'jpg', 'png'],
-      maxSize: '5MB'
+      maxSize: '5MB',
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'environmental-impact',
@@ -101,7 +108,8 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 1,
       acceptedFormats: ['pdf', 'doc', 'docx'],
-      maxSize: '25MB'
+      maxSize: '25MB',
+      roles: ['administrator', 're_governance_lead']
     },
     {
       id: 'government-nocs',
@@ -110,9 +118,30 @@ const DocumentUpload = () => {
       required: true,
       requiredFiles: 2,
       acceptedFormats: ['pdf', 'jpg', 'png'],
-      maxSize: '5MB'
+      maxSize: '5MB',
+      roles: ['administrator', 're_governance_lead']
     }
   ];
+
+  // Helper function to format role names for display
+  const formatRoleName = (role) => {
+    const roleMap = {
+      'administrator': 'Admin',
+      're_sales_advisor': 'Sales Advisor',
+      're_analyst': 'Analyst',
+      're_governance_lead': 'Governance Lead'
+    };
+    return roleMap[role] || role;
+  };
+
+  // Helper function to get roles text for display (excluding admin)
+  const getRolesText = (roles) => {
+    if (!roles) return '';
+    const nonAdminRoles = roles.filter(role => role !== 'administrator');
+    if (nonAdminRoles.length === 0) return 'Admin only';
+    const formattedRoles = nonAdminRoles.map(formatRoleName);
+    return formattedRoles.join(', ');
+  };
 
   // Load existing project data in edit mode
   useEffect(() => {
@@ -601,11 +630,18 @@ const DocumentUpload = () => {
     );
   }
 
+  // Custom breadcrumbs for document upload page
+  const customBreadcrumbs = [
+    { label: 'Home', path: '/', icon: 'Home' },
+    { label: 'Landowner', path: '/landowner/dashboard', icon: 'User' },
+    { label: 'Documents Upload', path: '/document-upload', icon: 'Upload', isLast: true }
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="landowner" />
       <div className="pt-16">
-        <WorkflowBreadcrumbs />
+        <WorkflowBreadcrumbs customBreadcrumbs={customBreadcrumbs} />
         <div className="max-w-9xl mx-auto px-4 lg:px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
@@ -704,6 +740,7 @@ const DocumentUpload = () => {
                 onSectionToggle={handleSectionToggle}
                 onViewVersions={handleViewDocumentVersions}
                 isEditMode={isEditMode}
+                getRolesText={getRolesText}
               />
             </div>
 
