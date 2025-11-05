@@ -56,7 +56,7 @@ const DocumentUpload = () => {
       id: 'financial',
       title: 'Financial Documents',
       description: 'Tax records and financial statements',
-      icon: 'DollarSign',
+      icon: 'PoundSterling',
       required: false,
       files: []
     }
@@ -145,7 +145,7 @@ const DocumentUpload = () => {
   return (
     <>
       <Helmet>
-        <title>Document Upload - RenewMart</title>
+        <title>Document Upload - Renewmart</title>
         <meta name="description" content="Upload property documents for renewable energy project evaluation" />
       </Helmet>
       <div className="min-h-screen bg-background">

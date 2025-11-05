@@ -87,7 +87,7 @@ const InvestorDashboard = () => {
       value: formatCurrency(dashboardData.total_invested || 0),
       change: null,
       changeType: 'neutral',
-      icon: 'DollarSign',
+      icon: 'PoundSterling',
       color: 'success'
     },
     {

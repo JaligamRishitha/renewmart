@@ -1148,23 +1148,6 @@ const DocumentReview = () => {
             />
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="mt-6 bg-card border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <Icon name="Clock" size={16} className="text-muted-foreground" />
-            <span className="text-sm">Last updated: {new Date().toLocaleTimeString()}</span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/admin/dashboard")}>
-              <Icon name="ArrowLeft" size={16} /> Back
-            </Button>
-            <Button size="sm" onClick={() => handleReviewAction("save")}>
-              <Icon name="Save" size={16} /> Save Progress
-            </Button>
-          </div>
-        </div>
       </div>
 
       {/* Floating UI */}

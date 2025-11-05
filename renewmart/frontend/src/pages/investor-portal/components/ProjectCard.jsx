@@ -43,7 +43,16 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
 
   // Get project type image from assets - same logic as admin marketplace
   const getProjectTypeImage = (project) => {
-    // First check if project has a custom image
+    // First check if project has a site image uploaded by saleadvisor
+    if (project?.has_site_image && project?.image_url) {
+      // Use site image if available
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+      return project.image_url.startsWith('/api') 
+        ? `${apiBaseUrl}${project.image_url.substring(4)}`
+        : project.image_url;
+    }
+    
+    // Then check if project has a custom image
     if (project?.image) {
       return project.image;
     }

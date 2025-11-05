@@ -64,7 +64,7 @@ const DocumentVersionUpload = () => {
       id: 'financial-models',
       title: 'Financial Models',
       description: 'Economic analysis and financial projections',
-      icon: 'DollarSign',
+      icon: 'PoundSterling',
       required: false,
       roles: ['administrator', 're_analyst']
     },

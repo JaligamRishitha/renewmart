@@ -11,7 +11,7 @@ const ProjectDetailsForm = ({
   const projectTypes = [
     { value: 'solar', label: 'Solar Energy' },
     { value: 'wind', label: 'Wind Energy' },
-    { value: 'hydroelectric', label: 'Hydroelectric' },
+    { value: 'hydro', label: 'Hydroelectric' },
     { value: 'biomass', label: 'Biomass' },
     { value: 'geothermal', label: 'Geothermal' }
   ];
@@ -30,6 +30,14 @@ const ProjectDetailsForm = ({
     { value: '20-years', label: '20 Years' },
     { value: '25-years', label: '25 Years' },
     { value: '30-years', label: '30 Years' }
+  ];
+
+  const landTypeOptions = [
+    { value: 'agricultural_land', label: 'Agricultural Land' },
+    { value: 'commercial_property', label: 'Commercial Property' },
+    { value: 'residential_property', label: 'Residential Property' },
+    { value: 'industrial_land', label: 'Industrial Land' },
+    { value: 'vacant_land', label: 'Vacant Land' }
   ];
 
   const handleInputChange = (field, value) => {
@@ -76,6 +84,15 @@ const ProjectDetailsForm = ({
           required
         />
 
+        <Select
+          label="Land Type"
+          placeholder="Select land type"
+          options={landTypeOptions}
+          value={projectDetails?.landType || ''}
+          onChange={(value) => handleInputChange('landType', value)}
+          error={errors?.landType}
+        />
+
         <Input
           label="Land Area (Acres)"
           type="number"
@@ -107,7 +124,7 @@ const ProjectDetailsForm = ({
         />
 
         <Input
-          label="Price per MWh (USD)"
+          label="Price per MWh (GBP)"
           type="number"
           placeholder="Enter price per MWh"
           value={projectDetails?.pricePerMWh || ''}

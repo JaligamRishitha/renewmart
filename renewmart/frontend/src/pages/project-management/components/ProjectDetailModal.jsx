@@ -13,7 +13,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose }) => {
     { id: 'tasks', label: 'Tasks', icon: 'CheckSquare' },
     { id: 'team', label: 'Team', icon: 'Users' },
     { id: 'documents', label: 'Documents', icon: 'FileText' },
-    { id: 'budget', label: 'Budget', icon: 'DollarSign' }
+    { id: 'budget', label: 'Budget', icon: 'PoundSterling' }
   ];
 
   const milestones = [
@@ -60,7 +60,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose }) => {
   const formatBudget = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     })?.format(amount);

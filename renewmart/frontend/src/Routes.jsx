@@ -24,6 +24,7 @@ import RoleBasedRedirect from './components/RoleBasedRedirect';
 
 // Import new pages from landinvest_pro
 import AdminDashboard from './pages/admin-dashboard';
+import AdminProjects from './pages/admin-projects';
 import AdminMarketplace from './pages/admin-marketplace';
 import MarketplaceV2 from './pages/admin-marketplace/MarketplaceV2';
 import MyPublishedProjects from './pages/admin-marketplace/MyPublishedProjects';
@@ -92,6 +93,11 @@ const Routes = () => {
         <Route path="/admin/dashboard" element={
           <AdminRoute>
             <AdminDashboard />
+          </AdminRoute>
+        } />
+        <Route path="/admin/projects" element={
+          <AdminRoute>
+            <AdminProjects />
           </AdminRoute>
         } />
         <Route path="/admin/document-versions/:landId" element={

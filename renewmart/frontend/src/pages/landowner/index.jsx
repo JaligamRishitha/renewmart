@@ -80,8 +80,8 @@ const LandownerDashboard = () => {
   return (
     <>
       <Helmet>
-        <title>Landowner Dashboard - RenewMart</title>
-        <meta name="description" content="Manage your renewable energy land listings and track performance on RenewMart." />
+        <title>Landowner Dashboard - Renewmart</title>
+        <meta name="description" content="Manage your renewable energy land listings and track performance on Renewmart." />
       </Helmet>
       
       <div className="min-h-screen bg-background flex">

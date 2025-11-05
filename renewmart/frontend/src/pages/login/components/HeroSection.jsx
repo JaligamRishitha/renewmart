@@ -27,14 +27,10 @@ const HeroSection = () => {
               <Icon name="Zap" size={24} color="white" />
             </div>
             <h1 className="text-4xl lg:text-5xl font-bold text-black leading-tight">
-              RenewMart
+              Renewmart
             </h1>
           </div>
-          {/* Centered Descriptive Text */}
-          <p className="text-xl text-green-800 mb-8 leading-relaxed text-center max-w-2xl mx-auto">
-            Connect landowners, investors, and industry stakeholders through our integrated 
-            marketplace and project management ecosystem for renewable energy assets.
-          </p>
+          
         </div>
 
        

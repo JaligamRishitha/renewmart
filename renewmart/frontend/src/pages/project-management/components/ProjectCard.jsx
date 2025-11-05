@@ -24,7 +24,7 @@ const ProjectCard = ({ project, onViewDetails, isExpanded, onToggleExpand }) => 
   const formatBudget = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     })?.format(amount);

@@ -24,7 +24,7 @@ const InvestorDetailsModal = ({ isOpen, onClose, investorData }) => {
     if (!amount) return 'Not specified';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
@@ -157,7 +157,7 @@ const InvestorDetailsModal = ({ isOpen, onClose, investorData }) => {
                   Price per MWh
                 </label>
                 <p className="text-sm text-foreground mt-1 flex items-center">
-                  <Icon name="DollarSign" size={14} className="text-muted-foreground mr-2" />
+                  <Icon name="PoundSterling" size={14} className="text-muted-foreground mr-2" />
                   £{investorData.projectPrice}/MWh
                 </p>
               </div>
@@ -209,7 +209,7 @@ const InvestorDetailsModal = ({ isOpen, onClose, investorData }) => {
                   Investment Amount
                 </label>
                 <p className="text-sm text-foreground mt-1 flex items-center">
-                  <Icon name="DollarSign" size={14} className="text-muted-foreground mr-2" />
+                  <Icon name="PoundSterling" size={14} className="text-muted-foreground mr-2" />
                   {formatCurrency(investorData.investmentAmount)}
                 </p>
               </div>

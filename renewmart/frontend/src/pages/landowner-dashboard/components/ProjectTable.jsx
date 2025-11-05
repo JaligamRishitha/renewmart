@@ -69,7 +69,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 Type
               </th>
               <th className="text-left px-6 py-4 text-sm font-body font-medium text-muted-foreground">
-                Capacity (MW)
+                Land (acres)
               </th>
               <th className="text-left px-6 py-4 text-sm font-body font-medium text-muted-foreground">
                 Status
@@ -94,9 +94,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                       <div className="font-body font-medium text-foreground">
                         {project?.name}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        ID: {project?.id}
-                      </div>
+                    
                     </div>
                   </div>
                 </td>
@@ -107,10 +105,16 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="font-body text-foreground capitalize">{project?.type}</span>
+                  <span className="font-body text-foreground capitalize">
+                    {project?.type || project?.energy_key || project?.energyType || 'N/A'}
+                  </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="font-body font-medium text-foreground">{project?.capacity}</span>
+                  <span className="font-body font-medium text-foreground">
+                    {project?.areaAcres || project?.area_acres 
+                      ? `${parseFloat(project?.areaAcres || project?.area_acres).toFixed(2)}`
+                      : 'N/A'}
+                  </span>
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={project?.status} />
@@ -141,16 +145,18 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                         iconName="Users"
                         iconPosition="left"
                       >
-                        View Interest
+                        View Interests
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAction('documents', project)}
-                      iconName="FileText"
-                      title="View Documents"
-                    />
+                    {project?.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAction('documents', project)}
+                        iconName="FileText"
+                        title="View Documents"
+                      />
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -176,16 +182,6 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                         title="Upload New Document Versions"
                       />
                     )}
-                    {project?.status === 'draft' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleAction('delete', project)}
-                        iconName="Trash2"
-                        title="Delete Draft"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      />
-                    )}
                   </div>
                 </td>
               </tr>
@@ -206,9 +202,6 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                   <div className="font-body font-medium text-foreground">
                     {project?.name}
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    ID: {project?.id}
-                  </div>
                 </div>
               </div>
               <StatusBadge status={project?.status} />
@@ -221,11 +214,17 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
               </div>
               <div>
                 <span className="text-muted-foreground">Type:</span>
-                <div className="font-body text-foreground capitalize">{project?.type}</div>
+                <div className="font-body text-foreground capitalize">
+                  {project?.type || project?.energy_key || project?.energyType || 'N/A'}
+                </div>
               </div>
               <div>
-                <span className="text-muted-foreground">Capacity:</span>
-                <div className="font-body font-medium text-foreground">{project?.capacity} MW</div>
+                <span className="text-muted-foreground">Land:</span>
+                <div className="font-body font-medium text-foreground">
+                  {project?.areaAcres || project?.area_acres 
+                    ? `${parseFloat(project?.areaAcres || project?.area_acres).toFixed(2)} acres`
+                    : 'N/A'}
+                </div>
               </div>
               <div>
                 <span className="text-muted-foreground">Updated:</span>
@@ -265,15 +264,17 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 </Button>
               )}
               <div className="flex items-center space-x-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleAction('documents', project)}
-                  iconName="FileText"
-                  fullWidth
-                >
-                  Documents
-                </Button>
+                {project?.status === 'draft' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAction('documents', project)}
+                    iconName="FileText"
+                    fullWidth
+                  >
+                    Documents
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -303,18 +304,6 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                     fullWidth
                   >
                     Upload Versions
-                  </Button>
-                )}
-                {project?.status === 'draft' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAction('delete', project)}
-                    iconName="Trash2"
-                    fullWidth
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    Delete
                   </Button>
                 )}
               </div>

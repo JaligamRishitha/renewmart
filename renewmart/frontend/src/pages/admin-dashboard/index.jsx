@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/ui/Header";
+import Footer from "../../components/ui/Footer";
 import Sidebar from "../../components/ui/Sidebar";
 import NotificationIndicator from "../../components/ui/NotificationIndicator";
 import QuickActions from "../../components/ui/QuickActions";
@@ -186,15 +187,13 @@ const AdminDashboard = () => {
         {
           title: "Under Review",
           value: summaryData.underReview.toString(),
-          change: `${summaryData.approved} approved`,
           changeType: "increase",
           icon: "Eye",
-          color: "primary",
+          color: "error",
         },
         {
           title: "Published",
           value: summaryData.published.toString(),
-          change: `${summaryData.readyToBuy} ready to buy`,
           changeType: "increase",
           icon: "CheckCircle",
           color: "success",
@@ -205,7 +204,7 @@ const AdminDashboard = () => {
           change: `${summaryData.totalLandArea.toFixed(0)} acres`,
           changeType: "neutral",
           icon: "Zap",
-          color: "secondary",
+          color: "warning",
         },
         {
           title: "Investor Interest",
@@ -651,6 +650,9 @@ const AdminDashboard = () => {
           }}
         />
       )}
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

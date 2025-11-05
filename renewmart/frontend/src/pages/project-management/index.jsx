@@ -159,7 +159,7 @@ const ProjectManagement = () => {
   return (
     <>
       <Helmet>
-        <title>Project Management - RenewMart</title>
+        <title>Project Management - Renewmart</title>
         <meta name="description" content="Comprehensive renewable energy project management and tracking platform" />
       </Helmet>
       <div className="min-h-screen bg-background">

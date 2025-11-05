@@ -129,7 +129,7 @@ const UserManagement = () => {
   return (
     <>
       <Helmet>
-        <title>User Management - RenewMart Admin</title>
+        <title>User Management - Renewmart Admin</title>
         <meta name="description" content="Manage users and role assignments" />
       </Helmet>
       <div className="min-h-screen bg-background">

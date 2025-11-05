@@ -22,9 +22,6 @@ const ProjectCard = ({
                 {project.title}
               </h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Project ID: {project.land_id}
-            </p>
           </div>
           <div className="flex flex-col items-end gap-2">
             <button

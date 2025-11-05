@@ -105,14 +105,15 @@ const DocumentAccordion = ({
   };
 
   const handleViewDocument = async (file) => {
-    if (!file?.id) {
+    const documentId = file?.id || file?.documentId;
+    if (!documentId) {
       alert('Cannot view this document. It may not be uploaded yet.');
       return;
     }
 
     try {
-      console.log('Viewing document:', file.id, file.name);
-      const blob = await documentsAPI.downloadDocument(file.id);
+      console.log('Viewing document:', documentId, file.name);
+      const blob = await documentsAPI.downloadDocument(documentId);
       
       if (!blob || blob.size === 0) {
         alert('Document has no data. Please try re-uploading it.');
@@ -138,16 +139,17 @@ const DocumentAccordion = ({
   };
 
   const handleDownloadDocument = async (file) => {
-    if (!file?.id) {
+    const documentId = file?.id || file?.documentId;
+    if (!documentId) {
       alert('Cannot download this document. It may not be uploaded yet.');
       return;
     }
 
     try {
-      setDownloading(file.id);
-      console.log('Downloading document:', file.id, file.name);
+      setDownloading(documentId);
+      console.log('Downloading document:', documentId, file.name);
       
-      const blob = await documentsAPI.downloadDocument(file.id);
+      const blob = await documentsAPI.downloadDocument(documentId);
       
       if (!blob) {
         throw new Error('No data received from server');
@@ -332,13 +334,26 @@ const DocumentAccordion = ({
                                 {file?.name}
                               </p>
                               <p className="font-caption text-xs text-muted-foreground">
-                                {formatFileSize(file?.size)} • Uploaded {new Date()?.toLocaleDateString()}
+                                {formatFileSize(file?.size)} 
+                                {file?.uploadedAt && (
+                                  <> • Uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}</>
+                                )}
+                                {file?.isExisting && !file?.uploadedAt && (
+                                  <> • Existing document</>
+                                )}
+                                {!file?.isExisting && !file?.uploadedAt && (
+                                  <> • Not uploaded yet</>
+                                )}
                               </p>
                             </div>
                           </div>
                           
                           <div className="flex items-center space-x-2">
-                            {file?.id && (
+                            {(file?.id || file?.documentId) && (
                               <>
                                 <Button
                                   variant="ghost"
@@ -352,10 +367,10 @@ const DocumentAccordion = ({
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleDownloadDocument(file)}
-                                  disabled={downloading === file.id}
+                                  disabled={downloading === (file.id || file.documentId)}
                                   title="Download Document"
                                 >
-                                  <Icon name={downloading === file.id ? "Loader" : "Download"} size={16} />
+                                  <Icon name={downloading === (file.id || file.documentId) ? "Loader" : "Download"} size={16} />
                                 </Button>
                                 {isEditMode && onViewVersions && (
                                   <Button
@@ -369,15 +384,22 @@ const DocumentAccordion = ({
                                 )}
                               </>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onFileRemove(section?.id, index)}
-                              className="text-error hover:text-error hover:bg-error/10"
-                              title="Remove Document"
-                            >
-                              <Icon name="Trash2" size={16} />
-                            </Button>
+                            {!file?.isExisting && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onFileRemove(section?.id, index)}
+                                className="text-error hover:text-error hover:bg-error/10"
+                                title="Remove Document"
+                              >
+                                <Icon name="Trash2" size={16} />
+                              </Button>
+                            )}
+                            {file?.isExisting && (
+                              <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                                Existing
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

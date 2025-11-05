@@ -83,7 +83,7 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
 
   const moreMenuItems = [
     {
-      label: 'Account',
+      label: 'Profile',
       path: '/account',
       icon: 'User',
       roles: ['landowner', 'admin', 'investor', 'reviewer'],
@@ -169,7 +169,7 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
               </div>
               <div className="flex flex-col">
                 <span className="font-heading font-semibold text-lg text-foreground leading-tight">
-                  RenewMart - {getRoleDisplayName(user?.roles || [])}
+                  Renewmart - {getRoleDisplayName(user?.roles || [])}
                 </span>
               </div>
             </div>
@@ -206,15 +206,31 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
             {/* Notifications Bell Icon */}
             <NotificationBellButton onOpen={() => setIsNotificationPanelOpen(true)} />
 
-            {/* More Menu */}
+            {/* User Menu */}
             {filteredMoreItems?.length > 0 && (
               <div className="relative more-menu-container">
                 <button
                   onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                  className="flex items-center space-x-2 px-4 py-2 rounded-lg font-body font-medium text-sm text-foreground hover:bg-muted hover:text-primary transition-smooth focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="flex items-center space-x-2 px-3 py-2 rounded-lg font-body font-medium text-sm text-foreground hover:bg-muted hover:text-primary transition-smooth focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <Icon name="MoreHorizontal" size={18} />
-                  <span>More</span>
+                  <Icon name="User" size={18} />
+                  <div className="hidden lg:flex flex-col items-start">
+                    <span className="text-sm font-medium leading-tight">
+                      {user?.first_name && user?.last_name 
+                        ? `${user.first_name} ${user.last_name}`
+                        : user?.email?.split('@')[0] || 'User'
+                      }
+                    </span>
+                    <span className="text-xs text-muted-foreground leading-tight">
+                      {user?.email || ''}
+                    </span>
+                  </div>
+                  <span className="lg:hidden text-sm font-medium">
+                    {user?.first_name && user?.last_name 
+                      ? `${user.first_name} ${user.last_name}`
+                      : user?.email?.split('@')[0] || 'User'
+                    }
+                  </span>
                 </button>
 
                 {isMoreMenuOpen && (

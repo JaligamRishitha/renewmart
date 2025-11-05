@@ -16,20 +16,31 @@ def seed_lookup_tables():
             try:
                 print("🌱 Seeding lookup tables...")
                 
-                # Seed lu_status (note: actual table has status_key, status_name, description - not scope)
+                # Seed lu_status (table has status_key and scope columns)
                 print("   Seeding lu_status...")
                 conn.execute(text("""
-                    INSERT INTO lu_status(status_key, status_name, description) VALUES
-                    ('draft', 'Draft', 'Land in draft status'),
-                    ('submitted', 'Submitted', 'Land submitted for review'),
-                    ('under_review', 'Under Review', 'Land under review'),
-                    ('approved', 'Approved', 'Land approved'),
-                    ('rejected', 'Rejected', 'Land rejected'),
-                    ('investor_ready', 'Investor Ready', 'Land ready for investors'),
-                    ('published', 'Published', 'Land published to marketplace'),
-                    ('interest_locked', 'Interest Locked', 'Investor interest locked'),
-                    ('rtb', 'Ready to Buy', 'Ready to buy'),
-                    ('complete', 'Complete', 'Land complete')
+                    INSERT INTO lu_status(status_key, scope) VALUES
+                    ('draft', 'land'),
+                    ('submitted', 'land'),
+                    ('under_review', 'land'),
+                    ('approved', 'land'),
+                    ('rejected', 'land'),
+                    ('investor_ready', 'land'),
+                    ('published', 'land'),
+                    ('interest_locked', 'land'),
+                    ('rtb', 'land'),
+                    ('complete', 'land'),
+                    ('assigned', 'task'),
+                    ('in_progress', 'task'),
+                    ('pending', 'task'),
+                    ('delayed', 'task'),
+                    ('completed', 'task'),
+                    ('rejected', 'task'),
+                    ('on_hold', 'task'),
+                    ('draft', 'section'),
+                    ('submitted', 'section'),
+                    ('approved', 'section'),
+                    ('rejected', 'section')
                     ON CONFLICT (status_key) DO NOTHING
                 """))
                 

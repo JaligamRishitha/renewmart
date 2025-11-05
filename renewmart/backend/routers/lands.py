@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import Response
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
+import json
 
 from database import get_db
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, security
 from models.schemas import (
     LandCreate, LandUpdate, LandResponse, Land,
     LandSectionCreate, LandSection,
@@ -48,6 +51,11 @@ async def get_admin_projects(
             l.created_at,
             l.updated_at,
             l.published_at,
+            l.landowner_id,
+            CASE 
+                WHEN l.site_image IS NOT NULL THEN true
+                ELSE false
+            END as has_site_image,
             u.email as landowner_email,
             u.first_name,
             u.last_name,
@@ -63,8 +71,8 @@ async def get_admin_projects(
                  l.capacity_mw, l.price_per_mwh, l.area_acres, l.status,
                  l.timeline_text, l.contract_term_years, l.developer_name,
                  l.admin_notes, l.project_priority, l.project_due_date,
-                 l.created_at, l.updated_at, l.published_at,
-                 u.email, u.first_name, u.last_name, u.phone
+                 l.created_at, l.updated_at, l.published_at, l.landowner_id,
+                 l.site_image, u.email, u.first_name, u.last_name, u.phone
         ORDER BY 
             CASE l.status
                 WHEN 'submitted' THEN 1
@@ -88,30 +96,55 @@ async def get_admin_projects(
     for row in results:
         landowner_name = f"{row.first_name or ''} {row.last_name or ''}".strip() or row.landowner_email
         
+        # Build image URL for site image if available
+        image_url = None
+        has_site_image = row.has_site_image if hasattr(row, 'has_site_image') else False
+        if has_site_image:
+            image_url = f"/api/lands/{row.land_id}/site-image"
+        
         project = {
             "id": str(row.land_id),
+            "land_id": str(row.land_id),
+            "landowner_id": str(row.landowner_id) if row.landowner_id else None,
             "landownerName": landowner_name,
             "landownerEmail": row.landowner_email,
             "landownerPhone": row.phone,
             "location": row.location_text or "Not specified",
+            "location_text": row.location_text or "Not specified",
             "projectType": row.land_type or "Not specified",
+            "land_type": row.land_type or None,
             "energy_key": row.energy_key or "Not specified",
             "energyType": row.energy_key or "Not specified",
             "capacity": f"{row.capacity_mw} MW" if row.capacity_mw else "Not specified",
+            "capacity_mw": float(row.capacity_mw) if row.capacity_mw else None,
             "pricePerMWh": float(row.price_per_mwh) if row.price_per_mwh else 0,
+            "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
             "areaAcres": float(row.area_acres) if row.area_acres else 0,
+            "area_acres": float(row.area_acres) if row.area_acres else None,
             "status": row.status or "unknown",
             "timeline": row.timeline_text or "Not specified",
+            "timeline_text": row.timeline_text or None,
             "contractTerm": f"{row.contract_term_years} years" if row.contract_term_years else "Not specified",
+            "contract_term_years": row.contract_term_years,
             "developerName": row.developer_name or "Not specified",
+            "developer_name": row.developer_name or None,
             "adminNotes": row.admin_notes or "",
+            "admin_notes": row.admin_notes or None,
+            "description": row.admin_notes or None,
             "project_priority": row.project_priority,
             "project_due_date": row.project_due_date.isoformat() if row.project_due_date else None,
             "submittedDate": row.created_at.isoformat() if row.created_at else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
             "lastUpdated": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "publishedAt": row.published_at.isoformat() if row.published_at else None,
             "title": row.title or f"{row.land_type} Project",
-            "investorInterestCount": int(row.investor_interest_count) if row.investor_interest_count else 0
+            "investorInterestCount": int(row.investor_interest_count) if row.investor_interest_count else 0,
+            "has_site_image": has_site_image,
+            "image_url": image_url,
+            "first_name": row.first_name,
+            "last_name": row.last_name,
+            "phone": row.phone
         }
         projects.append(project)
     
@@ -365,14 +398,38 @@ async def get_landowner_dashboard_summary(
     user_id = current_user["user_id"]
     
     # Get summary statistics
+    # For drafts, count only unique project IDs (one per land_id) - get the latest draft per project
     summary_query = text("""
+        WITH ranked_drafts AS (
+            SELECT 
+                land_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY land_id 
+                    ORDER BY updated_at DESC
+                ) as rn
+            FROM lands
+            WHERE landowner_id = :user_id
+            AND status = 'draft'
+        ),
+        unique_drafts AS (
+            SELECT land_id
+            FROM ranked_drafts
+            WHERE rn = 1
+        ),
+        all_lands AS (
+            SELECT 
+                land_id,
+                status,
+                area_acres
+            FROM lands
+            WHERE landowner_id = :user_id
+        )
         SELECT 
             COUNT(*) as total_projects,
             COALESCE(SUM(area_acres), 0) as total_land_area,
-            COUNT(CASE WHEN status IN ('published', 'rtb', 'interest_locked') THEN 1 END) as active_projects,
+            (SELECT COUNT(*) FROM unique_drafts) as draft_projects,
             COUNT(CASE WHEN status IN ('published', 'rtb') THEN 1 END) as completed_submissions
-        FROM lands
-        WHERE landowner_id = :user_id
+        FROM all_lands
     """)
     
     summary_result = db.execute(summary_query, {"user_id": user_id}).fetchone()
@@ -391,7 +448,7 @@ async def get_landowner_dashboard_summary(
     
     return {
         "totalLandArea": float(summary_result.total_land_area) if summary_result.total_land_area else 0,
-        "activeProjects": int(summary_result.active_projects),
+        "draftProjects": int(summary_result.draft_projects),
         "completedSubmissions": int(summary_result.completed_submissions),
         "estimatedRevenue": float(revenue_result.estimated_revenue) if revenue_result.estimated_revenue else 0,
         "totalProjects": int(summary_result.total_projects)
@@ -410,47 +467,78 @@ async def get_landowner_dashboard_projects(
     """Get landowner's projects for dashboard display."""
     user_id = current_user["user_id"]
     
-    # Build query
+    # Build query - get only the latest updated project per land_id
+    # This ensures we show only the most recent version of each project
+    # If a project was submitted (status = under_review), we show that, not old draft versions
     query = """
+        WITH ranked_lands AS (
+            SELECT 
+                l.land_id,
+                l.title as name,
+                l.location_text as location,
+                l.energy_key as type,
+                l.capacity_mw as capacity,
+                l.status,
+                l.updated_at as last_updated,
+                l.timeline_text as timeline,
+                l.price_per_mwh,
+                l.area_acres,
+                l.created_at,
+                CASE 
+                    WHEN l.status = 'draft' THEN 'Draft - Not yet submitted (visible to admin)'
+                    WHEN l.status = 'submitted' THEN 'Submitted - Awaiting admin review'
+                    WHEN l.status = 'under_review' THEN 'Admin reviewing - sections assigned to reviewers'
+                    WHEN l.status = 'approved' THEN 'Approved - Ready for publishing'
+                    WHEN l.status = 'published' THEN 'Published to investors'
+                    WHEN l.status = 'rtb' THEN 'Ready to Buy - All approvals completed'
+                    WHEN l.status = 'interest_locked' THEN 'Investor interest received - Hidden from others'
+                    WHEN l.status = 'rejected' THEN 'Rejected - Needs revision'
+                    ELSE 'Unknown status'
+                END as description,
+                ROW_NUMBER() OVER (
+                    PARTITION BY l.land_id
+                    ORDER BY l.updated_at DESC
+                ) as rn
+            FROM lands l
+            WHERE l.landowner_id = :user_id
+        )
         SELECT 
-            l.land_id,
-            l.title as name,
-            l.location_text as location,
-            l.energy_key as type,
-            l.capacity_mw as capacity,
-            l.status,
-            l.updated_at as last_updated,
-            l.timeline_text as timeline,
-            l.price_per_mwh,
-            l.area_acres,
-            l.created_at,
-            CASE 
-                WHEN l.status = 'draft' THEN 'Draft - Not yet submitted (visible to admin)'
-                WHEN l.status = 'submitted' THEN 'Submitted - Awaiting admin review'
-                WHEN l.status = 'under_review' THEN 'Admin reviewing - sections assigned to reviewers'
-                WHEN l.status = 'approved' THEN 'Approved - Ready for publishing'
-                WHEN l.status = 'published' THEN 'Published to investors'
-                WHEN l.status = 'rtb' THEN 'Ready to Buy - All approvals completed'
-                WHEN l.status = 'interest_locked' THEN 'Investor interest received - Hidden from others'
-                WHEN l.status = 'rejected' THEN 'Rejected - Needs revision'
-                ELSE 'Unknown status'
-            END as description
-        FROM lands l
-        WHERE l.landowner_id = :user_id
+            land_id,
+            name,
+            location,
+            type,
+            capacity,
+            status,
+            last_updated,
+            timeline,
+            price_per_mwh,
+            area_acres,
+            created_at,
+            description
+        FROM ranked_lands
+        WHERE rn = 1
     """
     
-    params = {"user_id": user_id, "skip": skip, "limit": limit}
+    params = {"user_id": user_id}
     
-    # Apply filters
+    # Apply filters - add WHERE conditions to the CTE
+    filter_conditions = []
     if status_filter:
-        query += " AND l.status = :status_filter"
+        filter_conditions.append("l.status = :status_filter")
         params["status_filter"] = status_filter
     
     if search:
-        query += " AND (LOWER(l.title) LIKE :search OR LOWER(l.location_text) LIKE :search)"
+        filter_conditions.append("(LOWER(l.title) LIKE :search OR LOWER(l.location_text) LIKE :search)")
         params["search"] = f"%{search.lower()}%"
     
-    query += " ORDER BY l.updated_at DESC OFFSET :skip LIMIT :limit"
+    if filter_conditions:
+        query = query.replace("WHERE l.landowner_id = :user_id", 
+                            f"WHERE l.landowner_id = :user_id AND {' AND '.join(filter_conditions)}")
+    
+    # Add ordering and pagination to the final SELECT
+    query += " ORDER BY last_updated DESC OFFSET :skip LIMIT :limit"
+    params["skip"] = skip
+    params["limit"] = limit
     
     results = db.execute(text(query), params).fetchall()
     
@@ -468,13 +556,21 @@ async def get_landowner_dashboard_projects(
             "name": row.name or "Untitled Project",
             "location": row.location or "Location not specified",
             "type": row.type or "solar",  # Default to solar if not specified
+            "energy_key": row.type or "solar",  # Also include as energy_key for compatibility
+            "energyType": row.type or "solar",  # Also include as energyType for compatibility
             "capacity": float(row.capacity) if row.capacity else 0,
+            "capacity_mw": float(row.capacity) if row.capacity else 0,  # Also include as capacity_mw
+            "areaAcres": float(row.area_acres) if row.area_acres else None,
+            "area_acres": float(row.area_acres) if row.area_acres else None,
             "status": row.status,
             "lastUpdated": row.last_updated.isoformat() if row.last_updated else None,
             "timeline": row.timeline or "Not specified",
+            "timeline_text": row.timeline or "Not specified",  # Also include as timeline_text
             "estimatedRevenue": round(estimated_revenue, 2),
             "description": row.description,
-            "createdAt": row.created_at.isoformat() if row.created_at else None
+            "createdAt": row.created_at.isoformat() if row.created_at else None,
+            "title": row.name or "Untitled Project",  # Also include as title
+            "location_text": row.location or "Location not specified"  # Also include as location_text
         }
         projects.append(project)
     
@@ -497,7 +593,6 @@ async def create_land(
         # Prepare coordinates as JSON string if it's a dict
         coordinates_json = land_data.coordinates
         if isinstance(coordinates_json, dict):
-            import json
             coordinates_json = json.dumps(coordinates_json)
         
         # Map energy_key from API to database
@@ -508,8 +603,8 @@ async def create_land(
         
         # Ensure 'draft' status exists in lu_status table
         db.execute(text("""
-            INSERT INTO lu_status(status_key, status_name, description) 
-            VALUES ('draft', 'Draft', 'Land in draft status')
+            INSERT INTO lu_status(status_key, scope) 
+            VALUES ('draft', 'land')
             ON CONFLICT (status_key) DO NOTHING
         """))
         
@@ -762,11 +857,22 @@ async def update_land(
             detail="Not enough permissions to update this land"
         )
     
+    # Prevent reverting status from submitted (or any non-draft status) back to draft
+    # Once a project is submitted, it cannot be changed back to draft
+    current_status = land_result.status
+    update_data = land_update.dict(exclude_unset=True)
+    
+    if 'status' in update_data and update_data['status'] == 'draft':
+        if current_status != 'draft':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot revert project status from '{current_status}' to 'draft'. Once submitted, a project cannot revert to draft status."
+            )
+    
     # Build dynamic update query
     update_fields = []
     params = {"land_id": str(land_id)}
     
-    update_data = land_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         # Map energy_key field (no column mapping needed - matches database)
         db_field = field
@@ -791,7 +897,18 @@ async def update_land(
         # JSON fields
         elif field == "coordinates":
             update_fields.append(f"{field} = :{field}")
-            params[field] = str(value) if value is not None else None
+            if value is not None:
+                # Properly serialize dict/object to JSON string for PostgreSQL
+                if isinstance(value, dict):
+                    params[field] = json.dumps(value)
+                elif isinstance(value, str):
+                    # If already a JSON string, use it as-is
+                    params[field] = value
+                else:
+                    # Try to convert to JSON string
+                    params[field] = json.dumps(value)
+            else:
+                params[field] = None
         # Date/time fields
         elif field == "project_due_date":
             update_fields.append(f"{field} = :{field}")
@@ -879,7 +996,7 @@ async def delete_land(
     """Delete land (owner or admin only)."""
     # Check if land exists and user has permission
     land_check = text("""
-        SELECT owner_id, status_key FROM lands WHERE land_id = :land_id
+        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
     """)
     
     land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
@@ -893,7 +1010,7 @@ async def delete_land(
     # Check permissions - convert both to strings for comparison
     user_roles = current_user.get("roles", [])
     user_id_str = str(current_user["user_id"])
-    owner_id_str = str(land_result.owner_id)
+    owner_id_str = str(land_result.landowner_id)
     
     is_admin = "administrator" in user_roles
     is_owner = owner_id_str == user_id_str
@@ -905,26 +1022,82 @@ async def delete_land(
         )
     
     # Only allow deletion of draft lands
-    if land_result.status_key != "draft":
+    if land_result.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only draft lands can be deleted"
         )
     
-    delete_query = text("DELETE FROM lands WHERE land_id = :land_id")
-    db.execute(delete_query, {"land_id": str(land_id)})
-    db.commit()
-    
-    return MessageResponse(message="Land deleted successfully")
+    try:
+        # Delete in order to avoid foreign key constraint issues with triggers
+        # The trigger log_document_change() fires AFTER DELETE on documents and tries to insert
+        # into document_audit_trail, but the document_id foreign key constraint fails.
+        # We need to delete audit trail entries first, then temporarily disable the trigger.
+        
+        # Step 1: Delete all document_audit_trail entries for this land
+        delete_audit_query = text("""
+            DELETE FROM document_audit_trail 
+            WHERE land_id = :land_id
+               OR document_id IN (
+                   SELECT document_id FROM documents WHERE land_id = :land_id
+               )
+        """)
+        db.execute(delete_audit_query, {"land_id": str(land_id)})
+        
+        # Step 2: Temporarily disable the trigger to avoid foreign key constraint issues
+        disable_trigger_query = text("ALTER TABLE documents DISABLE TRIGGER trg_log_document_change")
+        db.execute(disable_trigger_query)
+        
+        try:
+            # Step 3: Delete documents (trigger is disabled, so no audit trail insertion)
+            delete_documents_query = text("DELETE FROM documents WHERE land_id = :land_id")
+            db.execute(delete_documents_query, {"land_id": str(land_id)})
+            
+            # Step 4: Delete the land (this will cascade delete land_sections, tasks, investor_interests, etc.)
+            delete_land_query = text("DELETE FROM lands WHERE land_id = :land_id")
+            result = db.execute(delete_land_query, {"land_id": str(land_id)})
+            
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Land not found or already deleted"
+                )
+        finally:
+            # Step 5: Re-enable the trigger
+            enable_trigger_query = text("ALTER TABLE documents ENABLE TRIGGER trg_log_document_change")
+            db.execute(enable_trigger_query)
+        
+        db.commit()
+        return MessageResponse(message="Land deleted successfully")
+        
+    except HTTPException:
+        db.rollback()
+        # Make sure trigger is re-enabled even if there's an error
+        try:
+            db.execute(text("ALTER TABLE documents ENABLE TRIGGER trg_log_document_change"))
+        except:
+            pass
+        raise
+    except Exception as e:
+        db.rollback()
+        # Make sure trigger is re-enabled even if there's an error
+        try:
+            db.execute(text("ALTER TABLE documents ENABLE TRIGGER trg_log_document_change"))
+        except:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting land: {str(e)}"
+        )
 
 # Land status management
-@router.post("/{land_id}/submit", response_model=MessageResponse)
+@router.put("/{land_id}/submit", response_model=MessageResponse)
 async def submit_land_for_review(
     land_id: UUID,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Submit land for review (owner only)."""
+    """Submit land for review (owner only). Changes status from draft to under_review. Once submitted, cannot revert to draft."""
     # First check if land exists and belongs to user
     check_query = text("""
         SELECT landowner_id, status FROM lands WHERE land_id = :land_id
@@ -948,76 +1121,76 @@ async def submit_land_for_review(
             detail="Not authorized to submit this land"
         )
     
+    # Prevent reverting from under_review (or any non-draft status) back to draft
     if land_result.status != 'draft':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Can only submit draft lands. Current status: {land_result.status}"
+            detail=f"Can only submit draft lands. Current status: {land_result.status}. Once submitted, a project cannot revert to draft status."
         )
     
-    # Try to use stored procedure first, fallback to direct update
+    # Update status from draft to under_review
+    # This is a one-way transition - once submitted, it cannot be draft again
+    update_query = text("""
+        UPDATE lands 
+        SET status = 'under_review', updated_at = CURRENT_TIMESTAMP
+        WHERE land_id = :land_id 
+        AND landowner_id = :owner_id 
+        AND status = 'draft'
+    """)
+    
     try:
-        sp_query = text("SELECT sp_land_submit_for_review(:land_id, :owner_id) as success")
-        result = db.execute(sp_query, {
+        result = db.execute(update_query, {
             "land_id": str(land_id),
-            "owner_id": current_user["user_id"]
-        }).fetchone()
+            "owner_id": str(current_user["user_id"])
+        })
         
-        if result and result.success:
-            db.commit()
-            return MessageResponse(message="Land submitted for review successfully")
-    except Exception as sp_error:
-        # Stored procedure doesn't exist, use direct update
-        db.rollback()
-        print(f"Stored procedure not found, using direct update: {sp_error}")
-        
-        try:
-            update_query = text("""
-                UPDATE lands 
-                SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                WHERE land_id = :land_id AND landowner_id = :owner_id
-            """)
-            
-            db.execute(update_query, {
-                "land_id": str(land_id),
-                "owner_id": current_user["user_id"]
-            })
-            
-            # Get project title for notification
-            land_title_query = text("SELECT title FROM lands WHERE land_id = :land_id")
-            land_title_result = db.execute(land_title_query, {"land_id": str(land_id)}).fetchone()
-            project_title = land_title_result.title if land_title_result else "Project"
-            
-            # Get admin users to notify
-            admin_query = text("""
-                SELECT DISTINCT u.user_id
-                FROM "user" u
-                JOIN user_roles ur ON u.user_id = ur.user_id
-                WHERE ur.role_key = 'administrator' AND u.is_active = true
-            """)
-            admin_users = db.execute(admin_query).fetchall()
-            admin_user_ids = [str(row.user_id) for row in admin_users]
-            
-            # Create notifications
-            try:
-                from utils.notifications import notify_project_submitted
-                notify_project_submitted(
-                    db=db,
-                    land_id=str(land_id),
-                    project_title=project_title,
-                    landowner_id=str(current_user["user_id"]),
-                    admin_user_ids=admin_user_ids
-                )
-            except Exception as e:
-                print(f"Error creating project submission notification: {str(e)}")
-            
-            db.commit()
-            return MessageResponse(message="Land submitted for review successfully")
-        except Exception as e:
-            db.rollback()
+        # Check if any rows were updated
+        if result.rowcount == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error submitting land: {str(e)}"
+                detail="Failed to submit land. The project may have already been submitted or does not exist."
             )
+        
+        # Get project title for notification
+        land_title_query = text("SELECT title FROM lands WHERE land_id = :land_id")
+        land_title_result = db.execute(land_title_query, {"land_id": str(land_id)}).fetchone()
+        project_title = land_title_result.title if land_title_result else "Project"
+        
+        # Get admin users to notify
+        admin_query = text("""
+            SELECT DISTINCT u.user_id
+            FROM "user" u
+            JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE ur.role_key = 'administrator' AND u.is_active = true
+        """)
+        admin_users = db.execute(admin_query).fetchall()
+        admin_user_ids = [str(row.user_id) for row in admin_users]
+        
+        # Create notifications
+        try:
+            from utils.notifications import notify_project_submitted
+            notify_project_submitted(
+                db=db,
+                land_id=str(land_id),
+                project_title=project_title,
+                landowner_id=str(current_user["user_id"]),
+                admin_user_ids=admin_user_ids
+            )
+        except Exception as e:
+            print(f"Error creating project submission notification: {str(e)}")
+        
+        db.commit()
+        return MessageResponse(message="Land submitted for review successfully. Status changed to under_review.")
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error submitting land: {str(e)}"
+        )
 
 @router.post("/{land_id}/publish", response_model=MessageResponse)
 async def publish_land(
@@ -1104,6 +1277,10 @@ async def get_published_lands(
             l.developer_name,
             l.published_at,
             l.created_at,
+            CASE 
+                WHEN l.site_image IS NOT NULL THEN true
+                ELSE false
+            END as has_site_image,
             u.first_name || ' ' || u.last_name as landowner_name,
             u.email as landowner_email,
             COUNT(DISTINCT ii.interest_id) as interest_count
@@ -1144,7 +1321,7 @@ async def get_published_lands(
         GROUP BY l.land_id, l.title, l.location_text, l.coordinates, l.land_type,
                  l.energy_key, l.capacity_mw, l.price_per_mwh, l.area_acres,
                  l.timeline_text, l.contract_term_years, l.developer_name,
-                 l.published_at, l.created_at, u.first_name, u.last_name, u.email
+                 l.published_at, l.created_at, l.site_image, u.first_name, u.last_name, u.email
         ORDER BY l.published_at DESC NULLS LAST, l.created_at DESC
         OFFSET :skip LIMIT :limit
     """
@@ -1153,6 +1330,13 @@ async def get_published_lands(
     
     projects = []
     for row in results:
+        # Build image URL - use site_image if available, otherwise null
+        image_url = None
+        has_site_image = False
+        if hasattr(row, 'has_site_image') and row.has_site_image:
+            image_url = f"/api/lands/{row.land_id}/site-image"
+            has_site_image = True
+        
         project = {
             "id": str(row.land_id),
             "land_id": str(row.land_id),
@@ -1160,7 +1344,9 @@ async def get_published_lands(
             "name": row.title or f"{row.energy_key or 'Energy'} Project",
             "type": row.energy_key or "Not specified",
             "energyType": row.energy_key or "Not specified",
+            "energy_key": row.energy_key or "Not specified",
             "location": row.location_text or "Not specified",
+            "location_text": row.location_text or "Not specified",
             "coordinates": row.coordinates,
             "capacity": float(row.capacity_mw) if row.capacity_mw else 0,
             "capacityMW": float(row.capacity_mw) if row.capacity_mw else 0,
@@ -1181,7 +1367,9 @@ async def get_published_lands(
             "published_at": row.published_at.isoformat() if row.published_at else None,
             "published_date": row.published_at.isoformat() if row.published_at else None,
             "interestCount": row.interest_count or 0,
-            "isAvailable": True
+            "isAvailable": True,
+            "image_url": image_url,
+            "has_site_image": has_site_image
         }
         projects.append(project)
     
@@ -1611,3 +1799,280 @@ async def save_project_document_role_mappings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error saving mappings: {error_msg}"
         )
+
+
+@router.post("/{land_id}/site-image")
+async def upload_site_image(
+    land_id: UUID,
+    image: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload site image for a project (reviewer or admin only)."""
+    # Check if land exists and user has permission
+    land_check = text("""
+        SELECT land_id, status, landowner_id
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions: admin, reviewer, or landowner
+    user_roles = current_user.get("roles", [])
+    is_admin = "administrator" in user_roles
+    is_reviewer = any(role in ["re_sales_advisor", "re_analyst", "re_governance_lead"] for role in user_roles)
+    is_owner = str(land_result.landowner_id) == str(current_user["user_id"])
+    
+    if not (is_admin or is_reviewer or is_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to upload site image"
+        )
+    
+    # Validate file type
+    if not image.content_type or not image.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+    
+    # Read image data
+    try:
+        image_data = await image.read()
+        
+        # Validate file size (max 10MB)
+        if len(image_data) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Image size must be less than 10MB"
+            )
+        
+        # Update or insert site image
+        update_query = text("""
+            UPDATE lands 
+            SET site_image = :image_data,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE land_id = :land_id
+            RETURNING land_id
+        """)
+        
+        result = db.execute(update_query, {
+            "land_id": str(land_id),
+            "image_data": image_data
+        }).fetchone()
+        
+        db.commit()
+        
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to upload site image"
+            )
+        
+        return {
+            "message": "Site image uploaded successfully",
+            "land_id": str(land_id),
+            "image_url": f"/api/lands/{land_id}/site-image"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload site image: {str(e)}"
+        )
+
+
+@router.get("/{land_id}/site-image")
+async def get_site_image(
+    land_id: UUID,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get site image for a project (public for published projects)."""
+    # Check if land exists
+    query = text("""
+        SELECT site_image, status, landowner_id
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    result = db.execute(query, {"land_id": str(land_id)}).fetchone()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions: public access for published projects, otherwise require auth
+    is_published = result.status == "published"
+    current_user = None
+    
+    if not is_published:
+        # For non-published projects, require authentication
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+        
+        try:
+            from auth import verify_token, get_user_by_id
+            token_data = verify_token(credentials.credentials)
+            if token_data:
+                current_user = get_user_by_id(token_data.user_id, db)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+        
+        user_roles = current_user.get("roles", []) if isinstance(current_user, dict) else []
+        is_admin = "administrator" in user_roles
+        is_reviewer = any(role in ["re_sales_advisor", "re_analyst", "re_governance_lead"] for role in user_roles)
+        user_id = current_user.get("user_id") if isinstance(current_user, dict) else None
+        is_owner = user_id and str(result.landowner_id) == str(user_id)
+        
+        if not (is_admin or is_reviewer or is_owner):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions to view site image"
+            )
+    
+    if not result.site_image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Site image not found"
+        )
+    
+    # Return image as response
+    return Response(
+        content=result.site_image,
+        media_type="image/jpeg",
+        headers={
+            "Content-Disposition": f"inline; filename=site-image-{land_id}.jpg"
+        }
+    )
+
+
+@router.get("/{land_id}/site-image-url")
+async def get_site_image_url(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get site image URL for a project (returns URL if exists, null otherwise)."""
+    # Check if land exists and user has permission
+    query = text("""
+        SELECT site_image, status, landowner_id
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    result = db.execute(query, {"land_id": str(land_id)}).fetchone()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions
+    user_roles = current_user.get("roles", [])
+    is_admin = "administrator" in user_roles
+    is_reviewer = any(role in ["re_sales_advisor", "re_analyst", "re_governance_lead"] for role in user_roles)
+    is_owner = str(result.landowner_id) == str(current_user["user_id"])
+    is_published = result.status == "published"
+    
+    if not (is_admin or is_reviewer or is_owner or is_published):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to view site image"
+        )
+    
+    if result.site_image:
+        return {
+            "image_url": f"/api/lands/{land_id}/site-image",
+            "has_image": True
+        }
+    else:
+        return {
+            "image_url": None,
+            "has_image": False
+        }
+
+
+@router.delete("/{land_id}/site-image")
+async def delete_site_image(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete site image for a project (reviewer or admin only)."""
+    # Check if land exists and user has permission
+    land_check = text("""
+        SELECT land_id, status, landowner_id
+        FROM lands 
+        WHERE land_id = :land_id
+    """)
+    
+    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check permissions: admin or reviewer
+    user_roles = current_user.get("roles", [])
+    is_admin = "administrator" in user_roles
+    is_reviewer = any(role in ["re_sales_advisor", "re_analyst", "re_governance_lead"] for role in user_roles)
+    
+    if not (is_admin or is_reviewer):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to delete site image"
+        )
+    
+    # Delete site image
+    update_query = text("""
+        UPDATE lands 
+        SET site_image = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE land_id = :land_id
+        RETURNING land_id
+    """)
+    
+    result = db.execute(update_query, {
+        "land_id": str(land_id)
+    }).fetchone()
+    
+    db.commit()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete site image"
+        )
+    
+    return {
+        "message": "Site image deleted successfully",
+        "land_id": str(land_id)
+    }

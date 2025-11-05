@@ -10,6 +10,7 @@ import ReviewPanelCompact from './ReviewPanelCompact';
 import TaskPanel from './TaskPanel';
 import TeamsStyleMessaging from './components/TeamsStyleMessaging';
 import CollaborationWork from './components/CollaborationWork';
+import SiteImageUpload from './components/SiteImageUpload';
 import toast from 'react-hot-toast';
 
 const ProjectDetails = () => {
@@ -143,6 +144,7 @@ const ProjectDetails = () => {
     { id: 'overview', label: 'Overview', icon: 'LayoutGrid' },
     { id: 'documents', label: 'Documents', icon: 'FileText' },
     { id: 'collaboration', label: 'Collaboration Work', icon: 'Handshake' },
+    { id: 'site-image', label: 'Site Image', icon: 'Image' },
     { id: 'messaging', label: 'Messaging', icon: 'MessageSquare' }
   ];
 
@@ -657,7 +659,7 @@ const ProjectDetails = () => {
       'sale-contracts': 'FileText',
       'topographical-surveys': 'Map',
       'grid-connectivity': 'Zap',
-      'financial-models': 'DollarSign',
+      'financial-models': 'PoundSterling',
       'zoning-approvals': 'Building',
       'environmental-impact': 'Leaf',
       'government-nocs': 'Shield'
@@ -1034,9 +1036,6 @@ const handleRejectDocument = async (doc) => {
               <h1 className="text-3xl font-bold text-foreground mb-2">
                 {project?.title || 'Project Details'}
               </h1>
-              <p className="text-muted-foreground">
-                Project ID: {landId}
-              </p>
             </div>
             <button
               onClick={fetchProjectDetails}
@@ -1171,10 +1170,6 @@ const handleRejectDocument = async (doc) => {
                 <div>
                   <span className="text-sm text-muted-foreground">Project:</span>
                   <p className="font-medium text-foreground">{project?.title || 'Untitled Project'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-muted-foreground">Land ID:</span>
-                  <p className="font-medium text-foreground">{landId}</p>
                 </div>
                 <div>
                   <span className="text-sm text-muted-foreground">Total Documents:</span>
@@ -1512,13 +1507,21 @@ const handleRejectDocument = async (doc) => {
           </div>
         )}
 
-        {/* Messaging Tab */}
+        {/* Collaboration Tab */}
         {activeTab === 'collaboration' && (
           <div className="bg-card border border-border rounded-lg p-6">
             <CollaborationWork />
           </div>
         )}
 
+        {/* Site Image Tab */}
+        {activeTab === 'site-image' && (
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SiteImageUpload landId={landId} />
+          </div>
+        )}
+
+        {/* Messaging Tab */}
         {activeTab === 'messaging' && (
           <div className="bg-card border border-border rounded-lg overflow-hidden h-[600px]">
             <TeamsStyleMessaging 

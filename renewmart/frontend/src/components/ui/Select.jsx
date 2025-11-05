@@ -1,9 +1,13 @@
 // components/ui/Select.jsx - Shadcn style Select
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ChevronDown, Check, Search, X } from "lucide-react";
 import { cn } from "../../utils/cn";
 import Button from "./Button";
 import Input from "./Input";
+
+// Global state to track open dropdowns and close others
+let openDropdowns = new Set();
+let selectCounter = 0;
 
 const Select = React.forwardRef(({
     className,
@@ -28,9 +32,66 @@ const Select = React.forwardRef(({
 }, ref) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const selectRef = useRef(null);
+    const dropdownRef = useRef(null);
+    
+    // Generate unique ID if not provided - use useRef to keep it stable across renders
+    const selectIdRef = useRef(id || `select-${++selectCounter}`);
+    const selectId = id || selectIdRef.current;
 
-    // Generate unique ID if not provided
-    const selectId = id || `select-${Math.random()?.toString(36)?.substr(2, 9)}`;
+    // Close other dropdowns when this one opens
+    useEffect(() => {
+        if (isOpen) {
+            // Close all other dropdowns
+            openDropdowns.forEach((dropdownId) => {
+                if (dropdownId !== selectId) {
+                    const event = new CustomEvent('closeSelect', { detail: { id: dropdownId } });
+                    window.dispatchEvent(event);
+                }
+            });
+            openDropdowns.add(selectId);
+        } else {
+            openDropdowns.delete(selectId);
+        }
+
+        // Listen for close events from other dropdowns
+        const handleCloseSelect = (e) => {
+            if (e.detail?.id === selectId && isOpen) {
+                setIsOpen(false);
+                onOpenChange?.(false);
+            }
+        };
+
+        window.addEventListener('closeSelect', handleCloseSelect);
+
+        // Close on outside click
+        const handleClickOutside = (event) => {
+            if (
+                selectRef.current &&
+                !selectRef.current.contains(event.target) &&
+                dropdownRef.current &&
+                !dropdownRef.current.contains(event.target)
+            ) {
+                if (isOpen) {
+                    setIsOpen(false);
+                    onOpenChange?.(false);
+                    openDropdowns.delete(selectId);
+                }
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            window.removeEventListener('closeSelect', handleCloseSelect);
+            document.removeEventListener('mousedown', handleClickOutside);
+            if (!isOpen) {
+                openDropdowns.delete(selectId);
+            }
+        };
+    }, [isOpen, selectId, onOpenChange]);
 
     // Filter options based on search
     const filteredOptions = searchable && searchTerm
@@ -99,7 +160,7 @@ const Select = React.forwardRef(({
     const hasValue = multiple ? value?.length > 0 : value !== undefined && value !== '';
 
     return (
-        <div className={cn("relative z-10", className)}>
+        <div ref={selectRef} className={cn("relative", className)} style={{ zIndex: isOpen ? 50 : 10 }}>
             {label && (
                 <label
                     htmlFor={selectId}
@@ -118,7 +179,7 @@ const Select = React.forwardRef(({
                     id={selectId}
                     type="button"
                     className={cn(
-                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-white text-black px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
                         error && "border-destructive focus:ring-destructive",
                         !hasValue && "text-muted-foreground"
                     )}
@@ -173,7 +234,10 @@ const Select = React.forwardRef(({
 
                 {/* Dropdown */}
                 {isOpen && (
-                    <div className="absolute z-[100] w-full mt-1 bg-white text-black border border-border rounded-md shadow-lg">
+                    <div 
+                        ref={dropdownRef}
+                        className="absolute z-[9999] w-full mt-1 bg-popover text-popover-foreground border border-border rounded-md shadow-lg"
+                    >
                         {searchable && (
                             <div className="p-2 border-b">
                                 <div className="relative">

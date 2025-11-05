@@ -52,7 +52,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);
@@ -144,7 +144,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
           </div>
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-muted/30 rounded-lg p-4 border border-border">
               <div className="flex items-center space-x-2 text-muted-foreground mb-2">
                 <Icon name="Zap" size={16} />
@@ -161,7 +161,19 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                 <span className="text-xs font-medium">Type</span>
               </div>
               <div className="font-heading font-bold text-lg text-foreground capitalize">
-                {project.type}
+                {project.type || project.energy_key || project.energyType || 'N/A'}
+              </div>
+            </div>
+            
+            <div className="bg-muted/30 rounded-lg p-4 border border-border">
+              <div className="flex items-center space-x-2 text-muted-foreground mb-2">
+                <Icon name="Map" size={16} />
+                <span className="text-xs font-medium">Land Area</span>
+              </div>
+              <div className="font-heading font-bold text-lg text-foreground">
+                {project.areaAcres || project.area_acres
+                  ? `${parseFloat(project.areaAcres || project.area_acres).toFixed(2)} acres`
+                  : 'N/A'}
               </div>
             </div>
             
@@ -180,7 +192,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
             {project.estimatedRevenue && (
               <div className="bg-muted/30 rounded-lg p-4 border border-border">
                 <div className="flex items-center space-x-2 text-muted-foreground mb-2">
-                  <Icon name="DollarSign" size={16} />
+                  <Icon name="PoundSterling" size={16} />
                   <span className="text-xs font-medium">Est. Revenue</span>
                 </div>
                 <div className="font-heading font-bold text-lg text-foreground">
@@ -197,11 +209,6 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
             </h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-muted/20 rounded-lg p-4 border border-border">
-                <div className="text-sm text-muted-foreground mb-1">Project ID</div>
-                <div className="font-mono text-sm text-foreground">{project.id}</div>
-              </div>
-              
               <div className="bg-muted/20 rounded-lg p-4 border border-border">
                 <div className="text-sm text-muted-foreground mb-1">Status</div>
                 <div className="font-body text-sm text-foreground capitalize">
@@ -326,60 +333,51 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                            {(interest.phone || interest.investor?.phone) && (
-                              <div className="flex items-center space-x-2 text-sm">
-                                <Icon name="Phone" size={14} className="text-muted-foreground" />
-                                <span className="text-muted-foreground">Phone:</span>
-                                <span className="text-foreground">{interest.phone || interest.investor?.phone}</span>
-                              </div>
-                            )}
-                            
-                            {interest.status && (
-                              <div className="flex items-center space-x-2 text-sm">
-                                <Icon name="Info" size={14} className="text-muted-foreground" />
-                                <span className="text-muted-foreground">Status:</span>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  interest.status === 'approved' ? 'bg-green-500/10 text-green-600' :
-                                  interest.status === 'pending' ? 'bg-yellow-500/10 text-yellow-600' :
-                                  interest.status === 'rejected' ? 'bg-red-500/10 text-red-600' :
-                                  'bg-blue-500/10 text-blue-600'
-                                }`}>
-                                  {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
-                                </span>
-                              </div>
-                            )}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mt-4">
+  {/* Phone */}
+  <div className="flex items-center text-sm min-h-[28px]">
+    <Icon name="Phone" size={14} className="text-muted-foreground mr-2" />
+    <span className="text-muted-foreground w-32">Phone:</span>
+    <span className="text-foreground truncate">
+      {interest.phone || interest.investor?.phone || '—'}
+    </span>
+  </div>
 
-                            {interest.investment_amount && (
-                              <div className="flex items-center space-x-2 text-sm">
-                                <Icon name="DollarSign" size={14} className="text-muted-foreground" />
-                                <span className="text-muted-foreground">Investment Amount:</span>
-                                <span className="text-foreground font-medium">
-                                  ${interest.investment_amount.toLocaleString()}
-                                </span>
-                              </div>
-                            )}
+  {/* Status */}
+  <div className="flex items-center text-sm min-h-[28px]">
+    <Icon name="Info" size={14} className="text-muted-foreground mr-2" />
+    <span className="text-muted-foreground w-32">Status:</span>
+    {interest.status ? (
+      <span
+        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+          interest.status === 'approved'
+            ? 'bg-green-500/10 text-green-600'
+            : interest.status === 'pending'
+            ? 'bg-yellow-500/10 text-yellow-600'
+            : interest.status === 'rejected'
+            ? 'bg-red-500/10 text-red-600'
+            : 'bg-blue-500/10 text-blue-600'
+        }`}
+      >
+        {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
+      </span>
+    ) : (
+      <span className="text-muted-foreground opacity-50">—</span>
+    )}
+  </div>
 
-                            {interest.created_at && (
-                              <div className="flex items-center space-x-2 text-sm">
-                                <Icon name="Calendar" size={14} className="text-muted-foreground" />
-                                <span className="text-muted-foreground">Expressed Interest:</span>
-                                <span className="text-foreground">
-                                  {formatDate(interest.created_at)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+  {/* Expressed Interest */}
+  <div className="flex items-center text-sm min-h-[28px]">
+    <Icon name="Calendar" size={14} className="text-muted-foreground mr-2" />
+    <span className="text-muted-foreground w-32">Expressed Interest:</span>
+    <span className="text-foreground truncate">
+      {interest.created_at ? formatDate(interest.created_at) : '—'}
+    </span>
+  </div>
+</div>
 
-                          {interest.comments && (
-                            <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-border">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <Icon name="MessageCircle" size={14} className="text-muted-foreground" />
-                                <span className="text-xs font-medium text-muted-foreground uppercase">Comments</span>
-                              </div>
-                              <p className="text-sm text-foreground">{interest.comments}</p>
-                            </div>
-                          )}
+
+                          
                         </div>
                       </div>
                     </div>
@@ -395,18 +393,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          {project.status === 'draft' && (
-            <Button
-              variant="default"
-              iconName="Edit"
-              iconPosition="left"
-              onClick={() => {
-                window.location.href = `/document-upload?id=${project.id}`;
-              }}
-            >
-              Continue Editing
-            </Button>
-          )}
+          
         </div>
       </div>
     </div>

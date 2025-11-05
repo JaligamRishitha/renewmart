@@ -13,11 +13,11 @@ const ProjectSummaryCards = ({ summaryData }) => {
       textColor: 'text-primary-foreground'
     },
     {
-      id: 'active-projects',
-      title: 'Active Projects',
-      value: summaryData?.activeProjects,
+      id: 'draft-projects',
+      title: 'Draft Projects',
+      value: summaryData?.draftProjects,
       unit: 'projects',
-      icon: 'Activity',
+      icon: 'FileText',
       color: 'bg-success',
       textColor: 'text-success-foreground'
     },
@@ -33,9 +33,9 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'estimated-revenue',
       title: 'Estimated Revenue',
-      value: `$${summaryData?.estimatedRevenue}`,
+      value: `£${summaryData?.estimatedRevenue}`,
       unit: '/MWh',
-      icon: 'DollarSign',
+      icon: 'PoundSterling',
       color: 'bg-warning',
       textColor: 'text-warning-foreground'
     }

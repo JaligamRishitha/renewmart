@@ -314,9 +314,7 @@ const LandownerProjectReview = () => {
               <h1 className="text-3xl font-bold text-foreground mb-2">
                 {project?.title || 'Project Review Status'}
               </h1>
-              <p className="text-muted-foreground">
-                Project ID: {landId} • Read-only view for landowners
-              </p>
+              
             </div>
             <button
               onClick={fetchProjectDetails}

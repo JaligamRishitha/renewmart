@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
+import Footer from '../../components/ui/Footer';
 import Sidebar from '../../components/ui/Sidebar';
 import Button from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
 import Icon from '../../components/AppIcon';
 import Image from '../../components/AppImage';
 import { useAuth } from '../../contexts/AuthContext';
 import { landsAPI } from '../../services/api';
+import MarketplaceTemplateSettings from './components/MarketplaceTemplateSettings';
 // You can optionally use marketplace components, e.g. PPACard
 // import PPACard from '../marketplace/components/PPACard';
 
@@ -14,11 +17,14 @@ const MarketplaceV2 = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('other'); // Page represents Other Marketplace Projects
+  const [activeTab, setActiveTab] = useState('published'); // 'published' or 'draft'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [projects, setProjects] = useState([]);
-  const [myProjects, setMyProjects] = useState([]);
+  const [publishedProjects, setPublishedProjects] = useState([]);
+  const [draftProjects, setDraftProjects] = useState([]);
+  const [showTemplateSettings, setShowTemplateSettings] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(12);
   const [filters, setFilters] = useState({
     search: '',
     energyType: '',
@@ -37,11 +43,43 @@ const MarketplaceV2 = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await landsAPI.getMarketplaceProjects({});
-      setProjects(data || []);
-      const email = (user?.email || '').toLowerCase();
-      const mine = (data || []).filter(p => (p.landownerEmail || '').toLowerCase() === email);
-      setMyProjects(mine);
+      
+      // Fetch published projects (for Published Projects tab)
+      const publishedData = await landsAPI.getMarketplaceProjects({});
+      setPublishedProjects(publishedData || []);
+      
+      // Fetch all projects to filter for draft/under review (for Draft Projects tab)
+      try {
+        const allProjects = await landsAPI.getAdminProjects();
+        // Filter for draft projects: not published, under review, or draft status
+        const draft = (allProjects || []).filter(p => {
+          const status = (p.status || '').toLowerCase();
+          return status === 'draft' || 
+                 status === 'submitted' || 
+                 status === 'under_review' || 
+                 status === 'approved' ||
+                 !p.publishedAt; // Not published yet
+        });
+        setDraftProjects(draft);
+      } catch (draftErr) {
+        console.error('[Admin Marketplace V2] Error fetching draft projects:', draftErr);
+        // If admin projects API fails, try getLands
+        try {
+          const allLands = await landsAPI.getLands();
+          const draft = (allLands || []).filter(p => {
+            const status = (p.status || '').toLowerCase();
+            return status === 'draft' || 
+                   status === 'submitted' || 
+                   status === 'under_review' || 
+                   status === 'approved' ||
+                   !p.published_at;
+          });
+          setDraftProjects(draft);
+        } catch (landsErr) {
+          console.error('[Admin Marketplace V2] Error fetching lands:', landsErr);
+          setDraftProjects([]);
+        }
+      }
     } catch (err) {
       console.error('[Admin Marketplace V2] Error fetching projects:', err);
       setError('Failed to load marketplace projects');
@@ -66,30 +104,67 @@ const MarketplaceV2 = () => {
     });
   };
 
-  const list = activeTab === 'other' ? applyFiltersFor(projects) : myProjects;
+  const filteredList = activeTab === 'published' ? applyFiltersFor(publishedProjects) : applyFiltersFor(draftProjects);
+  
+  // Pagination logic
+  const totalPages = Math.ceil(filteredList.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const list = filteredList.slice(startIndex, endIndex);
 
-  const Card = ({ project }) => {
-    const rawType = String(project.energy_key || project.energyType || project.project_type || project.type || '').toLowerCase();
-    const isSolar = rawType.includes('solar');
-    const isWind = rawType.includes('wind');
-    const imgSrc = isSolar ? '/assets/images/solar.png' : (isWind ? '/assets/images/wind.png' : null);
+  // Reset to page 1 when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
 
+  const Card = ({ project, isDraft = false }) => {
     const titleText = project.title || project.name || 'Untitled Project';
     const locationText = project.location_text || project.location || project.locationText || 'N/A';
-    const capacityValue = project.capacity_mw || project.capacityMW || project.capacity;
+    const capacityValue = project.capacity_mw || project.capacityMW || (typeof project.capacity === 'string' ? project.capacity.replace(' MW', '') : project.capacity);
     const priceValue = project.price_per_mwh || project.pricePerMWh || project.price;
+    const status = project.status || 'unknown';
+    
+    // Determine image source: prioritize site_image, then fallback to project type mapping
+    let imgSrc = null;
+    if (project.has_site_image && project.image_url) {
+      // Use site image if available
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+      imgSrc = project.image_url.startsWith('/api') 
+        ? `${apiBaseUrl}${project.image_url.substring(4)}`
+        : project.image_url;
+    } else {
+      // Fallback to project type mapping
+      const rawType = String(project.energy_key || project.energyType || project.project_type || project.type || '').toLowerCase();
+      const isSolar = rawType.includes('solar');
+      const isWind = rawType.includes('wind');
+      imgSrc = isSolar ? '/assets/images/solar.png' : (isWind ? '/assets/images/wind.png' : null);
+    }
 
     return (
       <div className="rounded-lg border border-border bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden">
         {imgSrc && (
           <div className="w-full h-36 bg-muted/30">
-            <Image src={imgSrc} alt={`${rawType || 'Project'} image`} className="w-full h-full object-cover" />
+            <Image src={imgSrc} alt={`${titleText} site image`} className="w-full h-full object-cover" />
           </div>
         )}
         <div className="p-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-heading font-semibold text-base text-foreground truncate">{titleText}</h3>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground`}>{(project.energy_key || project.energyType || project.project_type || project.type || 'N/A').toUpperCase()}</span>
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground`}>
+                {(project.energy_key || project.energyType || project.project_type || project.type || 'N/A').toUpperCase()}
+              </span>
+              {isDraft && (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  status === 'under_review' ? 'bg-yellow-100 text-yellow-800' :
+                  status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                  status === 'submitted' ? 'bg-blue-100 text-blue-800' :
+                  'bg-muted text-foreground'
+                }`}>
+                  {status.replace('_', ' ').toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mb-3 truncate">{locationText}</p>
           <div className="grid grid-cols-2 gap-3 text-xs">
@@ -99,11 +174,11 @@ const MarketplaceV2 = () => {
             </div>
             <div>
               <p className="text-muted-foreground">Price</p>
-              <p className="font-medium text-foreground">{priceValue ? `$${priceValue}/MWh` : 'N/A'}</p>
+              <p className="font-medium text-foreground">{priceValue ? `£${priceValue}/MWh` : 'N/A'}</p>
             </div>
           </div>
           <div className="mt-3 flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/project-details/${project.land_id || project.id}`)} iconName="Eye" iconSize={14}>View</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/admin/projects/${project.land_id || project.id}/reviewers`)} iconName="Eye" iconSize={14}>View</Button>
           </div>
         </div>
       </div>
@@ -124,12 +199,37 @@ const MarketplaceV2 = () => {
               <div>
                 <h1 className="font-heading font-bold text-2xl lg:text-3xl text-foreground mb-2">Marketplace</h1>
                 <div className="flex items-center gap-2">
-                  <button className={`px-3 py-1.5 rounded text-sm bg-primary text-primary-foreground`}>Other Marketplace Projects</button>
-                  <button className={`px-3 py-1.5 rounded text-sm bg-muted text-foreground`} onClick={() => navigate('/admin/marketplace/my-projects')}>My Published Projects</button>
+                  <button 
+                    className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                      activeTab === 'published' 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted text-foreground hover:bg-muted/80'
+                    }`}
+                    onClick={() => setActiveTab('published')}
+                  >
+                    Published Projects
+                  </button>
+                  <button 
+                    className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                      activeTab === 'draft' 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted text-foreground hover:bg-muted/80'
+                    }`}
+                    onClick={() => setActiveTab('draft')}
+                  >
+                    Draft Projects
+                  </button>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
-                <Button variant="outline" onClick={() => navigate('/admin/dashboard')} iconName="LayoutDashboard" iconSize={18}>Back to Dashboard</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowTemplateSettings(true)} 
+                  iconName="Settings" 
+                  iconSize={18}
+                >
+                  Settings
+                </Button>
                 <Button variant="default" onClick={fetchAll} iconName="RefreshCw" iconSize={18}>Refresh</Button>
               </div>
             </div>
@@ -149,7 +249,7 @@ const MarketplaceV2 = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">Energy Type</label>
-                      <select value={filters.energyType} onChange={(e) => handleFilterChange('energyType', e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                      <select value={filters.energyType} onChange={(e) => handleFilterChange('energyType', e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
                         <option value="">All Types</option>
                         <option value="solar">Solar</option>
                         <option value="wind">Wind</option>
@@ -168,11 +268,11 @@ const MarketplaceV2 = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">Min Price</label>
-                      <input type="number" value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)} placeholder="$/MWh" className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm" />
+                      <input type="number" value={filters.minPrice} onChange={(e) => handleFilterChange('minPrice', e.target.value)} placeholder="£/MWh" className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">Max Price</label>
-                      <input type="number" value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)} placeholder="$/MWh" className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm" />
+                      <input type="number" value={filters.maxPrice} onChange={(e) => handleFilterChange('maxPrice', e.target.value)} placeholder="£/MWh" className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">Location</label>
@@ -193,7 +293,9 @@ const MarketplaceV2 = () => {
               {/* Projects heading */}
               <div className="bg-white rounded-lg shadow-sm border border-border overflow-hidden">
                 <div className="px-6 py-4 border-b border-border">
-                  <h2 className="font-heading font-semibold text-lg text-foreground">Market Projects ({list.length})</h2>
+                  <h2 className="font-heading font-semibold text-lg text-foreground">
+                    {activeTab === 'published' ? 'Published' : 'Draft'} Projects ({list.length})
+                  </h2>
                 </div>
 
                 {loading ? (
@@ -213,11 +315,27 @@ const MarketplaceV2 = () => {
                     <p className="text-sm text-muted-foreground mt-2">Projects will appear here once available</p>
                   </div>
                 ) : (
-                  <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-                    {list.map(project => (
-                      <Card key={project.land_id} project={project} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+                      {list.map(project => (
+                        <Card key={project.land_id || project.id} project={project} isDraft={activeTab === 'draft'} />
+                      ))}
+                    </div>
+                    
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="px-6 pb-6">
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={setCurrentPage}
+                          itemsPerPage={itemsPerPage}
+                          totalItems={filteredList.length}
+                          showInfo={true}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </section>
@@ -225,6 +343,20 @@ const MarketplaceV2 = () => {
         </div>
       </main>
       </div>
+      
+      {/* Footer */}
+      <Footer />
+      
+      {/* Marketplace Template Settings Modal */}
+      {showTemplateSettings && (
+        <MarketplaceTemplateSettings
+          onClose={() => setShowTemplateSettings(false)}
+          onSave={(templateData) => {
+            console.log('Template settings saved:', templateData);
+            setShowTemplateSettings(false);
+          }}
+        />
+      )}
     </div>
   );
 };

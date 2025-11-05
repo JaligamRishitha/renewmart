@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '../../components/ui/Header';
-import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import DocumentAccordion from './components/DocumentAccordion';
@@ -37,7 +36,7 @@ const DocumentUpload = () => {
       description: 'Professional appraisal and valuation documents for the property',
       required: true,
       requiredFiles: 1,
-      acceptedFormats: ['pdf', 'doc', 'docx'],
+      acceptedFormats: ['pdf', 'doc', 'docx', 'jpg', 'png'],
       maxSize: '10MB',
       roles: ['administrator', 're_sales_advisor', 're_governance_lead']
     },
@@ -57,7 +56,7 @@ const DocumentUpload = () => {
       description: 'Existing sale agreements or contract templates',
       required: false,
       requiredFiles: 1,
-      acceptedFormats: ['pdf', 'doc', 'docx'],
+      acceptedFormats: ['pdf', 'doc', 'docx', 'jpg', 'png'],
       maxSize: '10MB',
       roles: ['administrator', 're_sales_advisor']
     },
@@ -77,7 +76,7 @@ const DocumentUpload = () => {
       description: 'Electrical grid connection studies and feasibility reports',
       required: true,
       requiredFiles: 1,
-      acceptedFormats: ['pdf', 'doc', 'docx', 'xls', 'xlsx'],
+      acceptedFormats: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'png'],
       maxSize: '15MB',
       roles: ['administrator', 're_sales_advisor']
     },
@@ -87,7 +86,7 @@ const DocumentUpload = () => {
       description: 'Economic analysis and financial projections for the project',
       required: false,
       requiredFiles: 1,
-      acceptedFormats: ['xls', 'xlsx', 'pdf'],
+      acceptedFormats: ['xls', 'xlsx', 'pdf', 'jpg', 'png'],
       maxSize: '10MB',
       roles: ['administrator', 're_analyst']
     },
@@ -107,7 +106,7 @@ const DocumentUpload = () => {
       description: 'Environmental studies and impact assessment reports',
       required: true,
       requiredFiles: 1,
-      acceptedFormats: ['pdf', 'doc', 'docx'],
+      acceptedFormats: ['pdf', 'doc', 'docx', 'jpg', 'png'],
       maxSize: '25MB',
       roles: ['administrator', 're_governance_lead']
     },
@@ -148,6 +147,7 @@ const DocumentUpload = () => {
     const loadProjectData = async () => {
       const projectId = location.state?.projectId;
       const mode = location.state?.mode;
+      const projectData = location.state?.projectData; // Use passed project data if available
       
       if (projectId && (mode === 'edit' || mode === 'continue')) {
         console.log('[Document Upload] Loading project for editing:', projectId);
@@ -156,35 +156,68 @@ const DocumentUpload = () => {
         setIsLoadingProject(true);
         
         try {
-          // Fetch project details
-          const project = await landsAPI.getLandById(projectId);
+          // Use passed project data if available, otherwise fetch
+          let project = projectData;
+          if (!project) {
+            project = await landsAPI.getLandById(projectId);
+          }
           console.log('[Document Upload] Loaded project:', project);
           
           // Populate ALL project details form fields
           // Using exact backend field names from schemas.py
           console.log('[Document Upload] Raw project data:', project);
           
+          // Parse contract_term_years to contractDuration format ("20-years")
+          let contractDuration = '';
+          if (project.contract_term_years) {
+            contractDuration = `${project.contract_term_years}-years`;
+          } else if (project.contractDuration) {
+            contractDuration = project.contractDuration;
+          }
+          
+          // Normalize energy_key from backend to form value
+          let projectType = '';
+          const energyKey = project.energy_key || project.energy_type || project.projectType || project.type || '';
+          if (energyKey) {
+            const normalized = energyKey.toLowerCase().trim();
+            // Map backend enum values to form values
+            if (normalized === 'hydro' || normalized === 'hydroelectric') {
+              projectType = 'hydro';
+            } else if (['solar', 'wind', 'biomass', 'geothermal'].includes(normalized)) {
+              projectType = normalized;
+            } else {
+              projectType = normalized;
+            }
+          }
+          
           setProjectDetails({
             // Basic Info (from LandBase schema)
-            projectName: project.title || '',
+            projectName: project.title || project.projectName || '',
             location: project.location_text || project.location || '',
-            landArea: String(project.area_acres || project.landArea || ''),
-            projectType: project.energy_key || project.energy_type || project.projectType || '',
-            capacity: String(project.capacity_mw || project.capacity || ''),
+            landArea: project.area_acres 
+              ? String(project.area_acres) 
+              : (project.landArea ? String(project.landArea) : ''),
+            projectType: projectType,
+            capacity: project.capacity_mw 
+              ? String(project.capacity_mw) 
+              : (project.capacity ? String(project.capacity) : ''),
             
             // Pricing & Financial
-            pricePerMWh: String(project.price_per_mwh || project.pricePerMWh || ''),
+            pricePerMWh: project.price_per_mwh 
+              ? String(project.price_per_mwh) 
+              : (project.pricePerMWh ? String(project.pricePerMWh) : ''),
             estimatedBudget: project.estimated_budget || project.estimatedBudget || '',
             
             // Timeline & Contract
             timeline: project.timeline_text || project.timeline || '',
-            contractDuration: project.contract_term_years ? `${project.contract_term_years}-years` : 
-                            (project.contractDuration || ''),
+            contractDuration: contractDuration,
             
             // Additional Info
+            landType: project.land_type || project.landType || '',
             partners: project.developer_name || project.partners || '',
-            description: project.admin_notes || project.description || project.land_type || '',
-            additionalNotes: project.admin_notes || project.additional_notes || '',
+            description: project.description || project.admin_notes || '',
+            additionalNotes: project.additional_notes || project.admin_notes || '',
+            coordinates: project.coordinates || { lat: 0, lng: 0 },
             
             // Confirmation
             detailsConfirmed: true
@@ -201,36 +234,81 @@ const DocumentUpload = () => {
             contract_term_years: project.contract_term_years,
             developer_name: project.developer_name,
             admin_notes: project.admin_notes,
-            land_type: project.land_type
+            land_type: project.land_type,
+            coordinates: project.coordinates,
+            description: project.description
+          });
+          
+          console.log('[Document Upload] ✅ Form State Set:', {
+            projectName: project.title || project.projectName,
+            location: project.location_text || project.location,
+            landArea: project.area_acres ? String(project.area_acres) : '',
+            projectType: projectType,
+            capacity: project.capacity_mw ? String(project.capacity_mw) : '',
+            pricePerMWh: project.price_per_mwh ? String(project.price_per_mwh) : '',
+            timeline: project.timeline_text || project.timeline,
+            contractDuration: contractDuration,
+            landType: project.land_type || project.landType,
+            partners: project.developer_name || project.partners,
+            description: project.description || project.admin_notes
           });
           
           // Fetch and load existing documents
           try {
+            console.log('[Document Upload] Fetching documents for project:', projectId);
             const documents = await documentsAPI.getDocuments(projectId);
             console.log('[Document Upload] Loaded documents:', documents);
             
-            // Group documents by type/section
-            const filesBySection = {};
-            documents.forEach(doc => {
-              const sectionId = doc.document_type || 'other';
-              if (!filesBySection[sectionId]) {
-                filesBySection[sectionId] = [];
-              }
-              // Create a file-like object for existing documents
-              filesBySection[sectionId].push({
-                name: doc.file_name || doc.document_type,
-                size: doc.file_size || 0,
-                type: doc.mime_type || 'application/pdf',
-                uploadedAt: doc.uploaded_at,
-                documentId: doc.document_id,
-                url: doc.file_path,
-                isExisting: true
+            if (!documents || documents.length === 0) {
+              console.log('[Document Upload] No documents found for this project');
+              setUploadedFiles({});
+            } else {
+              // Group documents by type/section
+              const filesBySection = {};
+              documents.forEach(doc => {
+                const sectionId = doc.document_type || doc.documentType || 'other';
+                if (!filesBySection[sectionId]) {
+                  filesBySection[sectionId] = [];
+                }
+                // Create a file-like object for existing documents
+                // Use document_id as the id for existing documents
+                filesBySection[sectionId].push({
+                  id: doc.document_id, // Use document_id as id for API calls
+                  documentId: doc.document_id,
+                  name: doc.file_name || doc.document_type || 'Unknown',
+                  size: doc.file_size || 0,
+                  type: doc.mime_type || 'application/pdf',
+                  uploadedAt: doc.uploaded_at || doc.created_at || doc.upload_date,
+                  url: doc.file_path || doc.url,
+                  isExisting: true,
+                  status: doc.status || 'pending',
+                  version_number: doc.version_number || 1
+                });
               });
-            });
-            
-            setUploadedFiles(filesBySection);
+              
+              console.log('[Document Upload] Grouped documents by section:', filesBySection);
+              setUploadedFiles(filesBySection);
+              
+              // Auto-expand sections that have documents
+              const sectionsWithDocuments = Object.keys(filesBySection).filter(
+                sectionId => filesBySection[sectionId]?.length > 0
+              );
+              if (sectionsWithDocuments.length > 0) {
+                setExpandedSections(prev => {
+                  const newSections = [...new Set([...prev, ...sectionsWithDocuments])];
+                  return newSections;
+                });
+              }
+            }
           } catch (err) {
             console.error('[Document Upload] Failed to load documents:', err);
+            addNotification({
+              id: Date.now(),
+              type: 'warning',
+              title: 'Could not load documents',
+              message: 'Some documents may not be displayed. You can still upload new documents.',
+              timestamp: new Date()
+            });
           }
           
           addNotification({
@@ -286,15 +364,27 @@ const DocumentUpload = () => {
 
   // Handle file upload
   const handleFileUpload = (sectionId, files) => {
-    const validFiles = files?.filter(file => {
+    // Ensure we only process actual File objects
+    const fileArray = Array.from(files || []);
+    
+    const validFiles = fileArray.filter(file => {
+      // Must be a File object
+      if (!(file instanceof File)) {
+        console.warn('[Document Upload] Rejected non-File object:', file);
+        return false;
+      }
+      
       const section = documentSections?.find(s => s?.id === sectionId);
       const extension = file?.name?.split('.')?.pop()?.toLowerCase();
       const maxSizeBytes = parseInt(section?.maxSize) * 1024 * 1024;
       
-      return section?.acceptedFormats?.includes(extension) && file?.size <= maxSizeBytes;
+      const isValidFormat = section?.acceptedFormats?.includes(extension);
+      const isValidSize = file?.size <= maxSizeBytes;
+      
+      return isValidFormat && isValidSize;
     });
 
-    if (validFiles?.length !== files?.length) {
+    if (validFiles?.length !== fileArray?.length) {
       addNotification({
         id: Date.now(),
         type: 'warning',
@@ -322,10 +412,29 @@ const DocumentUpload = () => {
 
   // Handle file removal
   const handleFileRemove = (sectionId, fileIndex) => {
-    setUploadedFiles(prev => ({
-      ...prev,
-      [sectionId]: prev?.[sectionId]?.filter((_, index) => index !== fileIndex)
-    }));
+    setUploadedFiles(prev => {
+      const sectionFiles = prev?.[sectionId] || [];
+      const fileToRemove = sectionFiles[fileIndex];
+      
+      // Safety check: Don't remove existing documents (they're read-only)
+      if (fileToRemove?.isExisting) {
+        console.warn('[Document Upload] Cannot remove existing document:', fileToRemove.name);
+        addNotification({
+          id: Date.now(),
+          type: 'warning',
+          title: 'Cannot Remove',
+          message: 'Existing documents cannot be removed. They are saved to the server.',
+          timestamp: new Date()
+        });
+        return prev;
+      }
+      
+      // Remove non-existing files (newly uploaded files that haven't been saved)
+      return {
+        ...prev,
+        [sectionId]: sectionFiles.filter((_, index) => index !== fileIndex)
+      };
+    });
   };
 
   // Handle section toggle
@@ -365,37 +474,145 @@ const DocumentUpload = () => {
       }
       
       // Create land entry as draft
-      const landData = {
-        title: projectDetails.projectName || 'Untitled Project',
-        location_text: projectDetails.location || '',
-        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
-        area_acres: parseFloat(projectDetails.totalArea) || 0,
-        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
-        capacity_mw: parseFloat(projectDetails.capacity) || 0,
-        price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
-        timeline_text: projectDetails.timeline || '',
-        land_type: projectDetails.landType || '',
-        contract_term_years: parseInt(projectDetails.contractTerm) || null,
-        developer_name: projectDetails.developerName || null
+      // Parse contract duration from "20-years" format to number 20
+      let contractTermYears = null;
+      if (projectDetails.contractDuration) {
+        const match = projectDetails.contractDuration.match(/^(\d+)-years?$/i);
+        if (match) {
+          contractTermYears = parseInt(match[1], 10);
+        }
+      }
+      
+      // Normalize energy_key to match backend enum values
+      let energyKey = 'solar'; // default
+      if (projectDetails.projectType) {
+        const normalized = projectDetails.projectType.toLowerCase().trim();
+        // Map common variations to enum values
+        if (normalized === 'wind' || normalized === 'wind energy') {
+          energyKey = 'wind';
+        } else if (normalized === 'solar' || normalized === 'solar energy') {
+          energyKey = 'solar';
+        } else if (normalized === 'hydro' || normalized === 'hydroelectric' || normalized === 'hydroelectric energy') {
+          energyKey = 'hydro';
+        } else if (normalized === 'biomass' || normalized === 'biomass energy') {
+          energyKey = 'biomass';
+        } else if (normalized === 'geothermal' || normalized === 'geothermal energy') {
+          energyKey = 'geothermal';
+        } else {
+          energyKey = normalized; // Use as-is if it matches enum
+        }
+      }
+      
+      // Helper function to parse numeric values - return null if empty/invalid
+      const parseNumericOrNull = (value) => {
+        // Handle null/undefined
+        if (value === null || value === undefined) return null;
+        
+        // Convert to string and trim
+        const trimmed = String(value).trim();
+        
+        // Empty string means not set
+        if (trimmed === '') return null;
+        
+        // Parse the value
+        const parsed = parseFloat(trimmed);
+        
+        // If NaN or explicitly "0" (not set), return null
+        if (isNaN(parsed)) return null;
+        
+        // For capacity and price, 0 probably means not set, return null
+        // But allow other numeric values
+        if (parsed === 0) return null;
+        
+        // Return the parsed value
+        return parsed;
       };
       
-      const createdLand = await landsAPI.createLand(landData);
-      const landId = createdLand.land_id;
+      const landData = {
+        title: projectDetails.projectName || 'Untitled Project',
+        location_text: projectDetails.location || null,
+        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
+        area_acres: parseNumericOrNull(projectDetails.landArea),
+        energy_key: energyKey || null,
+        capacity_mw: parseNumericOrNull(projectDetails.capacity),
+        price_per_mwh: parseNumericOrNull(projectDetails.pricePerMWh),
+        timeline_text: projectDetails.timeline || null,
+        land_type: projectDetails.landType || null,
+        contract_term_years: contractTermYears,
+        developer_name: projectDetails.partners || projectDetails.developerName || null
+      };
       
-      // Upload any documents that are already added
-      if (Object.keys(uploadedFiles).length > 0) {
+      console.log('[Document Upload] Saving draft land data:', landData);
+      console.log('[Document Upload] Field values:', {
+        capacity: projectDetails.capacity,
+        capacity_mw: landData.capacity_mw,
+        pricePerMWh: projectDetails.pricePerMWh,
+        price_per_mwh: landData.price_per_mwh,
+        timeline: projectDetails.timeline,
+        timeline_text: landData.timeline_text,
+        contractDuration: projectDetails.contractDuration,
+        contract_term_years: landData.contract_term_years
+      });
+      
+      let landId;
+      if (isEditMode && editingProjectId) {
+        // Update existing land
+        console.log('[Document Upload] Updating existing land:', editingProjectId);
+        console.log('[Document Upload] Request payload:', JSON.stringify(landData, null, 2));
+        const updatedLand = await landsAPI.updateLand(editingProjectId, landData);
+        console.log('[Document Upload] Update response:', updatedLand);
+        landId = editingProjectId;
+      } else {
+        // Create new land
+        console.log('[Document Upload] Creating new land');
+        const createdLand = await landsAPI.createLand(landData);
+        landId = createdLand.land_id;
+      }
+      
+      // Upload any documents that are already added (only new File objects, skip existing ones)
+      const filesToUpload = Object.entries(uploadedFiles).reduce((acc, [sectionId, files]) => {
+        const newFiles = files.filter(file => file instanceof File && !file.isExisting);
+        if (newFiles.length > 0) {
+          acc[sectionId] = newFiles;
+        }
+        return acc;
+      }, {});
+      
+      if (Object.keys(filesToUpload).length > 0) {
         const uploadPromises = [];
-        Object.entries(uploadedFiles).forEach(([sectionId, files]) => {
+        Object.entries(filesToUpload).forEach(([sectionId, files]) => {
           files.forEach(file => {
+            // Only upload if it's a real File object
+            if (!(file instanceof File)) {
+              console.warn('[Document Upload] Skipping non-File object:', file);
+              return;
+            }
+            
             const formData = new FormData();
             formData.append('file', file);
             formData.append('document_type', sectionId);
             formData.append('is_draft', 'true');
+            
+            // Debug: Verify FormData contents
+            console.log('[Document Upload] FormData contents:', {
+              file: file instanceof File ? `${file.name} (${file.size} bytes)` : 'Not a File',
+              document_type: sectionId,
+              is_draft: 'true',
+              landId: landId
+            });
+            
+            // Verify FormData entries
+            for (const [key, value] of formData.entries()) {
+              console.log(`[Document Upload] FormData entry: ${key} =`, value instanceof File ? `${value.name} (File)` : value);
+            }
+            
             uploadPromises.push(documentsAPI.uploadDocument(landId, formData));
           });
         });
         
-        await Promise.all(uploadPromises);
+        if (uploadPromises.length > 0) {
+          await Promise.all(uploadPromises);
+        }
       }
       
       setIsSaving(false);
@@ -463,40 +680,146 @@ const DocumentUpload = () => {
       setIsSaving(true);
       
       // Step 1: Create land entry
-      const landData = {
-        title: projectDetails.projectName || 'Untitled Project',
-        location_text: projectDetails.location || '',
-        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
-        area_acres: parseFloat(projectDetails.totalArea) || 0,
-        energy_key: projectDetails.energyType?.toLowerCase() || 'solar',
-        capacity_mw: parseFloat(projectDetails.capacity) || 0,
-        price_per_mwh: parseFloat(projectDetails.pricePerMWh) || 0,
-        timeline_text: projectDetails.timeline || '',
-        land_type: projectDetails.landType || '',
-        contract_term_years: parseInt(projectDetails.contractTerm) || null,
-        developer_name: projectDetails.developerName || null
+      // Parse contract duration from "20-years" format to number 20
+      let contractTermYears = null;
+      if (projectDetails.contractDuration) {
+        const match = projectDetails.contractDuration.match(/^(\d+)-years?$/i);
+        if (match) {
+          contractTermYears = parseInt(match[1], 10);
+        }
+      }
+      
+      // Normalize energy_key to match backend enum values
+      let energyKey = 'solar'; // default
+      if (projectDetails.projectType) {
+        const normalized = projectDetails.projectType.toLowerCase().trim();
+        // Map common variations to enum values
+        if (normalized === 'wind' || normalized === 'wind energy') {
+          energyKey = 'wind';
+        } else if (normalized === 'solar' || normalized === 'solar energy') {
+          energyKey = 'solar';
+        } else if (normalized === 'hydro' || normalized === 'hydroelectric' || normalized === 'hydroelectric energy') {
+          energyKey = 'hydro';
+        } else if (normalized === 'biomass' || normalized === 'biomass energy') {
+          energyKey = 'biomass';
+        } else if (normalized === 'geothermal' || normalized === 'geothermal energy') {
+          energyKey = 'geothermal';
+        } else {
+          energyKey = normalized; // Use as-is if it matches enum
+        }
+      }
+      
+      // Helper function to parse numeric values - return null if empty/invalid
+      const parseNumericOrNull = (value) => {
+        // Handle null/undefined
+        if (value === null || value === undefined) return null;
+        
+        // Convert to string and trim
+        const trimmed = String(value).trim();
+        
+        // Empty string means not set
+        if (trimmed === '') return null;
+        
+        // Parse the value
+        const parsed = parseFloat(trimmed);
+        
+        // If NaN or explicitly "0" (not set), return null
+        if (isNaN(parsed)) return null;
+        
+        // For capacity and price, 0 probably means not set, return null
+        // But allow other numeric values
+        if (parsed === 0) return null;
+        
+        // Return the parsed value
+        return parsed;
       };
       
-      const createdLand = await landsAPI.createLand(landData);
-      const landId = createdLand.land_id;
+      const landData = {
+        title: projectDetails.projectName || 'Untitled Project',
+        location_text: projectDetails.location || null,
+        coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
+        area_acres: parseNumericOrNull(projectDetails.landArea),
+        energy_key: energyKey || null,
+        capacity_mw: parseNumericOrNull(projectDetails.capacity),
+        price_per_mwh: parseNumericOrNull(projectDetails.pricePerMWh),
+        timeline_text: projectDetails.timeline || null,
+        land_type: projectDetails.landType || null,
+        contract_term_years: contractTermYears,
+        developer_name: projectDetails.partners || projectDetails.developerName || null
+      };
+      
+      console.log('[Document Upload] Submitting land data:', landData);
+      console.log('[Document Upload] Field values:', {
+        capacity: projectDetails.capacity,
+        capacity_mw: landData.capacity_mw,
+        pricePerMWh: projectDetails.pricePerMWh,
+        price_per_mwh: landData.price_per_mwh,
+        timeline: projectDetails.timeline,
+        timeline_text: landData.timeline_text,
+        contractDuration: projectDetails.contractDuration,
+        contract_term_years: landData.contract_term_years
+      });
+      
+      let landId;
+      if (isEditMode && editingProjectId) {
+        // Update existing land
+        console.log('[Document Upload] Updating existing land for submission:', editingProjectId);
+        console.log('[Document Upload] Request payload:', JSON.stringify(landData, null, 2));
+        const updatedLand = await landsAPI.updateLand(editingProjectId, landData);
+        console.log('[Document Upload] Update response:', updatedLand);
+        landId = editingProjectId;
+      } else {
+        // Create new land
+        console.log('[Document Upload] Creating new land for submission');
+        const createdLand = await landsAPI.createLand(landData);
+        landId = createdLand.land_id;
+      }
       
       // Step 2: Upload all documents with progress tracking
       const uploadPromises = [];
-      const totalFiles = Object.values(uploadedFiles).flat().length;
-      let uploadedFiles = 0;
+      // Filter out existing documents (those with isExisting flag) - only upload new File objects
+      const filesToUpload = Object.entries(uploadedFiles).reduce((acc, [sectionId, files]) => {
+        const newFiles = files.filter(file => file instanceof File && !file.isExisting);
+        if (newFiles.length > 0) {
+          acc[sectionId] = newFiles;
+        }
+        return acc;
+      }, {});
       
-      Object.entries(uploadedFiles).forEach(([sectionId, files]) => {
+      const totalFiles = Object.values(filesToUpload).flat().length;
+      let uploadedCount = 0;
+      
+      Object.entries(filesToUpload).forEach(([sectionId, files]) => {
         files.forEach(file => {
+          // Only upload if it's a real File object
+          if (!(file instanceof File)) {
+            console.warn('[Document Upload] Skipping non-File object:', file);
+            return;
+          }
+          
           const formData = new FormData();
           formData.append('file', file);
           formData.append('document_type', sectionId);
           formData.append('is_draft', 'false');
           
+          // Debug: Verify FormData contents
+          console.log('[Document Upload] FormData contents:', {
+            file: file instanceof File ? `${file.name} (${file.size} bytes)` : 'Not a File',
+            document_type: sectionId,
+            is_draft: 'false',
+            landId: landId
+          });
+          
+          // Verify FormData entries
+          for (const [key, value] of formData.entries()) {
+            console.log(`[Document Upload] FormData entry: ${key} =`, value instanceof File ? `${value.name} (File)` : value);
+          }
+          
           const uploadPromise = documentsAPI.uploadDocument(landId, formData)
             .then(result => {
-              uploadedFiles++;
-              const progress = Math.round((uploadedFiles / totalFiles) * 100);
-              console.log(`Upload progress: ${progress}% (${uploadedFiles}/${totalFiles})`);
+              uploadedCount++;
+              const progress = Math.round((uploadedCount / totalFiles) * 100);
+              console.log(`Upload progress: ${progress}% (${uploadedCount}/${totalFiles})`);
               return result;
             });
           
@@ -616,7 +939,7 @@ const DocumentUpload = () => {
       <div className="min-h-screen bg-background">
         <Header userRole="landowner" />
         <div className="pt-16">
-          <WorkflowBreadcrumbs />
+        
           <div className="max-w-9xl mx-auto px-4 lg:px-6 py-8">
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">
@@ -641,7 +964,7 @@ const DocumentUpload = () => {
     <div className="min-h-screen bg-background">
       <Header userRole="landowner" />
       <div className="pt-16">
-        <WorkflowBreadcrumbs customBreadcrumbs={customBreadcrumbs} />
+      
         <div className="max-w-9xl mx-auto px-4 lg:px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">

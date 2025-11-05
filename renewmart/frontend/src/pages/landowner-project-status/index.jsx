@@ -42,10 +42,6 @@ const LandownerProjectStatus = () => {
     });
   };
 
-  const handleEditProject = (project) => {
-    navigate('/document-upload', { state: { projectId: project?.id, mode: 'edit' } });
-  };
-
   const handleContinueDraft = (project) => {
     navigate('/document-upload', { state: { projectId: project?.id, mode: 'continue' } });
   };
@@ -179,13 +175,15 @@ const LandownerProjectStatus = () => {
                   <div className="p-6">
                     <div className="space-y-3 mb-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Project ID</span>
-                        <span className="font-mono text-foreground">{project.id}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Created</span>
                         <span className="text-foreground">
-                          {new Date(project.created_at || project.date_created).toLocaleDateString()}
+                          {project.createdAt 
+                            ? new Date(project.createdAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })
+                            : 'N/A'}
                         </span>
                       </div>
                     </div>
@@ -204,16 +202,6 @@ const LandownerProjectStatus = () => {
                       </Button>
                       
                       <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditProject(project)}
-                          iconName="Edit"
-                          className="flex-1"
-                        >
-                          Edit
-                        </Button>
-                        
                         {project.status === 'draft' && (
                           <Button
                             variant="outline"

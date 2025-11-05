@@ -178,7 +178,7 @@ const LoginForm = () => {
       
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-2">Welcome Back</h1>
-        <p className="text-muted-foreground">Sign in to your RenewMart account</p>
+        <p className="text-muted-foreground">Sign in to your Renewmart account</p>
       </div>
       
       {/* General Error Display */}

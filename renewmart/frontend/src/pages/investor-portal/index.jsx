@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
+import Footer from '../../components/ui/Footer';
+import Pagination from '../../components/ui/Pagination';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
@@ -37,6 +39,8 @@ const InvestorPortal = () => {
   // Projects state
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(12);
   const mockSavedSearches = [];
   const mockWatchlistItems = [];
 
@@ -104,6 +108,17 @@ const InvestorPortal = () => {
         return new Date(b.publishedAt) - new Date(a.publishedAt);
     }
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(sortedProjects.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProjects = sortedProjects.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
 
   useEffect(() => {
     // Initialize with mock data
@@ -354,17 +369,33 @@ const InvestorPortal = () => {
                 </p>
               </div>
             ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {sortedProjects?.map((project) => (
-                  <ProjectCard
-                    key={project?.id}
-                    project={project}
-                    onViewDetails={handleViewDetails}
-                    onExpressInterest={handleExpressInterest}
-                    
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {paginatedProjects?.map((project) => (
+                    <ProjectCard
+                      key={project?.id}
+                      project={project}
+                      onViewDetails={handleViewDetails}
+                      onExpressInterest={handleExpressInterest}
+                      
+                    />
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-6">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={sortedProjects.length}
+                      showInfo={true}
+                    />
+                  </div>
+                )}
+              </>
             ) : (
               <div className="h-[600px] rounded-lg overflow-hidden">
                 <MapView
@@ -420,6 +451,9 @@ const InvestorPortal = () => {
         onActionComplete={handleQuickAction}
         position="bottom-right"
       />
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

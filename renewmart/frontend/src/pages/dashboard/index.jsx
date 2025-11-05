@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import Header from '../../components/ui/Header';
+import Footer from '../../components/ui/Footer';
 import Sidebar from '../../components/ui/Sidebar';
 import BreadcrumbNavigation from '../../components/ui/BreadcrumbNavigation';
 import MetricCard from './components/MetricCard';
@@ -85,27 +86,27 @@ const Dashboard = () => {
         return [
           { title: 'Portfolio Value', value: '$125.4M', change: '+8.2%', changeType: 'positive', icon: 'TrendingUp', color: 'primary' },
           { title: 'Active Investments', value: '24', change: '+3', changeType: 'positive', icon: 'Briefcase', color: 'success' },
-          { title: 'Monthly Returns', value: '12.5%', change: '+1.2%', changeType: 'positive', icon: 'DollarSign', color: 'secondary' },
+          { title: 'Monthly Returns', value: '12.5%', change: '+1.2%', changeType: 'positive', icon: 'PoundSterling', color: 'secondary' },
           { title: 'Pipeline Deals', value: '8', change: '+2', changeType: 'positive', icon: 'Target', color: 'warning' }
         ];
     } else if (hasRole('landowner')) {
         return [
           { title: 'Property Listings', value: '12', change: '+2', changeType: 'positive', icon: 'MapPin', color: 'primary' },
           { title: 'Active Inquiries', value: '18', change: '+5', changeType: 'positive', icon: 'MessageCircle', color: 'success' },
-          { title: 'Revenue Generated', value: '$45.2K', change: '+12.3%', changeType: 'positive', icon: 'DollarSign', color: 'secondary' },
+          { title: 'Revenue Generated', value: '$45.2K', change: '+12.3%', changeType: 'positive', icon: 'PoundSterling', color: 'secondary' },
           { title: 'Site Assessments', value: '6', change: '+1', changeType: 'positive', icon: 'Search', color: 'warning' }
         ];
     } else if (hasRole('administrator') || hasRole('re_governance_lead')) {
         return [
           { title: 'Total Users', value: '1,247', change: '+23', changeType: 'positive', icon: 'Users', color: 'primary' },
           { title: 'Active Properties', value: '89', change: '+12', changeType: 'positive', icon: 'MapPin', color: 'success' },
-          { title: 'Platform Revenue', value: '$125.4K', change: '+18.5%', changeType: 'positive', icon: 'DollarSign', color: 'secondary' },
+          { title: 'Platform Revenue', value: '$125.4K', change: '+18.5%', changeType: 'positive', icon: 'PoundSterling', color: 'secondary' },
           { title: 'System Health', value: '99.2%', change: '+0.3%', changeType: 'positive', icon: 'Shield', color: 'warning' }
         ];
     } else { // Default for other roles (sales advisor, analyst, project manager)
         return [
           { title: 'Active Projects', value: '24', change: '+3', changeType: 'positive', icon: 'FolderOpen', color: 'primary' },
-          { title: 'Total Revenue', value: '$2.4M', change: '+12.5%', changeType: 'positive', icon: 'DollarSign', color: 'success' },
+          { title: 'Total Revenue', value: '$2.4M', change: '+12.5%', changeType: 'positive', icon: 'PoundSterling', color: 'success' },
           { title: 'Pipeline Value', value: '$8.7M', change: '+18.2%', changeType: 'positive', icon: 'TrendingUp', color: 'secondary' },
           { title: 'Completion Rate', value: '94%', change: '+2%', changeType: 'positive', icon: 'CheckCircle', color: 'warning' }
         ];
@@ -117,8 +118,8 @@ const Dashboard = () => {
   return (
     <>
       <Helmet>
-        <title>Dashboard - RenewMart</title>
-        <meta name="description" content="RenewMart dashboard providing comprehensive overview of renewable energy projects, marketplace activities, and performance metrics." />
+        <title>Dashboard - Renewmart</title>
+        <meta name="description" content="Renewmart dashboard providing comprehensive overview of renewable energy projects, marketplace activities, and performance metrics." />
       </Helmet>
       <div className="min-h-screen bg-background">
         <Header />
@@ -198,15 +199,11 @@ const Dashboard = () => {
             <div className="mb-8">
               <RoleBasedProjectsTable />
             </div>
-
-            {/* Footer */}
-            <div className="text-center py-6 border-t border-border">
-              <p className="text-sm text-muted-foreground">
-                © {new Date()?.getFullYear()} RenewMart. Accelerating the energy transition through innovative renewable energy solutions.
-              </p>
-            </div>
           </div>
         </main>
+        
+        {/* Footer */}
+        <Footer />
       </div>
     </>
   );

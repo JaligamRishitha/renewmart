@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo         RenewMart Deployment Script
+echo         Renewmart Deployment Script
 echo ========================================
 echo.
 

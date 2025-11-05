@@ -422,7 +422,7 @@ const AdminDocumentVersions = () => {
       'sale-contracts': 'FileText',
       'topographical-surveys': 'Map',
       'grid-connectivity': 'Zap',
-      'financial-models': 'DollarSign',
+      'financial-models': 'PoundSterling',
       'zoning-approvals': 'Building',
       'environmental-impact': 'Leaf',
       'government-nocs': 'Shield'

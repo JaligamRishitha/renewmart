@@ -1,4 +1,4 @@
-# Docker Setup Commands for RenewMart
+# Docker Setup Commands for Renewmart
 
 ## Quick Start Commands
 

@@ -934,9 +934,9 @@ const ReviewPanel = ({
                   <div className="mb-3 flex items-center gap-2">
                     <span className="text-xs font-medium text-muted-foreground">Reviewing as:</span>
                     <span className="px-3 py-1 text-xs font-semibold bg-primary text-primary-foreground rounded-full shadow-sm">
-                      {reviewerRole === 're_sales_advisor' ? '🏢 RE Sales Advisor' :
-                       reviewerRole === 're_analyst' ? '📊 RE Analyst' :
-                       reviewerRole === 're_governance_lead' ? '⚖️ RE Governance Lead' :
+                      {reviewerRole === 're_sales_advisor' ? 'RE Sales Advisor' :
+                       reviewerRole === 're_analyst' ? 'RE Analyst' :
+                       reviewerRole === 're_governance_lead' ? 'RE Governance Lead' :
                        reviewerRole}
                     </span>
                   </div>
@@ -958,8 +958,12 @@ const ReviewPanel = ({
                           </p>
                         ) : null}
                         <p className="text-sm text-muted-foreground mt-1">
-                          Document Category: {documentCategory?.replace('_', ' ')?.toUpperCase()}
-                        </p>
+  Document Category:{' '}
+  {documentCategory
+    ?.replace(/_/g, ' ')
+    ?.replace(/\b\w/g, (char) => char.toUpperCase())}
+</p>
+
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-4">
@@ -1533,12 +1537,7 @@ const ReviewPanel = ({
                         {currentTask?.assigned_by_name || currentTask?.created_by?.name || 'N/A'}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Task ID</div>
-                      <div className="text-sm font-medium text-foreground font-mono">
-                        {currentTask?.task_id || 'N/A'}
-                      </div>
-                    </div>
+                    
                     {currentTask?.land_title && (
                       <div className="col-span-2">
                         <div className="text-sm text-muted-foreground mb-1">Project/Land</div>
@@ -1550,14 +1549,7 @@ const ReviewPanel = ({
                   </div>
                 </div>
 
-                {/* Completion Notes - Always show section */}
-                <div className="bg-muted/50 border border-border rounded-lg p-4">
-                  <h4 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <Icon name="MessageSquare" size={18} className="text-primary" />
-                    Completion Notes
-                  </h4>
-                  
-                </div>
+                
                 
                 {/* Debug Info in Development */}
                 

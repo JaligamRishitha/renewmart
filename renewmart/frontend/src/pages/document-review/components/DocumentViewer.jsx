@@ -27,7 +27,7 @@ const DocumentViewer = ({
       'environmental_clearance': 'Leaf',
       'zoning_certificate': 'Building',
       'tax_receipt': 'Receipt',
-      'financial_documents': 'DollarSign',
+      'financial_documents': 'PoundSterling',
       'legal_documents': 'Scale',
       'other': 'File'
     };

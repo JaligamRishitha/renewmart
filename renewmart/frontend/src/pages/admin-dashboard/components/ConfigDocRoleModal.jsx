@@ -190,7 +190,7 @@ const ConfigDocRoleModal = ({ projectId, onClose, onSave }) => {
                       <div className="text-sm font-medium text-gray-900">
                         {getLabel(docType)}
                       </div>
-                      <div className="text-xs text-gray-500">{docType}</div>
+                      
                     </td>
                     {roles.map(role => {
                       const isChecked = mappings[docType]?.includes(role.role_key) || false;

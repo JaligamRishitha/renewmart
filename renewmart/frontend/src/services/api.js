@@ -20,6 +20,27 @@ api.interceptors.request.use(
     console.log('API Interceptor: Request URL:', config.url);
     console.log('API Interceptor: Request method:', config.method);
     
+    // If FormData, remove Content-Type header to let axios set it with boundary
+    if (config.data instanceof FormData) {
+      // Remove Content-Type from all possible header locations
+      delete config.headers['Content-Type'];
+      if (config.headers.common) delete config.headers.common['Content-Type'];
+      if (config.headers.post) delete config.headers.post['Content-Type'];
+      if (config.headers.put) delete config.headers.put['Content-Type'];
+      console.log('API Interceptor: FormData detected, removed Content-Type header');
+      
+      // Debug: Log FormData entries
+      try {
+        const entries = Array.from(config.data.entries());
+        console.log('API Interceptor: FormData entries:', entries.map(([key, value]) => ({
+          key,
+          value: value instanceof File ? `${value.name} (${value.size} bytes)` : String(value)
+        })));
+      } catch (e) {
+        console.log('API Interceptor: Could not log FormData entries:', e);
+      }
+    }
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       console.log('API Interceptor: Authorization header set');
@@ -265,7 +286,7 @@ export const landsAPI = {
   },
   
   submitForReview: async (landId) => {
-    const response = await api.post(`/lands/${landId}/submit`);
+    const response = await api.put(`/lands/${landId}/submit`);
     return response.data;
   },
   
@@ -331,6 +352,26 @@ export const landsAPI = {
     return response.data;
   },
 
+  // Site Image API
+  uploadSiteImage: async (landId, formData) => {
+    const response = await api.post(`/lands/${landId}/site-image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  getSiteImage: async (landId) => {
+    const response = await api.get(`/lands/${landId}/site-image-url`);
+    return response.data;
+  },
+
+  deleteSiteImage: async (landId) => {
+    const response = await api.delete(`/lands/${landId}/site-image`);
+    return response.data;
+  },
+
   getAdminInvestorInterests: async () => {
     const response = await api.get('/investors/admin/interests');
     return response.data;
@@ -390,11 +431,11 @@ export const sectionsAPI = {
 //Documents API
 export const documentsAPI = {
   uploadDocument: async (landId, formData) => {
+    // Don't set Content-Type header - let axios set it automatically with boundary
+    // Setting it manually can cause issues with multipart/form-data
     const response = await api.post(`/documents/upload/${landId}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       timeout: 120000, // 2 minutes for document uploads
+      // axios will automatically set Content-Type: multipart/form-data with boundary
     });
     return response.data;
   },

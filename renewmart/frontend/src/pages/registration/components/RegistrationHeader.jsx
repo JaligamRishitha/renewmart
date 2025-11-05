@@ -10,7 +10,7 @@ const RegistrationHeader = () => {
         <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
           <Icon name="Zap" size={24} color="white" />
         </div>
-        <span className="text-2xl font-bold text-foreground">RenewMart</span>
+        <span className="text-2xl font-bold text-foreground">Renewmart</span>
       </Link>
 
       {/* Header Content */}

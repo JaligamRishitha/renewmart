@@ -1,5 +1,6 @@
 import React from 'react';
 import Header from '../../components/ui/Header';
+import Footer from '../../components/ui/Footer';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import InvestorDashboard from '../investor-portal/components/InvestorDashboard';
@@ -27,6 +28,9 @@ const InvestorDashboardPage = () => {
         onActionComplete={() => {}}
         position="bottom-right"
       />
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

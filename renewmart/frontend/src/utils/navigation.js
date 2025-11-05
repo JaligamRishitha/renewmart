@@ -12,6 +12,7 @@ export const getRoleNavigation = (user) => {
   if (userRoles.includes('administrator')) {
     return {
       dashboard: '/admin/dashboard',
+      projectStatus: '/admin/projects',
       marketplace: '/admin/marketplace',
       investorInterests: '/admin/investor-interests',
       documentReview: '/admin/document-review',

@@ -8,8 +8,8 @@ const LoginPage = () => {
   return (
     <>
       <Helmet>
-        <title>Sign In - RenewMart | Renewable Energy Marketplace</title>
-        <meta name="description" content="Sign in to RenewMart, the leading renewable energy marketplace connecting landowners, investors, and industry stakeholders." />
+        <title>Renewmart | Renewable Energy Marketplace</title>
+        <meta name="description" content="Sign in to Renewmart, the leading renewable energy marketplace connecting landowners, investors, and industry stakeholders." />
         <meta name="keywords" content="renewable energy, login, marketplace, solar, wind, PPA, power purchase agreement" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </Helmet>
@@ -30,7 +30,7 @@ const LoginPage = () => {
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                   </svg>
                 </div>
-                <span className="text-2xl font-bold text-foreground">RenewMart</span>
+                <span className="text-2xl font-bold text-foreground">Renewmart</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Renewable Energy Marketplace
@@ -63,19 +63,9 @@ const LoginPage = () => {
             {/* Footer */}
             <div className="mt-8 pt-6 border-t border-border text-center">
               <p className="text-xs text-muted-foreground">
-                © {new Date()?.getFullYear()} RenewMart. All rights reserved.
+                © {new Date()?.getFullYear()} Renewmart. All rights reserved.
               </p>
-              <div className="flex items-center justify-center space-x-4 mt-2">
-                <a href="/privacy" className="text-xs text-muted-foreground hover:text-foreground transition-smooth">
-                  Privacy Policy
-                </a>
-                <a href="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-smooth">
-                  Terms of Service
-                </a>
-                <a href="/support" className="text-xs text-muted-foreground hover:text-foreground transition-smooth">
-                  Support
-                </a>
-              </div>
+              
             </div>
           </div>
         </div>

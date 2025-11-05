@@ -451,7 +451,7 @@ const BrowseProperties = () => {
   return (
     <>
       <Helmet>
-        <title>Browse Properties - RenewMart</title>
+        <title>Browse Properties - Renewmart</title>
         <meta name="description" content="Browse available renewable energy development properties" />
       </Helmet>
       <div className="min-h-screen bg-background">

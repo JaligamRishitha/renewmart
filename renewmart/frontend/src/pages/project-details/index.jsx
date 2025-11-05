@@ -123,7 +123,7 @@ const ProjectDetailsPage = () => {
     if (!amount) return 'Not specified';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
@@ -335,7 +335,7 @@ const ProjectDetailsPage = () => {
                 
                 <div className="bg-white rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Icon name="DollarSign" size={16} className="text-green-600" />
+                    <Icon name="PoundSterling" size={16} className="text-green-600" />
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                       Price
                     </span>
@@ -438,15 +438,6 @@ const ProjectDetailsPage = () => {
                   </label>
                   <p className="text-sm text-foreground mt-1">
                     {projectData.status || 'Active'}
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Project ID
-                  </label>
-                  <p className="text-sm text-foreground mt-1">
-                    {projectData.land_id || projectData.id || 'N/A'}
                   </p>
                 </div>
                 
@@ -553,15 +544,6 @@ const ProjectDetailsPage = () => {
                       </p>
                     </div>
                   )}
-                  
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      User ID
-                    </label>
-                    <p className="text-sm text-foreground mt-1">
-                      {landownerData.user_id}
-                    </p>
-                  </div>
                   
                   <div>
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

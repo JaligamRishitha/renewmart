@@ -315,7 +315,7 @@ const AdminMarketplace = () => {
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Icon name="DollarSign" size={24} className="text-blue-600" />
+                  <Icon name="PoundSterling" size={24} className="text-blue-600" />
                 </div>
               </div>
             </div>

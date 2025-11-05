@@ -110,7 +110,7 @@ const RoleSpecificFields = ({ role, formData, onChange, errors }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Minimum Investment (USD)"
+              label="Minimum Investment (GBP)"
               type="number"
               placeholder="e.g., 1000000"
               value={formData?.minInvestment || ''}
@@ -120,7 +120,7 @@ const RoleSpecificFields = ({ role, formData, onChange, errors }) => {
             />
             
             <Input
-              label="Maximum Investment (USD)"
+              label="Maximum Investment (GBP)"
               type="number"
               placeholder="e.g., 50000000"
               value={formData?.maxInvestment || ''}

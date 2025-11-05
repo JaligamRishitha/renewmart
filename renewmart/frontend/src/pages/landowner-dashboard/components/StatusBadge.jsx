@@ -47,7 +47,7 @@ const StatusBadge = ({ status }) => {
       case 'ready-to-buy':
         return {
           label: 'RTB',
-          icon: 'DollarSign',
+          icon: 'PoundSterling',
           description: 'Ready to Buy',
           className: 'bg-emerald-50 text-emerald-700 border-emerald-200'
         };

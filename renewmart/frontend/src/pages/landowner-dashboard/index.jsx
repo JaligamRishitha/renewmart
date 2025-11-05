@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
+import Footer from '../../components/ui/Footer';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
@@ -20,7 +21,7 @@ const LandownerDashboard = () => {
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [summaryData, setSummaryData] = useState({
     totalLandArea: 0,
-    activeProjects: 0,
+    draftProjects: 0,
     completedSubmissions: 0,
     estimatedRevenue: 0
   });
@@ -77,6 +78,8 @@ const LandownerDashboard = () => {
   }, []);
 
   useEffect(() => {
+    // Backend already returns only the latest updated project per land_id
+    // So we can use projects directly without additional deduplication
     let filtered = [...projects];
 
     // Apply search filter
@@ -145,8 +148,22 @@ const LandownerDashboard = () => {
     });
   };
 
-  const handleEditProject = (project) => {
-    navigate('/document-upload', { state: { projectId: project?.id, mode: 'edit' } });
+  const handleEditProject = async (project) => {
+    try {
+      // Fetch full project details to ensure all fields are available
+      const fullProject = await landsAPI.getLandById(project?.id);
+      navigate('/document-upload', { 
+        state: { 
+          projectId: project?.id, 
+          mode: 'edit',
+          projectData: fullProject // Pass full project data for auto-population
+        } 
+      });
+    } catch (err) {
+      console.error('Error fetching project details:', err);
+      // Fallback to basic navigation
+      navigate('/document-upload', { state: { projectId: project?.id, mode: 'edit' } });
+    }
   };
 
   const handleViewProject = (project) => {
@@ -183,12 +200,23 @@ const LandownerDashboard = () => {
         }
       ]);
       
-      // Update project status locally
-      setProjects(prev => prev.map(p => 
-        p.id === project.id 
-          ? { ...p, status: 'submitted', lastUpdated: new Date().toISOString(), description: 'Submitted - Awaiting admin review' }
-          : p
-      ));
+      // Refresh projects from API to get the latest status
+      try {
+        const [summaryResponse, projectsResponse] = await Promise.all([
+          landsAPI.getDashboardSummary(),
+          landsAPI.getDashboardProjects()
+        ]);
+        setSummaryData(summaryResponse);
+        setProjects(projectsResponse);
+      } catch (refreshErr) {
+        console.error('Error refreshing projects after submission:', refreshErr);
+        // Fallback: Update project status locally
+        setProjects(prev => prev.map(p => 
+          p.id === project.id 
+            ? { ...p, status: 'under_review', lastUpdated: new Date().toISOString(), description: 'Admin reviewing - sections assigned to reviewers' }
+            : p
+        ));
+      }
       
     } catch (err) {
       console.error('Error submitting project for review:', err);
@@ -316,7 +344,7 @@ const LandownerDashboard = () => {
         }} 
       />
       <div className="pt-16">
-        <WorkflowBreadcrumbs />
+        
         <main className="pb-20">
           <div className="max-w-9xl mx-auto px-4 lg:px-6">
           {/* Error State */}
@@ -335,7 +363,7 @@ const LandownerDashboard = () => {
           {/* Page Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
+              <h1 className="text-2xl font-heading font-bold text-foreground mb-2 mt-2">
                 Landowner Dashboard
               </h1>
               <p className="text-muted-foreground font-body">
@@ -479,6 +507,9 @@ const LandownerDashboard = () => {
           </div>
         </div>
       )}
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

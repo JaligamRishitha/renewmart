@@ -60,7 +60,7 @@ const FilterChips = ({ filters, onRemoveFilter, onClearAll }) => {
         id: 'price-range',
         label: `${min}-${max}/MWh`,
         type: 'price',
-        icon: 'DollarSign'
+        icon: 'PoundSterling'
       });
     }
 
