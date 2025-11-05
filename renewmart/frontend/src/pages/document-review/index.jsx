@@ -21,6 +21,7 @@ const DocumentReview = () => {
 
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [reviewerRole, setReviewerRole] = useState("re_sales_advisor");
+  const [documentCategory, setDocumentCategory] = useState(null); // Will be set from navigation state or role
   const [annotations, setAnnotations] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,15 +34,16 @@ const DocumentReview = () => {
   const [isRoleChanging, setIsRoleChanging] = useState(false);
   const [roleStatuses, setRoleStatuses] = useState({});
   const [isPublishing, setIsPublishing] = useState(false);
-
+  const [currentTaskStatus, setCurrentTaskStatus] = useState(null);
+  const [documentTypesCount, setDocumentTypesCount] = useState(0);
   const reviewerRoles = [
     { id: "re_sales_advisor", label: "RE Sales Advisor", icon: "TrendingUp" },
     { id: "re_analyst", label: "RE Analyst", icon: "Calculator" },
     { id: "re_governance_lead", label: "RE Governance Lead", icon: "Shield" },
   ];
 
-  // Document type to roles mapping - matches backend mapping
-  const roleDocumentMapping = {
+  // Default document type to roles mapping (fallback)
+  const defaultRoleDocumentMapping = {
     're_sales_advisor': [
       'land-valuation',
       'sale-contracts',
@@ -60,6 +62,129 @@ const DocumentReview = () => {
     ]
   };
 
+  // State for project-specific mappings
+  // null = project_mappings doesn't exist in API, use defaults
+  // {} = project_mappings exists but is empty, use empty (no documents allowed)
+  // {...} = project_mappings exists and has data, use this
+  const [projectDocumentMappings, setProjectDocumentMappings] = useState(null);
+  const [hasProjectMappingsInAPI, setHasProjectMappingsInAPI] = useState(false);
+
+  // Fetch project-specific document role mappings
+  useEffect(() => {
+    const fetchProjectMappings = async () => {
+      if (!currentLand?.land_id) return;
+      
+      try {
+        const mappings = await landsAPI.getProjectDocumentRoleMappings(currentLand.land_id);
+        // Convert to a format similar to default mapping: role -> [document_types]
+        // ALWAYS use project_mappings if it exists, never fall back to default_mappings
+        const roleToDocTypes = {};
+        console.log('[DocumentReview] API Response mappings:', {
+          hasProjectMappings: !!mappings.project_mappings,
+          projectMappingsKeys: mappings.project_mappings ? Object.keys(mappings.project_mappings) : [],
+          projectMappings: mappings.project_mappings,
+          hasDefaultMappings: !!mappings.default_mappings,
+          defaultMappingsKeys: mappings.default_mappings ? Object.keys(mappings.default_mappings) : []
+        });
+        
+        if (mappings.project_mappings && Object.keys(mappings.project_mappings).length > 0) {
+          // Use project_mappings (prioritize over default_mappings)
+          Object.keys(mappings.project_mappings).forEach(docType => {
+            mappings.project_mappings[docType].forEach(roleKey => {
+              if (!roleToDocTypes[roleKey]) {
+                roleToDocTypes[roleKey] = [];
+              }
+              roleToDocTypes[roleKey].push(docType);
+            });
+          });
+          console.log('[DocumentReview] ✅ Using project_mappings (NOT default_mappings):', roleToDocTypes);
+        } else {
+          // Only use defaults if project_mappings doesn't exist or is empty
+          console.log('[DocumentReview] ⚠️ No project_mappings found, using default_mappings');
+          // Convert default_mappings if available
+          if (mappings.default_mappings) {
+            Object.keys(mappings.default_mappings).forEach(docType => {
+              mappings.default_mappings[docType].forEach(roleKey => {
+                if (!roleToDocTypes[roleKey]) {
+                  roleToDocTypes[roleKey] = [];
+                }
+                roleToDocTypes[roleKey].push(docType);
+              });
+            });
+          }
+        }
+        
+        // IMPORTANT: Check if project_mappings exists in API response (even if empty)
+        // If it exists, ALWAYS use it. Only use defaults if project_mappings doesn't exist in API
+        const projectMappingsExists = mappings.project_mappings !== null && mappings.project_mappings !== undefined;
+        setHasProjectMappingsInAPI(projectMappingsExists);
+        
+        if (projectMappingsExists) {
+          // project_mappings exists in API - ALWAYS use it (even if empty or converted result is empty)
+          setProjectDocumentMappings(roleToDocTypes);
+          console.log('[DocumentReview] ✅ project_mappings EXISTS in API - using project_mappings:', roleToDocTypes);
+        } else {
+          // project_mappings doesn't exist in API - use defaults
+          setProjectDocumentMappings(Object.keys(roleToDocTypes).length > 0 ? roleToDocTypes : null);
+          console.log('[DocumentReview] ⚠️ project_mappings DOES NOT EXIST in API - using default_mappings:', roleToDocTypes);
+        }
+        
+        console.log('[DocumentReview] Final document mappings set:', {
+          projectMappingsExistsInAPI: projectMappingsExists,
+          projectDocumentMappings: roleToDocTypes,
+          roleToDocTypes: roleToDocTypes
+        });
+      } catch (err) {
+        console.error('[DocumentReview] Error fetching project mappings, using defaults:', err);
+        setProjectDocumentMappings(null);
+        setHasProjectMappingsInAPI(false);
+      }
+    };
+
+    fetchProjectMappings();
+  }, [currentLand?.land_id]);
+
+  // Recalculate document types count when project mappings or reviewer role changes
+  useEffect(() => {
+    const recalculateDocumentTypesCount = async () => {
+      if (!currentLand?.land_id || !reviewerRole) return;
+      
+      try {
+        const statusSummary = await documentsAPI.getDocumentStatusSummary(currentLand.land_id);
+        if (statusSummary && Array.isArray(statusSummary)) {
+          // Filter document types by reviewer role using project_mappings
+          let filteredDocumentTypes = statusSummary;
+          if (hasProjectMappingsInAPI && projectDocumentMappings) {
+            // Use project_mappings to filter
+            const allowedTypesForRole = projectDocumentMappings[reviewerRole] || [];
+            filteredDocumentTypes = statusSummary.filter(summaryItem => 
+              allowedTypesForRole.includes(summaryItem.document_type)
+            );
+          } else if (!hasProjectMappingsInAPI) {
+            // Use default mappings if project_mappings doesn't exist
+            const allowedTypesForRole = defaultRoleDocumentMapping[reviewerRole] || [];
+            filteredDocumentTypes = statusSummary.filter(summaryItem => 
+              allowedTypesForRole.includes(summaryItem.document_type)
+            );
+          }
+          
+          setDocumentTypesCount(filteredDocumentTypes.length);
+          console.log("[DocumentReview] Recalculated document types count:", {
+            reviewerRole: reviewerRole,
+            hasProjectMappingsInAPI: hasProjectMappingsInAPI,
+            totalTypes: statusSummary.length,
+            filteredTypes: filteredDocumentTypes.length,
+            filteredTypesList: filteredDocumentTypes.map(item => item.document_type)
+          });
+        }
+      } catch (err) {
+        console.error("[DocumentReview] Error recalculating document types count:", err);
+      }
+    };
+
+    recalculateDocumentTypesCount();
+  }, [currentLand?.land_id, reviewerRole, hasProjectMappingsInAPI, projectDocumentMappings]);
+
   // Helper function to check if a document type is allowed for the reviewer role
   const isDocumentTypeAllowed = (documentType, role) => {
     // Admin can see all documents
@@ -68,8 +193,22 @@ const DocumentReview = () => {
     // If no reviewer role, don't show any documents
     if (!role) return false;
     
-    // Check if document type is in the allowed list for this role
-    const allowedTypes = roleDocumentMapping[role] || [];
+    // ALWAYS use project_mappings if it exists in API (even if empty), only use defaults if project_mappings doesn't exist in API
+    // hasProjectMappingsInAPI tells us if project_mappings was present in the API response
+    const roleMapping = hasProjectMappingsInAPI ? (projectDocumentMappings || {}) : defaultRoleDocumentMapping;
+    const allowedTypes = roleMapping[role] || [];
+    
+    // Log for debugging
+    console.log(`[DocumentReview] Checking document type ${documentType} for role ${role}:`, {
+      hasProjectMappingsInAPI: hasProjectMappingsInAPI,
+      usingProjectMappings: hasProjectMappingsInAPI,
+      projectMappings: projectDocumentMappings,
+      defaultMappings: defaultRoleDocumentMapping,
+      roleMapping: roleMapping,
+      allowedTypes: allowedTypes,
+      isAllowed: allowedTypes.includes(documentType)
+    });
+    
     return allowedTypes.includes(documentType);
   };
 
@@ -234,6 +373,38 @@ const DocumentReview = () => {
     }
   };
 
+  const handleStatusChange = (statusData) => {
+    setCurrentTaskStatus(statusData);
+    console.log('📥 Parent: Received status from ReviewPanel:', statusData);
+    
+    // Store in localStorage so ProjectReviewersPage can access it
+    // Use taskId_reviewerRole_assignedTo to make it unique per reviewer
+    // Multiple reviewers can have the same role and task, so we need assignedTo
+    try {
+      const assignedTo = statusData.assignedTo || currentTask?.assigned_to;
+      if (!assignedTo) {
+        console.warn('⚠️ Cannot save status: No assigned_to found in statusData or currentTask');
+        return;
+      }
+      
+      const storageKey = `task_status_${statusData.taskId}_${statusData.reviewerRole}_${assignedTo}`;
+      localStorage.setItem(storageKey, JSON.stringify(statusData));
+      console.log('💾 Saved status to localStorage:', storageKey, {
+        taskId: statusData.taskId,
+        reviewerRole: statusData.reviewerRole,
+        assignedTo: assignedTo,
+        status: statusData.status
+      });
+      
+      // Dispatch custom event to notify other components (like ProjectReviewersPage)
+      window.dispatchEvent(new CustomEvent('taskStatusUpdated', {
+        detail: { storageKey, statusData }
+      }));
+    } catch (error) {
+      console.error('Error storing status:', error);
+    }
+  };
+
   /** 🧩 Main Fetch */
   const fetchData = useCallback(async () => {
     try {
@@ -350,7 +521,7 @@ const DocumentReview = () => {
         setCurrentLand(land);
         docs = await documentsAPI.getDocuments(task.land_id);
         
-        // Filter documents based on reviewer role
+        // Filter documents based on task's assigned_role (parent role)
         // Always filter by role if a specific reviewer role is set (even for admins viewing as a reviewer)
         const isAdmin = user?.role === 'admin' || user?.roles?.includes('administrator');
         const shouldFilterByRole = taskRole && (taskRole === 're_sales_advisor' || taskRole === 're_analyst' || taskRole === 're_governance_lead');
@@ -359,14 +530,50 @@ const DocumentReview = () => {
           // Filter out subtask documents
           if (doc.subtask_id) return false;
           
-          // Filter by document type based on reviewer role
+          // Filter by document type based on task's assigned_role (parent role)
           return isDocumentTypeAllowed(doc.document_type, taskRole);
         });
         
-        console.log("[DocumentReview] Documents filtering:", {
+        // Fetch document status summary and filter by task's assigned_role using project_mappings
+        try {
+          const statusSummary = await documentsAPI.getDocumentStatusSummary(task.land_id);
+          if (statusSummary && Array.isArray(statusSummary)) {
+            // Filter document types by task's assigned_role using project_mappings
+            let filteredDocumentTypes = statusSummary;
+            if (shouldFilterByRole && taskRole) {
+              if (hasProjectMappingsInAPI && projectDocumentMappings) {
+                // Use project_mappings to filter
+                const allowedTypesForRole = projectDocumentMappings[taskRole] || [];
+                filteredDocumentTypes = statusSummary.filter(summaryItem => 
+                  allowedTypesForRole.includes(summaryItem.document_type)
+                );
+              } else {
+                // Fallback to isDocumentTypeAllowed if project_mappings not loaded yet
+                filteredDocumentTypes = statusSummary.filter(summaryItem => 
+                  isDocumentTypeAllowed(summaryItem.document_type, taskRole)
+                );
+              }
+            }
+            setDocumentTypesCount(filteredDocumentTypes.length);
+            console.log("[DocumentReview] Document types count (filtered by task role):", {
+              totalTypes: statusSummary.length,
+              filteredTypes: filteredDocumentTypes.length,
+              taskRole: taskRole,
+              taskAssignedRole: task.assigned_role,
+              hasProjectMappingsInAPI: hasProjectMappingsInAPI,
+              filteredTypesList: filteredDocumentTypes.map(item => item.document_type)
+            });
+          }
+        } catch (err) {
+          console.error("[DocumentReview] Error fetching document status summary:", err);
+          setDocumentTypesCount(0);
+        }
+        
+        console.log("[DocumentReview] Documents filtering (by task assigned_role):", {
           totalDocs: docs.length,
           filteredDocs: filteredDocs.length,
-          reviewerRole: taskRole,
+          taskRole: taskRole,
+          taskAssignedRole: task.assigned_role,
           isAdmin: isAdmin,
           shouldFilterByRole: shouldFilterByRole,
           filteredDocTypes: filteredDocs.map(d => d.document_type)
@@ -380,12 +587,23 @@ const DocumentReview = () => {
       const autoSwitchRole = location.state?.autoSwitchRole;
       const targetRole = location.state?.reviewerRole;
       
+      // Determine document category from navigation state or role
+      const navDocumentCategory = location.state?.documentCategory;
+      const roleDocumentCategoryMap = {
+        're_sales_advisor': 'land-valuation',
+        're_analyst': 'financial-models',
+        're_governance_lead': 'ownership-documents'
+      };
+      const determinedDocumentCategory = navDocumentCategory || roleDocumentCategoryMap[taskRole] || roleDocumentCategoryMap[reviewerRole] || 'ownership-documents';
+      setDocumentCategory(determinedDocumentCategory);
+      
       console.log('📋 Document Review - Navigation state:', {
         autoSwitchRole,
         targetRole,
         taskType: location.state?.taskType,
         taskAssignedRole: task.assigned_role,
         currentReviewerRole: reviewerRole,
+        documentCategory: determinedDocumentCategory,
         locationState: location.state,
         projectId,
         landId: task.land_id
@@ -543,8 +761,14 @@ const DocumentReview = () => {
           },
         ]);
         
-        // Update role first, then clear task and subtasks
+        // Update role and document category, then clear task and subtasks
+        const roleDocumentCategoryMap = {
+          're_sales_advisor': 'land-valuation',
+          're_analyst': 'financial-models',
+          're_governance_lead': 'ownership-documents'
+        };
         setReviewerRole(newRole);
+        setDocumentCategory(roleDocumentCategoryMap[newRole] || 'ownership-documents');
         setCurrentTask(null);
         setSubtasks([]);
         setIsLoading(false);
@@ -552,8 +776,14 @@ const DocumentReview = () => {
         return;
       }
   
-      // Update role immediately
+      // Update role and document category immediately
+      const roleDocumentCategoryMap = {
+        're_sales_advisor': 'land-valuation',
+        're_analyst': 'financial-models',
+        're_governance_lead': 'ownership-documents'
+      };
       setReviewerRole(newRole);
+      setDocumentCategory(roleDocumentCategoryMap[newRole] || 'ownership-documents');
       
       // Fetch subtasks
       console.log('📥 Fetching subtasks for task:', roleTask.task_id);
@@ -577,22 +807,59 @@ const DocumentReview = () => {
       // Update subtasks
       setSubtasks(finalSubtasks);
       
-      // Re-fetch and filter documents based on new role
+      // Re-fetch and filter documents based on task's assigned_role (parent role)
       if (roleTask.land_id) {
         try {
           const allDocs = await documentsAPI.getDocuments(roleTask.land_id);
+          
           const isAdmin = user?.role === 'admin' || user?.roles?.includes('administrator');
           const shouldFilterByRole = newRole && (newRole === 're_sales_advisor' || newRole === 're_analyst' || newRole === 're_governance_lead');
           
+          // Filter documents by task's assigned_role (parent role)
           const filteredDocs = (isAdmin && !shouldFilterByRole) ? allDocs : allDocs.filter(doc => {
             // Filter out subtask documents
             if (doc.subtask_id) return false;
-            // Filter by document type based on new role
+            // Filter by document type based on task's assigned_role
             return isDocumentTypeAllowed(doc.document_type, newRole);
           });
           
-          console.log('[DocumentReview] Documents re-fetched and filtered on role change:', {
+          // Fetch document status summary and filter by task's assigned_role using project_mappings
+          try {
+            const statusSummary = await documentsAPI.getDocumentStatusSummary(roleTask.land_id);
+            if (statusSummary && Array.isArray(statusSummary)) {
+              // Filter document types by task's assigned_role using project_mappings
+              let filteredDocumentTypes = statusSummary;
+              if (shouldFilterByRole && newRole) {
+                if (hasProjectMappingsInAPI && projectDocumentMappings) {
+                  // Use project_mappings to filter
+                  const allowedTypesForRole = projectDocumentMappings[newRole] || [];
+                  filteredDocumentTypes = statusSummary.filter(summaryItem => 
+                    allowedTypesForRole.includes(summaryItem.document_type)
+                  );
+                } else {
+                  // Fallback to isDocumentTypeAllowed if project_mappings not loaded yet
+                  filteredDocumentTypes = statusSummary.filter(summaryItem => 
+                    isDocumentTypeAllowed(summaryItem.document_type, newRole)
+                  );
+                }
+              }
+              setDocumentTypesCount(filteredDocumentTypes.length);
+              console.log('[DocumentReview] Document types count updated on role change (filtered by task role):', {
+                totalTypes: statusSummary.length,
+                filteredTypes: filteredDocumentTypes.length,
+                taskRole: newRole,
+                taskAssignedRole: roleTask.assigned_role,
+                hasProjectMappingsInAPI: hasProjectMappingsInAPI,
+                filteredTypesList: filteredDocumentTypes.map(item => item.document_type)
+              });
+            }
+          } catch (err) {
+            console.error('[DocumentReview] Error fetching document status summary on role change:', err);
+          }
+          
+          console.log('[DocumentReview] Documents re-fetched and filtered on role change (by task assigned_role):', {
             role: newRole,
+            taskAssignedRole: roleTask.assigned_role,
             totalDocs: allDocs.length,
             filteredDocs: filteredDocs.length,
             isAdmin: isAdmin,
@@ -667,10 +934,40 @@ const DocumentReview = () => {
   const handleDeleteAnnotation = (id) => setAnnotations((p) => p.filter((a) => a.id !== id));
 
   const handleSubtaskUpdate = async (subtaskId, updates) => {
-    if (!currentTask) return;
+    if (!currentTask || !currentLand?.land_id) return;
+    
+    // Update subtask
     await taskAPI.updateSubtask(currentTask.task_id, subtaskId, updates);
     const updated = await taskAPI.getSubtasks(currentTask.task_id);
     setSubtasks(updated);
+    
+    // Calculate completion percentage from updated subtasks
+    const completedCount = updated.filter(s => s.status === 'completed').length;
+    const totalCount = updated.length;
+    const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    
+    // Get current review status to preserve document counts
+    const currentStatus = roleStatuses[reviewerRole] || {};
+    const documentsApproved = currentStatus.documentsApproved || currentStatus.documents_approved || 0;
+    const totalDocuments = currentStatus.totalDocuments || currentStatus.total_documents || 0;
+    
+    // Update review status with completion percentage
+    await updateRoleStatus(reviewerRole, {
+      subtasksCompleted: completedCount,
+      totalSubtasks: totalCount,
+      documentsApproved: documentsApproved,
+      totalDocuments: totalDocuments,
+      completion_percentage: completionPercentage,
+      status: completionPercentage === 100 ? 'completed' : (completionPercentage > 0 ? 'in_progress' : 'pending')
+    });
+    
+    console.log('[DocumentReview] Review status updated after subtask change:', {
+      role: reviewerRole,
+      completionPercentage,
+      subtasksCompleted: completedCount,
+      totalSubtasks: totalCount,
+      status: completionPercentage === 100 ? 'completed' : (completionPercentage > 0 ? 'in_progress' : 'pending')
+    });
   };
 
   const handleAddSubtask = async (data) => {
@@ -773,18 +1070,30 @@ const DocumentReview = () => {
               {/* Quick Stats */}
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div className="text-center p-3 bg-muted/20 rounded-lg">
-                  <p className="text-2xl font-semibold text-foreground">{documents.length}</p>
-                  <p className="text-xs text-muted-foreground">Documents</p>
-                </div>
-                <div className="text-center p-3 bg-muted/20 rounded-lg">
                   <p className="text-2xl font-semibold text-foreground">
-                    {documents.filter(doc => 
-                      doc.status === 'under_review' || 
-                      doc.version_status === 'under_review' ||
-                      doc.review_locked_by !== null
-                    ).length}
+                    {documents.filter(doc => {
+                      // Filter out subtask documents
+                      if (doc.subtask_id) return false;
+                      
+                      // Ensure document type is allowed for reviewer role using project_mappings
+                      if (hasProjectMappingsInAPI && projectDocumentMappings && reviewerRole) {
+                        const allowedTypesForRole = projectDocumentMappings[reviewerRole] || [];
+                        if (!allowedTypesForRole.includes(doc.document_type)) {
+                          return false;
+                        }
+                      }
+                      
+                      // Check if document is under review
+                      return doc.status === 'under_review' || 
+                             doc.version_status === 'under_review' ||
+                             doc.review_locked_by !== null;
+                    }).length}
                   </p>
                   <p className="text-xs text-muted-foreground">Under Review</p>
+                </div>
+                <div className="text-center p-3 bg-muted/20 rounded-lg">
+                  <p className="text-2xl font-semibold text-foreground">{documentTypesCount}</p>
+                  <p className="text-xs text-muted-foreground">Document Types</p>
                 </div>
               </div>
             </div>
@@ -795,6 +1104,7 @@ const DocumentReview = () => {
           <div className="xl:col-span-3">
             <ReviewPanel
               reviewerRole={reviewerRole}
+              documentCategory={documentCategory}
               currentTask={currentTask}
               subtasks={subtasks}
               currentUser={user}
@@ -806,6 +1116,26 @@ const DocumentReview = () => {
               onViewDocument={handleViewDocument}
               onEditDocument={handleEditDocument}
               onApprove={handleApproveReview}
+              roleStatuses={roleStatuses}
+              onStatusChange={handleStatusChange} 
+              onSaveProgress={async (reviewData) => {
+                // Update review status when progress is saved
+                const completedCount = subtasks.filter(s => s.status === 'completed').length;
+                const totalCount = subtasks.length;
+                const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+                
+                await updateRoleStatus(reviewerRole, {
+                  subtasksCompleted: completedCount,
+                  totalSubtasks: totalCount,
+                  documentsApproved: reviewData?.documentsApproved || 0,
+                  totalDocuments: reviewData?.totalDocuments || 0,
+                  completion_percentage: completionPercentage,
+                  status: completionPercentage === 100 ? 'completed' : (completionPercentage > 0 ? 'in_progress' : 'pending'),
+                  reviewData: reviewData
+                });
+                
+                console.log('[DocumentReview] Progress saved with completion:', completionPercentage);
+              }}
               initialRole={location.state?.reviewerRole}
               autoSwitchRole={location.state?.autoSwitchRole}
               initialTaskType={location.state?.taskType}

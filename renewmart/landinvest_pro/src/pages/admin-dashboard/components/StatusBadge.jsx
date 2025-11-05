@@ -1,8 +1,33 @@
 import React from 'react';
 
-const StatusBadge = ({ status, size = 'default' }) => {
+const StatusBadge = ({ status, size = 'default', completionPercentage, reviewStatus }) => {
+  // Determine the actual status to display based on completion percentage or review status
+  const getDisplayStatus = () => {
+    // If completion percentage is 100% or review status shows completion, show "Completed"
+    if (completionPercentage !== undefined && completionPercentage >= 100) {
+      return 'completed';
+    }
+    
+    // Check review status for completion indicators
+    if (reviewStatus) {
+      if (reviewStatus.published === true || 
+          reviewStatus.status === 'completed' || 
+          reviewStatus.status === 'published') {
+        return 'completed';
+      }
+      if (reviewStatus.completion_percentage !== undefined && reviewStatus.completion_percentage >= 100) {
+        return 'completed';
+      }
+    }
+    
+    // Otherwise, use the provided status
+    return status?.toLowerCase();
+  };
+
+  const displayStatus = getDisplayStatus();
+
   const getStatusStyles = () => {
-    switch (status?.toLowerCase()) {
+    switch (displayStatus) {
       case 'in progress':
         return 'bg-primary/10 text-primary border-primary/20';
       case 'pending':
@@ -33,12 +58,21 @@ const StatusBadge = ({ status, size = 'default' }) => {
     }
   };
 
+  // Get the display label
+  const getDisplayLabel = () => {
+    if (displayStatus === 'completed') {
+      return 'Completed';
+    }
+    // Capitalize first letter of status
+    return status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : status;
+  };
+
   return (
     <span className={`
       inline-flex items-center rounded-full border font-medium font-body
       ${getStatusStyles()} ${getSizeClasses()}
     `}>
-      {status}
+      {getDisplayLabel()}
     </span>
   );
 };

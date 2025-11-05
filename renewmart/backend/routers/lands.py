@@ -13,6 +13,7 @@ from models.schemas import (
     LandSectionCreate, LandSection,
     SectionDefinition, MessageResponse
 )
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/lands", tags=["lands"])
 
@@ -1314,3 +1315,299 @@ async def get_section_definitions(
         )
         for row in results
     ]
+
+
+# Pydantic models for document role mappings
+class DocumentRoleMappingsRequest(BaseModel):
+    mappings: Dict[str, List[str]]
+
+# Project Document Role Mappings
+@router.get("/{land_id}/document-role-mappings", response_model=Dict[str, Any])
+async def get_project_document_role_mappings(
+    land_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get project-specific document role mappings for a project (accessible to all authenticated users)."""
+    
+    # Verify land exists
+    land_query = text("SELECT land_id FROM lands WHERE land_id = :land_id")
+    land_result = db.execute(land_query, {"land_id": str(land_id)}).first()
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Get all document types
+    doc_types_query = text("""
+        SELECT DISTINCT document_type 
+        FROM documents 
+        WHERE document_type IS NOT NULL
+        ORDER BY document_type
+    """)
+    doc_types_result = db.execute(doc_types_query).fetchall()
+    all_doc_types = []
+    for row in doc_types_result:
+        if hasattr(row, '_mapping'):
+            all_doc_types.append(row._mapping['document_type'])
+        elif isinstance(row, tuple):
+            all_doc_types.append(row[0])
+        else:
+            all_doc_types.append(getattr(row, 'document_type', row[0]))
+    
+    # Get all reviewer roles
+    roles_query = text("""
+        SELECT role_key, label 
+        FROM lu_roles 
+        WHERE role_key IN ('re_sales_advisor', 're_analyst', 're_governance_lead')
+        ORDER BY role_key
+    """)
+    roles_result = db.execute(roles_query).fetchall()
+    all_roles = []
+    for row in roles_result:
+        if hasattr(row, '_mapping'):
+            all_roles.append({"role_key": row._mapping['role_key'], "label": row._mapping['label']})
+        elif isinstance(row, tuple):
+            all_roles.append({"role_key": row[0], "label": row[1]})
+        else:
+            all_roles.append({"role_key": getattr(row, 'role_key', row[0]), "label": getattr(row, 'label', row[1])})
+    
+    # Get project-specific mappings
+    mappings_query = text("""
+        SELECT document_type, role_key
+        FROM project_document_role_mappings
+        WHERE land_id = :land_id
+    """)
+    try:
+        mappings_result = db.execute(mappings_query, {"land_id": str(land_id)}).fetchall()
+    except Exception as e:
+        # Table might not exist yet, return empty mappings
+        print(f"Warning: project_document_role_mappings table may not exist: {e}")
+        mappings_result = []
+    
+    # Get default mappings
+    # Try to get from document_type_roles table, or use hardcoded defaults
+    default_mappings = {}
+    try:
+        default_mappings_query = text("""
+            SELECT document_type, role_key
+            FROM document_type_roles
+            WHERE can_view = true
+        """)
+        default_mappings_result = db.execute(default_mappings_query).fetchall()
+        for row in default_mappings_result:
+            if hasattr(row, '_mapping'):
+                doc_type = row._mapping['document_type']
+                role_key = row._mapping['role_key']
+            elif isinstance(row, tuple):
+                doc_type = row[0]
+                role_key = row[1]
+            else:
+                doc_type = getattr(row, 'document_type', row[0])
+                role_key = getattr(row, 'role_key', row[1])
+            if doc_type not in default_mappings:
+                default_mappings[doc_type] = []
+            default_mappings[doc_type].append(role_key)
+    except Exception as e:
+        # Table might not exist or have different structure, use hardcoded defaults
+        print(f"Warning: document_type_roles table may not exist or have different structure: {e}")
+        # Use hardcoded default mappings
+        default_mappings = {
+            "land-valuation": ["re_sales_advisor", "re_governance_lead"],
+            "ownership-documents": ["re_governance_lead"],
+            "sale-contracts": ["re_sales_advisor"],
+            "topographical-surveys": ["re_sales_advisor"],
+            "grid-connectivity": ["re_sales_advisor"],
+            "financial-models": ["re_analyst"],
+            "zoning-approvals": ["re_governance_lead"],
+            "environmental-impact": ["re_governance_lead"],
+            "government-nocs": ["re_governance_lead"]
+        }
+    
+    # Build response structure: document_type -> [role_keys]
+    project_mappings = {}
+    for row in mappings_result:
+        if hasattr(row, '_mapping'):
+            doc_type = row._mapping['document_type']
+            role_key = row._mapping['role_key']
+        elif isinstance(row, tuple):
+            doc_type = row[0]
+            role_key = row[1]
+        else:
+            doc_type = getattr(row, 'document_type', row[0])
+            role_key = getattr(row, 'role_key', row[1])
+        if doc_type not in project_mappings:
+            project_mappings[doc_type] = []
+        project_mappings[doc_type].append(role_key)
+    
+    # Get user's roles to filter document types
+    user_roles = current_user.get("roles", [])
+    is_admin = "administrator" in user_roles
+    
+    # Filter document types based on user's role
+    # Admin can see all document types, others see only what their roles allow
+    filtered_doc_types = []
+    if is_admin:
+        # Admin sees all document types
+        filtered_doc_types = all_doc_types if all_doc_types else [
+            "land-valuation",
+            "ownership-documents",
+            "sale-contracts",
+            "topographical-surveys",
+            "grid-connectivity",
+            "financial-models",
+            "zoning-approvals",
+            "environmental-impact",
+            "government-nocs"
+        ]
+    else:
+        # Get reviewer roles from user's roles
+        reviewer_roles = [role for role in user_roles if role in ['re_sales_advisor', 're_analyst', 're_governance_lead']]
+        
+        # Determine which mappings to use (project-specific or default)
+        effective_mappings = project_mappings if project_mappings else default_mappings
+        
+        # Get all document types the user's roles can access
+        allowed_doc_types = set()
+        for doc_type, role_keys in effective_mappings.items():
+            # Check if any of the user's reviewer roles can access this document type
+            if any(role in role_keys for role in reviewer_roles):
+                allowed_doc_types.add(doc_type)
+        
+        # Filter the document types list to only include allowed ones
+        # Also exclude "subtask_document" as it's not a real document type for display
+        doc_types_list = all_doc_types if all_doc_types else [
+            "land-valuation",
+            "ownership-documents",
+            "sale-contracts",
+            "topographical-surveys",
+            "grid-connectivity",
+            "financial-models",
+            "zoning-approvals",
+            "environmental-impact",
+            "government-nocs"
+        ]
+        
+        filtered_doc_types = [
+            dt for dt in doc_types_list 
+            if dt in allowed_doc_types and dt != "subtask_document"
+        ]
+        
+        # If user has no reviewer roles, return empty list
+        if not reviewer_roles:
+            filtered_doc_types = []
+    
+    print(f"📋 Filtered document types for user {current_user.get('user_id')} (roles: {user_roles}): {filtered_doc_types}")
+    
+    return {
+        "land_id": str(land_id),
+        "document_types": filtered_doc_types,
+        "roles": all_roles,
+        "project_mappings": project_mappings,
+        "default_mappings": default_mappings
+    }
+
+
+@router.post("/{land_id}/document-role-mappings", response_model=MessageResponse)
+async def save_project_document_role_mappings(
+    land_id: UUID,
+    request: DocumentRoleMappingsRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Save project-specific document role mappings (accessible to all authenticated users).
+    
+    Request body format: {
+        "mappings": {
+            "document_type": ["role_key1", "role_key2"],
+            ...
+        }
+    }
+    """
+    mappings = request.mappings
+    
+    # Verify land exists
+    land_query = text("SELECT land_id FROM lands WHERE land_id = :land_id")
+    land_result = db.execute(land_query, {"land_id": str(land_id)}).first()
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    try:
+        # Check if table exists first
+        table_check_query = text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'project_document_role_mappings'
+            )
+        """)
+        table_exists = db.execute(table_check_query).scalar()
+        
+        if not table_exists:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The project_document_role_mappings table does not exist. Please run the database migration script (renew-sql.sql) to create the required table."
+            )
+        
+        # Delete existing mappings for this project
+        delete_query = text("""
+            DELETE FROM project_document_role_mappings
+            WHERE land_id = :land_id
+        """)
+        db.execute(delete_query, {"land_id": str(land_id)})
+        
+        # Insert new mappings
+        insert_query = text("""
+            INSERT INTO project_document_role_mappings 
+            (land_id, document_type, role_key, created_by)
+            VALUES (:land_id, :document_type, :role_key, :created_by)
+        """)
+        
+        for document_type, role_keys in mappings.items():
+            for role_key in role_keys:
+                # Verify role exists
+                role_check = text("SELECT role_key FROM lu_roles WHERE role_key = :role_key")
+                role_result = db.execute(role_check, {"role_key": role_key}).first()
+                if not role_result:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid role: {role_key}"
+                    )
+                
+                db.execute(insert_query, {
+                    "land_id": str(land_id),
+                    "document_type": document_type,
+                    "role_key": role_key,
+                    "created_by": current_user.get("user_id")
+                })
+        
+        db.commit()
+        
+        # Log the successful save for debugging
+        print(f"✅ Project document role mappings saved for land_id: {land_id}")
+        print(f"   Mappings saved: {len(mappings)} document types configured")
+        
+        return MessageResponse(
+            message="Document role mappings saved successfully. Changes will be applied immediately to all document queries.",
+            success=True
+        )
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        error_msg = str(e)
+        if "does not exist" in error_msg or "UndefinedTable" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The project_document_role_mappings table does not exist. Please run the database migration script (renew-sql.sql) to create the required table."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving mappings: {error_msg}"
+        )

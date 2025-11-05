@@ -14,6 +14,11 @@ This folder contains SQL migration scripts for the RenewMart database.
 **Status**: **NEW - Ready to apply**
 **Date**: 2025-10-17
 
+### 3. add_project_document_role_mappings.sql
+**Purpose**: Creates project_document_role_mappings table for project-specific document type to role mappings
+**Status**: **NEW - Ready to apply**
+**Date**: 2025-01-XX
+
 ## How to Apply Migrations
 
 ### Using psql Command Line
@@ -51,11 +56,15 @@ with engine.connect() as conn:
 If running in Docker:
 
 ```bash
-# Copy migration file to container
-docker cp add_document_blob_storage.sql renewmart_backend:/app/migrations/
+# Option 1: Using Python migration script (recommended)
+docker exec -it renewmart-backend python /app/apply_project_document_role_mappings_migration.py
 
-# Execute in container
-docker exec -it renewmart_backend psql -U postgres -d renewmart -f /app/migrations/add_document_blob_storage.sql
+# Option 2: Using psql directly
+docker exec -it renewmart-postgres psql -U renewmart_user -d renewmart_db -f /docker-entrypoint-initdb.d/02-renew-sql.sql
+
+# Option 3: Copy migration file and run via psql
+docker cp add_project_document_role_mappings.sql renewmart-postgres:/tmp/
+docker exec -it renewmart-postgres psql -U renewmart_user -d renewmart_db -f /tmp/add_project_document_role_mappings.sql
 ```
 
 ## Migration: add_document_blob_storage.sql
@@ -134,6 +143,7 @@ AND indexname = 'idx_documents_document_id';
 |------|------|-------------|--------|
 | 2024-XX-XX | `add_project_priority_and_due_date.sql` | Project management fields | ✅ Applied |
 | 2025-10-17 | `add_document_blob_storage.sql` | Document blob storage | 🆕 Ready |
+| 2025-01-XX | `add_project_document_role_mappings.sql` | Project document role mappings table | 🆕 Ready |
 
 ## Best Practices
 

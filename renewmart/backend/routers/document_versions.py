@@ -51,9 +51,11 @@ async def get_document_versions(
     
     # Get all versions of the document (exclude subtask documents)
     query = text("""
-        SELECT d.*, u.first_name, u.last_name, u.email as uploader_email
+        SELECT d.*, u.first_name, u.last_name, u.email as uploader_email,
+               approver.first_name as approver_first_name, approver.last_name as approver_last_name
         FROM documents d
         LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN "user" approver ON d.approved_by = approver.user_id
         WHERE d.land_id = :land_id AND d.document_type = :document_type
         AND d.subtask_id IS NULL
         ORDER BY d.doc_slot, d.version_number DESC, d.created_at DESC
@@ -77,15 +79,20 @@ async def get_document_versions(
             "mime_type": doc_dict["mime_type"],
             "is_draft": doc_dict["is_draft"],
             "status": doc_dict["status"],
+            "approved_by": doc_dict.get("approved_by"),
+            "approved_at": doc_dict.get("approved_at"),
+            "rejection_reason": doc_dict.get("rejection_reason"),
             "version_number": doc_dict["version_number"],
             "is_latest_version": doc_dict["is_latest_version"],
             "version_status": doc_dict["version_status"],
             "version_notes": doc_dict["version_notes"],
             "version_change_reason": doc_dict["version_change_reason"],
             "review_locked_at": doc_dict["review_locked_at"],
+            "review_locked_by": doc_dict.get("review_locked_by"),
             "created_at": doc_dict["created_at"],
             "doc_slot": doc_dict.get("doc_slot", "D1"),
-            "uploader_name": f"{doc_dict['first_name']} {doc_dict['last_name']}" if doc_dict['first_name'] else doc_dict['uploader_email']
+            "uploader_name": f"{doc_dict['first_name']} {doc_dict['last_name']}" if doc_dict['first_name'] else doc_dict['uploader_email'],
+            "approver_name": f"{doc_dict['approver_first_name']} {doc_dict['approver_last_name']}" if doc_dict.get('approver_first_name') else None
         })
     
     return documents
@@ -267,6 +274,264 @@ async def archive_document_version(
     )
     
     return {"message": "Document version archived successfully"}
+
+@router.post("/{document_id}/approve")
+async def approve_document_version(
+    document_id: UUID,
+    reason: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Approve a document version that is under review (reviewer action)"""
+    
+    # Get document info
+    doc_query = text("""
+        SELECT d.*, l.land_id, l.title as land_title, t.assigned_to, t.assigned_role
+        FROM documents d
+        LEFT JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN tasks t ON d.land_id = t.land_id AND t.assigned_to = :user_id
+        WHERE d.document_id = :document_id
+    """)
+    
+    doc_result = db.execute(doc_query, {
+        "document_id": str(document_id),
+        "user_id": str(current_user["user_id"])
+    }).fetchone()
+    
+    if not doc_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+    
+    # Convert result to dict for easier access
+    doc_dict = dict(doc_result._mapping)
+    
+    # Check if document is under review
+    version_status = doc_dict.get('version_status') or doc_dict.get('d.version_status')
+    if version_status != 'under_review':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document is not under review. Only documents under review can be approved."
+        )
+    
+    # Check permissions - user must be assigned as reviewer for this land
+    user_roles = current_user.get("roles", [])
+    user_id = current_user["user_id"]
+    user_id_str = str(user_id)
+    is_admin = "administrator" in user_roles
+    
+    # Get land_id from document
+    land_id = doc_dict.get('land_id') or doc_dict.get('d.land_id')
+    if not land_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document does not have an associated land"
+        )
+    
+    # Check if user is assigned as reviewer for this land
+    reviewer_check = text("""
+        SELECT assigned_role FROM tasks 
+        WHERE land_id = :land_id AND assigned_to = :user_id
+        LIMIT 1
+    """)
+    reviewer_result = db.execute(reviewer_check, {
+        "land_id": str(land_id),
+        "user_id": user_id_str
+    }).fetchone()
+    
+    if not is_admin and not reviewer_result:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Only assigned reviewers can approve documents."
+        )
+    
+    # Approve the document
+    approve_query = text("""
+        UPDATE documents 
+        SET status = 'approved',
+            version_status = 'active',
+            approved_by = CAST(:approved_by AS uuid),
+            approved_at = :approved_at,
+            version_change_reason = :reason,
+            review_locked_at = NULL,
+            review_locked_by = NULL
+        WHERE document_id = CAST(:document_id AS uuid)
+        RETURNING document_id, land_id, document_type, version_number
+    """)
+    
+    try:
+        result = db.execute(approve_query, {
+            "document_id": str(document_id),
+            "approved_by": user_id_str,
+            "approved_at": datetime.utcnow(),
+            "reason": reason or "Approved by reviewer"
+        })
+        db.commit()
+        
+        # Get updated document info for notification
+        updated_doc = result.fetchone()
+        if updated_doc:
+            updated_doc_dict = dict(updated_doc._mapping)
+        else:
+            # Fallback to original doc_dict
+            updated_doc_dict = doc_dict
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve document: {str(e)}"
+        )
+    
+    # Send notification (with error handling)
+    try:
+        notification_service = NotificationService(db)
+        notification_service.notify_status_change(
+            str(land_id),
+            updated_doc_dict.get('document_type') or doc_dict.get('document_type', 'unknown'),
+            updated_doc_dict.get('version_number') or doc_dict.get('version_number', 1),
+            user_id_str,
+            'approved',
+            reason or "Approved by reviewer"
+        )
+    except Exception as e:
+        # Log notification error but don't fail the approval
+        print(f"Warning: Failed to send notification: {str(e)}")
+    
+    return {"message": "Document version approved successfully"}
+
+@router.post("/{document_id}/reject")
+async def reject_document_version(
+    document_id: UUID,
+    rejection_reason: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reject a document version that is under review (reviewer action)"""
+    
+    # Get document info
+    doc_query = text("""
+        SELECT d.*, l.land_id, l.title as land_title, t.assigned_to, t.assigned_role
+        FROM documents d
+        LEFT JOIN lands l ON d.land_id = l.land_id
+        LEFT JOIN tasks t ON d.land_id = t.land_id AND t.assigned_to = :user_id
+        WHERE d.document_id = :document_id
+    """)
+    
+    doc_result = db.execute(doc_query, {
+        "document_id": str(document_id),
+        "user_id": str(current_user["user_id"])
+    }).fetchone()
+    
+    if not doc_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+    
+    # Convert result to dict for easier access
+    doc_dict = dict(doc_result._mapping)
+    
+    # Check if document is under review
+    version_status = doc_dict.get('version_status') or doc_dict.get('d.version_status')
+    if version_status != 'under_review':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document is not under review. Only documents under review can be rejected."
+        )
+    
+    # Check permissions - user must be assigned as reviewer for this land
+    user_roles = current_user.get("roles", [])
+    user_id = current_user["user_id"]
+    user_id_str = str(user_id)
+    is_admin = "administrator" in user_roles
+    
+    # Get land_id from document
+    land_id = doc_dict.get('land_id') or doc_dict.get('d.land_id')
+    if not land_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document does not have an associated land"
+        )
+    
+    # Check if user is assigned as reviewer for this land
+    reviewer_check = text("""
+        SELECT assigned_role FROM tasks 
+        WHERE land_id = :land_id AND assigned_to = :user_id
+        LIMIT 1
+    """)
+    reviewer_result = db.execute(reviewer_check, {
+        "land_id": str(land_id),
+        "user_id": user_id_str
+    }).fetchone()
+    
+    if not is_admin and not reviewer_result:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Only assigned reviewers can reject documents."
+        )
+    
+    if not rejection_reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rejection reason is required"
+        )
+    
+    # Reject the document
+    reject_query = text("""
+        UPDATE documents 
+        SET status = 'rejected',
+            version_status = 'active',
+            approved_by = CAST(:approved_by AS uuid),
+            approved_at = :approved_at,
+            rejection_reason = :rejection_reason,
+            version_change_reason = :reason,
+            review_locked_at = NULL,
+            review_locked_by = NULL
+        WHERE document_id = CAST(:document_id AS uuid)
+        RETURNING document_id, land_id, document_type, version_number
+    """)
+    
+    try:
+        result = db.execute(reject_query, {
+            "document_id": str(document_id),
+            "approved_by": user_id_str,
+            "approved_at": datetime.utcnow(),
+            "rejection_reason": rejection_reason,
+            "reason": f"Rejected: {rejection_reason}"
+        })
+        db.commit()
+        
+        # Get updated document info for notification
+        updated_doc = result.fetchone()
+        if updated_doc:
+            updated_doc_dict = dict(updated_doc._mapping)
+        else:
+            # Fallback to original doc_dict
+            updated_doc_dict = doc_dict
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject document: {str(e)}"
+        )
+    
+    # Send notification (with error handling)
+    try:
+        notification_service = NotificationService(db)
+        notification_service.notify_status_change(
+            str(land_id),
+            updated_doc_dict.get('document_type') or doc_dict.get('document_type', 'unknown'),
+            updated_doc_dict.get('version_number') or doc_dict.get('version_number', 1),
+            user_id_str,
+            'rejected',
+            rejection_reason
+        )
+    except Exception as e:
+        # Log notification error but don't fail the rejection
+        print(f"Warning: Failed to send notification: {str(e)}")
+    
+    return {"message": "Document version rejected successfully"}
 
 @router.get("/land/{land_id}/status-summary")
 async def get_document_status_summary(

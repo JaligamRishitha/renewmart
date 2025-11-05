@@ -21,26 +21,35 @@ import api from '../../../services/api';
  * The component will re-render whenever the parent changes these props.
  */
 const ReviewPanel = ({ 
-  reviewerRole = 're_sales_advisor',  // Driven by parent
-  documentCategory = 'ownership',
-  currentTask = null,                  // Driven by parent
-  subtasks = [],                       // Driven by parent
-  currentUser = null,                  // User info for permission checks
-  reviewerRoles = [],                  // Role options for switching
-  onRoleChange = () => {},            // Role change handler
-  isRoleChanging = false,             // Role changing state
+  reviewerRole = 're_sales_advisor',
+  documentCategory = null, // Will be determined from role if not provided
+  currentTask = null,
+  subtasks = [],
+  currentUser = null,
+  reviewerRoles = [],
+  onRoleChange = () => {},
+  isRoleChanging = false,
   onSubtaskUpdate = () => {},
   onAddSubtask = () => {},
   onApprove = () => {},
   onReject = () => {},
   onRequestClarification = () => {},
   onSaveProgress = () => {},
-  initialRole = null,                  // Initial role from navigation
-  autoSwitchRole = false,              // Flag to auto-switch to initial role
-  initialTaskType = null,              // Initial task type from navigation
-  onRefreshSubtasks = async () => {}   // Callback to refresh subtasks from parent
+  initialRole = null,
+  autoSwitchRole = false,
+  initialTaskType = null,
+  onRefreshSubtasks = async () => {},
+  roleStatuses = {},
+  onStatusChange = () => {}  // 👈 ADD THIS NEW PROP
 }) => {
-
+  // 🔹 Determine document category from prop or derive from role
+  const roleDocumentCategoryMap = {
+    're_sales_advisor': 'land-valuation',
+    're_analyst': 'financial-models',
+    're_governance_lead': 'ownership-documents'
+  };
+  const effectiveDocumentCategory = documentCategory || roleDocumentCategoryMap[reviewerRole] || 'ownership-documents';
+  
   // 🔹 Role-specific state management - maintains state per role with localStorage persistence
   const [roleStates, setRoleStates] = useState(() => {
     // Load from localStorage on component mount with user-specific key
@@ -245,7 +254,98 @@ const ReviewPanel = ({
     }
   }, [autoSwitchRole, initialRole, reviewerRole, onRoleChange, currentTask, subtasks]);
 
-  // 🔹 Update role-specific state when local state changes
+  // 🔹 Calculate and send status to parent - runs whenever task, subtasks, or roleStatuses change
+  useEffect(() => {
+    if (!currentTask?.task_id || !reviewerRole) {
+      console.log('[ReviewPanel] Status calculation skipped - missing task or role:', {
+        hasTask: !!currentTask?.task_id,
+        hasRole: !!reviewerRole
+      });
+      return;
+    }
+  
+    // Calculate status using the EXACT same logic as Task Details tab
+    const reviewStatus = roleStatuses[reviewerRole] || {};
+    
+    // Calculate completion percentage from actual subtasks (most accurate)
+    // Use actual subtasks array if available, otherwise use reviewStatus data
+    const totalSubtasks = subtasks.length > 0 ? subtasks.length : (reviewStatus.totalSubtasks || reviewStatus.total_subtasks || 0);
+    const completedSubtasks = subtasks.length > 0 
+      ? subtasks.filter(s => s.status === 'completed').length
+      : (reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || 0);
+    
+    // Calculate completion percentage from actual subtasks
+    let completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+    
+    // Only use stored completion_percentage if it's valid and matches actual subtask completion
+    // Otherwise trust the calculated value from actual subtasks
+    if (reviewStatus.completion_percentage !== undefined && reviewStatus.completion_percentage !== null) {
+      const storedPercentage = Number(reviewStatus.completion_percentage);
+      // Only use stored if it's close to calculated (within 5%) or if we have no subtasks to calculate from
+      if (totalSubtasks === 0 || Math.abs(storedPercentage - completionPercentage) <= 5) {
+        completionPercentage = storedPercentage;
+      }
+    }
+    
+    // Ensure it's a valid number
+    completionPercentage = Math.max(0, Math.min(100, completionPercentage || 0));
+    
+    // Determine status based on completion percentage (EXACT same logic as Task Details tab)
+    // 100% = Completed, 0% = Pending, > 0% = In Progress
+    let displayStatus = 'pending';
+    let statusLabel = 'PENDING';
+    
+    // Only check published status if it's truly published (don't trust status === 'completed' from API)
+    // Published reviews are always 100% complete
+    if (reviewStatus.published === true) {
+      displayStatus = 'completed';
+      statusLabel = 'COMPLETED';
+      completionPercentage = 100;
+    } else if (completionPercentage >= 100) {
+      displayStatus = 'completed';
+      statusLabel = 'COMPLETED';
+    } else if (completionPercentage > 0) {
+      displayStatus = 'in_progress';
+      statusLabel = 'IN PROGRESS';
+    }
+    
+    // Send status to parent component
+    // Include assigned_to to make status unique per reviewer (multiple reviewers can have same role)
+    const statusData = {
+      taskId: currentTask.task_id,
+      assignedTo: currentTask.assigned_to, // Include reviewer's user ID for uniqueness
+      reviewerRole: reviewerRole,
+      status: displayStatus,
+      statusLabel: statusLabel,
+      completionPercentage: completionPercentage,
+      reviewStatus: reviewStatus,
+      subtasksCompleted: reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || subtasks.filter(s => s.status === 'completed').length,
+      totalSubtasks: reviewStatus.totalSubtasks || reviewStatus.total_subtasks || subtasks.length,
+      documentsApproved: reviewStatus.documentsApproved || reviewStatus.documents_approved || 0,
+      totalDocuments: reviewStatus.totalDocuments || reviewStatus.total_documents || 0,
+      timestamp: new Date().toISOString()
+    };
+    
+    onStatusChange(statusData);
+    
+    console.log('📤 ReviewPanel: Calculated and sent status to parent:', {
+      taskId: currentTask.task_id,
+      assignedTo: currentTask.assigned_to,
+      reviewerRole,
+      status: displayStatus,
+      statusLabel,
+      completionPercentage,
+      subtasksCompleted: statusData.subtasksCompleted,
+      totalSubtasks: statusData.totalSubtasks,
+      actualSubtasksCompleted: completedSubtasks,
+      actualTotalSubtasks: totalSubtasks,
+      reviewStatusPublished: reviewStatus.published,
+      reviewStatusStatus: reviewStatus.status,
+      storageKey: `task_status_${currentTask.task_id}_${reviewerRole}_${currentTask.assigned_to}`
+    });
+    
+  }, [currentTask?.task_id, reviewerRole, subtasks, roleStatuses, onStatusChange]);
+  
   useEffect(() => {
     console.log('🔄 State changed, updating role state for:', reviewerRole, {
       comments,
@@ -1314,14 +1414,42 @@ const ReviewPanel = ({
                         Role: {currentTask?.assigned_role?.replace(/_/g, ' ').toUpperCase() || reviewerRole?.replace(/_/g, ' ').toUpperCase() || 'Not Specified'}
                       </p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                      currentTask?.status === 'completed' ? 'text-green-500 bg-green-500/10 border-green-500/20' :
-                      currentTask?.status === 'in_progress' ? 'text-blue-500 bg-blue-500/10 border-blue-500/20' :
-                      currentTask?.status === 'pending' ? 'text-orange-500 bg-orange-500/10 border-orange-500/20' :
-                      'text-muted-foreground bg-muted border-border'
-                    }`}>
-                      {currentTask?.status?.toUpperCase() || 'UNKNOWN'}
-                    </span>
+                    {(() => {
+                      // Get review status for current role
+                      const reviewStatus = roleStatuses[reviewerRole] || {};
+                      
+                      // Calculate completion percentage
+                      let completionPercentage = reviewStatus.completion_percentage;
+                      if (completionPercentage === undefined || completionPercentage === null) {
+                        // Calculate from subtasks if available
+                        const totalSubtasks = reviewStatus.totalSubtasks || reviewStatus.total_subtasks || subtasks.length;
+                        const completedSubtasks = reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || 
+                                                  (subtasks.filter(s => s.status === 'completed').length);
+                        completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+                      }
+                      
+                      // Determine status based on completion percentage
+                      // 100% = Completed, 0% = Pending, > 0% = In Progress
+                      let displayStatus = 'pending';
+                      let statusLabel = 'PENDING';
+                      let statusClasses = 'text-orange-500 bg-orange-500/10 border-orange-500/20';
+                      
+                      if (completionPercentage >= 100) {
+                        displayStatus = 'completed';
+                        statusLabel = 'COMPLETED';
+                        statusClasses = 'text-green-500 bg-green-500/10 border-green-500/20';
+                      } else if (completionPercentage > 0) {
+                        displayStatus = 'in_progress';
+                        statusLabel = 'IN PROGRESS';
+                        statusClasses = 'text-blue-500 bg-blue-500/10 border-blue-500/20';
+                      }
+                      
+                      return (
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusClasses}`}>
+                          {statusLabel}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 

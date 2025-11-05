@@ -175,7 +175,7 @@ async def upload_document(
             detail=f"Failed to upload document: {str(e)}"
         )
 
-@router.get("/land/{land_id}", response_model=List[Document])
+@router.get("/land/{land_id}")
 async def get_land_documents(
     land_id: UUID,
     document_type: Optional[str] = None,
@@ -237,10 +237,13 @@ async def get_land_documents(
                d.mime_type, d.is_draft, d.status, d.version_status, 
                d.version_number, d.is_latest_version, d.doc_slot,
                d.review_locked_at, d.review_locked_by,
+               d.approved_by, d.approved_at, d.rejection_reason,
                u.first_name || ' ' || u.last_name as uploader_name,
+               approver.first_name || ' ' || approver.last_name as approver_name,
                l.title as land_title
         FROM documents d
         LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN "user" approver ON d.approved_by = approver.user_id
         LEFT JOIN lands l ON d.land_id = l.land_id
         WHERE d.land_id = :land_id
     """
@@ -250,28 +253,46 @@ async def get_land_documents(
     # Filter documents based on reviewer role
     # Admin can see all documents, so no filtering needed for admin
     if is_reviewer and reviewer_role and not (is_admin or is_owner):
-        # Document type mapping - each document type is linked to specific roles
-        # Admin can see all documents regardless of this mapping
-        role_document_mapping = {
-            "re_sales_advisor": [
-                "land-valuation",
-                "sale-contracts",
-                "topographical-surveys",
-                "grid-connectivity"
-            ],
-            "re_analyst": [
-                "financial-models"
-            ],
-            "re_governance_lead": [
-                "land-valuation",
-                "ownership-documents",
-                "zoning-approvals",
-                "environmental-impact",
-                "government-nocs"
-            ]
-        }
+        # Check for project-specific mappings first
+        # NOTE: This queries the database directly, so changes to project_document_role_mappings
+        # will be applied immediately without requiring a server restart or cache invalidation
+        project_mapping_query = text("""
+            SELECT DISTINCT document_type
+            FROM project_document_role_mappings
+            WHERE land_id = :land_id AND role_key = :role_key
+        """)
+        project_mapping_result = db.execute(project_mapping_query, {
+            "land_id": str(land_id),
+            "role_key": reviewer_role
+        }).fetchall()
         
-        allowed_docs = role_document_mapping.get(reviewer_role, [])
+        allowed_docs = []
+        if project_mapping_result:
+            # Use project-specific mappings (these are saved via /lands/{land_id}/document-role-mappings endpoint)
+            allowed_docs = [row.document_type for row in project_mapping_result]
+            print(f"📋 Using project-specific mappings for {reviewer_role} on land {land_id}: {allowed_docs}")
+        else:
+            # Fall back to default mappings if no project-specific mappings exist
+            role_document_mapping = {
+                "re_sales_advisor": [
+                    "land-valuation",
+                    "sale-contracts",
+                    "topographical-surveys",
+                    "grid-connectivity"
+                ],
+                "re_analyst": [
+                    "financial-models"
+                ],
+                "re_governance_lead": [
+                    "land-valuation",
+                    "ownership-documents",
+                    "zoning-approvals",
+                    "environmental-impact",
+                    "government-nocs"
+                ]
+            }
+            allowed_docs = role_document_mapping.get(reviewer_role, [])
+        
         if allowed_docs:
             # Create placeholders for IN clause
             placeholders = ", ".join([f":doc_type_{i}" for i in range(len(allowed_docs))])
@@ -288,28 +309,36 @@ async def get_land_documents(
     
     results = db.execute(text(base_query), params).fetchall()
     
-    return [
-        Document(
-            document_id=row.document_id,
-            land_id=row.land_id,
-            document_type=row.document_type,
-            file_name=row.file_name,
-            file_path=row.file_path,
-            file_size=row.file_size,
-            uploaded_by=row.uploaded_by,
-            created_at=row.created_at,
-            mime_type=row.mime_type,
-            is_draft=row.is_draft,
-            status=getattr(row, 'status', 'pending'),
-            version_status=getattr(row, 'version_status', 'active'),
-            version_number=getattr(row, 'version_number', 1),
-            is_latest_version=getattr(row, 'is_latest_version', True),
-            doc_slot=getattr(row, 'doc_slot', 'D1'),
-            review_locked_at=getattr(row, 'review_locked_at', None),
-            review_locked_by=getattr(row, 'review_locked_by', None)
-        )
-        for row in results
-    ]
+    # Return as dict to include uploader_name which is not in Document schema
+    documents_list = []
+    for row in results:
+        doc_dict = {
+            "document_id": row.document_id,
+            "land_id": row.land_id,
+            "document_type": row.document_type,
+            "file_name": row.file_name,
+            "file_path": row.file_path,
+            "file_size": row.file_size,
+            "uploaded_by": row.uploaded_by,
+            "created_at": row.created_at,
+            "mime_type": row.mime_type,
+            "is_draft": row.is_draft,
+            "status": getattr(row, 'status', 'pending'),
+            "version_status": getattr(row, 'version_status', 'active'),
+            "version_number": getattr(row, 'version_number', 1),
+            "is_latest_version": getattr(row, 'is_latest_version', True),
+            "doc_slot": getattr(row, 'doc_slot', 'D1'),
+            "review_locked_at": getattr(row, 'review_locked_at', None),
+            "review_locked_by": getattr(row, 'review_locked_by', None),
+            "approved_by": getattr(row, 'approved_by', None),
+            "approved_at": getattr(row, 'approved_at', None),
+            "rejection_reason": getattr(row, 'rejection_reason', None),
+            "approver_name": getattr(row, 'approver_name', None),
+            "uploader_name": getattr(row, 'uploader_name', None)
+        }
+        documents_list.append(doc_dict)
+    
+    return documents_list
 
 
 @router.get("/land/{land_id}/reviewer", response_model=List[Dict[str, Any]])
@@ -368,8 +397,10 @@ async def get_land_reviewer_documents(
         SELECT 
             d.document_id, d.land_id, d.task_id, d.subtask_id, d.document_type, 
             d.file_name, d.file_path, d.file_size, d.uploaded_by, d.created_at,
-            d.mime_type, d.is_draft,
+            d.mime_type, d.is_draft, d.status, d.version_status,
+            d.approved_by, d.approved_at, d.rejection_reason,
             u.first_name || ' ' || u.last_name as uploader_name,
+            approver.first_name || ' ' || approver.last_name as approver_name,
             t.assigned_role as task_role,
             s.title as subtask_title,
             s.description as subtask_description,
@@ -379,6 +410,7 @@ async def get_land_reviewer_documents(
             s.completed_at as subtask_completed_at
         FROM documents d
         LEFT JOIN "user" u ON d.uploaded_by = u.user_id
+        LEFT JOIN "user" approver ON d.approved_by = approver.user_id
         LEFT JOIN tasks t ON d.task_id = t.task_id
         LEFT JOIN subtasks s ON d.subtask_id = s.subtask_id
         WHERE d.land_id = :land_id 
@@ -422,7 +454,13 @@ async def get_land_reviewer_documents(
             'uploaded_by': str(row.uploaded_by),
             'uploader_name': row.uploader_name,
             'created_at': row.created_at,
-            'document_type': row.document_type
+            'document_type': row.document_type,
+            'status': getattr(row, 'status', 'pending'),
+            'version_status': getattr(row, 'version_status', 'active'),
+            'approved_by': str(row.approved_by) if row.approved_by else None,
+            'approved_at': row.approved_at.isoformat() if row.approved_at else None,
+            'rejection_reason': row.rejection_reason,
+            'approver_name': row.approver_name
         })
     
     # Convert to list format for frontend

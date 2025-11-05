@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
 import Header from '../../components/ui/Header';
-import { documentsAPI, reviewerAPI } from '../../services/api';
+import { documentsAPI, reviewerAPI, landsAPI, taskAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -19,15 +19,17 @@ const AdminDocumentVersions = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedAccordions, setExpandedAccordions] = useState({});
 
-  // Get reviewer role from location state or user roles
-  const reviewerRole = location.state?.reviewerRole || 
+  // State for reviewer role (can be set from location state, user roles, or task's assigned_role)
+  const [reviewerRole, setReviewerRole] = useState(
+    location.state?.reviewerRole || 
     user?.roles?.find(role => 
       ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
-    );
+    ) || null
+  );
   const isAdmin = user?.roles?.includes('administrator') || user?.role === 'admin';
 
-  // Document type to roles mapping - matches backend mapping
-  const roleDocumentMapping = {
+  // Default document type to roles mapping (fallback)
+  const defaultRoleDocumentMapping = {
     're_sales_advisor': [
       'land-valuation',
       'sale-contracts',
@@ -46,23 +48,148 @@ const AdminDocumentVersions = () => {
     ]
   };
 
+  // State for project-specific mappings: { role_key: [document_types] }
+  const [projectDocumentMappings, setProjectDocumentMappings] = useState(null);
+  // State to track if project_mappings exists in API response
+  const [hasProjectMappingsInAPI, setHasProjectMappingsInAPI] = useState(false);
+  // State for allowed document types from backend (filtered by role)
+  const [allowedDocumentTypes, setAllowedDocumentTypes] = useState([]);
+
+  // Fetch project-specific document role mappings and determine reviewer role from tasks
+  useEffect(() => {
+    const fetchProjectMappingsAndRole = async () => {
+      if (!landId) return;
+      
+      try {
+        const mappings = await landsAPI.getProjectDocumentRoleMappings(landId);
+        
+        // Store the filtered document_types array from backend (already filtered by role)
+        setAllowedDocumentTypes(mappings.document_types || []);
+        console.log('[AdminDocumentVersions] Allowed document types from backend:', mappings.document_types);
+        
+        // Convert to a format similar to default mapping: role -> [document_types]
+        // ALWAYS use project_mappings if it exists in API, never fall back to default_mappings
+        const roleToDocTypes = {};
+        console.log('[AdminDocumentVersions] API Response mappings:', {
+          hasProjectMappings: !!mappings.project_mappings,
+          projectMappingsKeys: mappings.project_mappings ? Object.keys(mappings.project_mappings) : [],
+          projectMappings: mappings.project_mappings,
+          hasDefaultMappings: !!mappings.default_mappings
+        });
+        
+        if (mappings.project_mappings && Object.keys(mappings.project_mappings).length > 0) {
+          // Use project_mappings (prioritize over default_mappings)
+          Object.keys(mappings.project_mappings).forEach(docType => {
+            mappings.project_mappings[docType].forEach(roleKey => {
+              if (!roleToDocTypes[roleKey]) {
+                roleToDocTypes[roleKey] = [];
+              }
+              roleToDocTypes[roleKey].push(docType);
+            });
+          });
+          console.log('[AdminDocumentVersions] ✅ Using project_mappings (NOT default_mappings):', roleToDocTypes);
+        } else {
+          // Only use defaults if project_mappings doesn't exist or is empty
+          console.log('[AdminDocumentVersions] ⚠️ No project_mappings found, using default_mappings');
+          // Convert default_mappings if available
+          if (mappings.default_mappings) {
+            Object.keys(mappings.default_mappings).forEach(docType => {
+              mappings.default_mappings[docType].forEach(roleKey => {
+                if (!roleToDocTypes[roleKey]) {
+                  roleToDocTypes[roleKey] = [];
+                }
+                roleToDocTypes[roleKey].push(docType);
+              });
+            });
+          }
+        }
+        
+        // IMPORTANT: Check if project_mappings exists in API response (even if empty)
+        const projectMappingsExists = mappings.project_mappings !== null && mappings.project_mappings !== undefined;
+        setHasProjectMappingsInAPI(projectMappingsExists);
+        
+        if (projectMappingsExists) {
+          // project_mappings exists in API - ALWAYS use it
+          setProjectDocumentMappings(roleToDocTypes);
+          console.log('[AdminDocumentVersions] ✅ project_mappings EXISTS in API - using project_mappings:', roleToDocTypes);
+        } else {
+          // project_mappings doesn't exist in API - use defaults
+          setProjectDocumentMappings(Object.keys(roleToDocTypes).length > 0 ? roleToDocTypes : null);
+          console.log('[AdminDocumentVersions] ⚠️ project_mappings DOES NOT EXIST in API - using default_mappings:', roleToDocTypes);
+        }
+
+        // If reviewerRole is not set yet (not from location.state or user roles), try to get it from tasks for this land
+        const initialRole = location.state?.reviewerRole || 
+          user?.roles?.find(role => 
+            ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(role)
+          );
+        
+        if (!initialRole && isAdmin) {
+          try {
+            const tasks = await taskAPI.getTasks({ land_id: landId });
+            console.log('[AdminDocumentVersions] Tasks for land:', tasks);
+            
+            // Find first task with an assigned_role
+            const taskWithRole = tasks.find(t => 
+              t.assigned_role && 
+              ['re_sales_advisor', 're_analyst', 're_governance_lead'].includes(t.assigned_role)
+            );
+            
+            if (taskWithRole?.assigned_role) {
+              console.log('[AdminDocumentVersions] Setting reviewer role from task:', taskWithRole.assigned_role);
+              setReviewerRole(taskWithRole.assigned_role);
+            }
+          } catch (err) {
+            console.error('[AdminDocumentVersions] Error fetching tasks:', err);
+          }
+        }
+      } catch (err) {
+        console.error('[AdminDocumentVersions] Error fetching project mappings, using defaults:', err);
+        setProjectDocumentMappings(null);
+        setHasProjectMappingsInAPI(false);
+        setAllowedDocumentTypes([]);
+      }
+    };
+
+    fetchProjectMappingsAndRole();
+  }, [landId, isAdmin]);
+
   // Helper function to check if a document type is allowed for the reviewer role
   const isDocumentTypeAllowed = (documentType) => {
-    // If viewing as a specific reviewer role (from location state), filter by that role
-    // even if user is admin
-    if (location.state?.reviewerRole && reviewerRole) {
-      const allowedTypes = roleDocumentMapping[reviewerRole] || [];
-      return allowedTypes.includes(documentType);
+    // If there's a reviewer role (from location state or user roles), ALWAYS filter by that role
+    // even if user is admin - this ensures role-based filtering
+    if (reviewerRole) {
+      // ALWAYS use project_mappings if it exists in API, only use defaults if project_mappings doesn't exist in API
+      const roleMapping = hasProjectMappingsInAPI ? (projectDocumentMappings || {}) : defaultRoleDocumentMapping;
+      const allowedTypes = roleMapping[reviewerRole] || [];
+      const isAllowed = allowedTypes.includes(documentType);
+      console.log(`[AdminDocumentVersions] Checking document type ${documentType} for role ${reviewerRole}:`, {
+        hasProjectMappingsInAPI: hasProjectMappingsInAPI,
+        usingProjectMappings: hasProjectMappingsInAPI,
+        projectMappings: projectDocumentMappings,
+        defaultMappings: defaultRoleDocumentMapping,
+        roleMapping: roleMapping,
+        allowedTypes: allowedTypes,
+        isAllowed: isAllowed
+      });
+      return isAllowed;
     }
     
-    // Admin can see all documents (when not viewing as a specific reviewer role)
-    if (isAdmin) return true;
+    // If no reviewer role and user is admin, show all documents
+    if (isAdmin && !reviewerRole) {
+      console.log(`[AdminDocumentVersions] No reviewer role - Admin viewing all documents`);
+      return true;
+    }
     
-    // If no reviewer role, don't show any documents
-    if (!reviewerRole) return false;
+    // If no reviewer role and not admin, don't show any documents
+    if (!reviewerRole) {
+      console.log(`[AdminDocumentVersions] No reviewer role - showing no documents`);
+      return false;
+    }
     
-    // Check if document type is in the allowed list for this role
-    const allowedTypes = roleDocumentMapping[reviewerRole] || [];
+    // Fallback: ALWAYS use project_mappings if it exists in API
+    const roleMapping = hasProjectMappingsInAPI ? (projectDocumentMappings || {}) : defaultRoleDocumentMapping;
+    const allowedTypes = roleMapping[reviewerRole] || [];
     return allowedTypes.includes(documentType);
   };
 
@@ -73,64 +200,139 @@ const AdminDocumentVersions = () => {
       console.error('No landId provided');
       setLoading(false);
     }
-  }, [landId]);
+  }, [landId, reviewerRole, projectDocumentMappings, hasProjectMappingsInAPI]);
 
   // Document management helper functions (same as reviewer)
   const getDocumentTypes = () => {
     const typeMap = new Map();
     
-    // Filter documents by role and process each document type separately
-    const filteredDocuments = documents.filter(doc => {
-      // Filter out subtask documents
-      if (doc.subtask_id) return false;
-      // Filter by reviewer role
-      return isDocumentTypeAllowed(doc.document_type);
-    });
+    // IMPORTANT: Filter document types based on project_mappings for the current reviewerRole
+    // If project_mappings exists, use it to determine which document types to show
+    let documentTypes = [];
     
-    // Process each document type separately to ensure consistent version numbering
-    const documentTypes = [...new Set(filteredDocuments.map(doc => doc.document_type || 'unknown'))];
+    if (hasProjectMappingsInAPI && projectDocumentMappings && reviewerRole) {
+      // Use project_mappings to get allowed document types for this role
+      const allowedTypesForRole = projectDocumentMappings[reviewerRole] || [];
+      documentTypes = allowedTypesForRole.filter(docType => {
+        // Filter out subtask document types
+        if (docType === 'subtask-document' || 
+            docType === 'subtask_document' ||
+            docType.toLowerCase().includes('subtask document') ||
+            docType.toLowerCase().includes('subtask-document') ||
+            docType.toLowerCase().includes('subtask_document')) {
+          return false;
+        }
+        return true;
+      });
+      console.log('[AdminDocumentVersions] ✅ Using project_mappings document types for role:', {
+        reviewerRole: reviewerRole,
+        documentTypes: documentTypes,
+        projectMappings: projectDocumentMappings
+      });
+    } else if (allowedDocumentTypes.length > 0 && reviewerRole) {
+      // Fallback: Use backend-filtered document types, but filter by role using project_mappings if available
+      documentTypes = allowedDocumentTypes.filter(docType => {
+        // Filter out subtask document types
+        if (docType === 'subtask-document' || 
+            docType === 'subtask_document' ||
+            docType.toLowerCase().includes('subtask document') ||
+            docType.toLowerCase().includes('subtask-document') ||
+            docType.toLowerCase().includes('subtask_document')) {
+          return false;
+        }
+        // If project_mappings exists, check if this doc type is allowed for the role
+        if (hasProjectMappingsInAPI && projectDocumentMappings) {
+          const allowedTypesForRole = projectDocumentMappings[reviewerRole] || [];
+          return allowedTypesForRole.includes(docType);
+        }
+        return true;
+      });
+      console.log('[AdminDocumentVersions] Using backend-filtered document types (with role filter):', documentTypes);
+    } else {
+      // Fallback: derive from existing documents (old behavior)
+      const filteredDocuments = documents.filter(doc => {
+        // Filter out subtask documents
+        if (doc.subtask_id) return false;
+        // Filter by reviewer role
+        return isDocumentTypeAllowed(doc.document_type);
+      });
+      
+      documentTypes = [...new Set(filteredDocuments.map(doc => doc.document_type || 'unknown'))];
+      console.log('[AdminDocumentVersions] Fallback: deriving document types from documents:', documentTypes);
+    }
     
     documentTypes.forEach(type => {
-      // Get all documents of this type (already filtered by role)
+      // Get all documents of this type (filtered by role)
+      const filteredDocuments = documents.filter(doc => {
+        // Filter out subtask documents
+        if (doc.subtask_id) return false;
+        // Filter by reviewer role
+        return isDocumentTypeAllowed(doc.document_type);
+      });
+      
       const docsOfType = filteredDocuments
         .filter(doc => (doc.document_type || 'unknown') === type);
       
-      if (docsOfType.length === 0) return;
-      
       // Group by doc_slot for independent D1/D2 processing
-      const groupedDocs = groupDocumentsBySlot(docsOfType);
+      const groupedDocs = docsOfType.length > 0 ? groupDocumentsBySlot(docsOfType) : {};
       
       // Calculate total count and latest version across all slots
       let totalCount = 0;
       let maxVersion = 0;
-      let underReviewVersion = null;
+      const underReviewVersions = {}; // Track under review versions per slot: { D1: 3, D2: 5 }
+      const approvedVersions = {}; // Track approved versions per slot: { D1: 2, D2: 4 }
+      const rejectedVersions = {}; // Track rejected versions per slot: { D1: 1, D2: 3 }
       
-      Object.entries(groupedDocs).forEach(([slot, slotDocs]) => {
-        const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        totalCount += sortedSlotDocs.length;
-        
-        // Find the document that's under review in this slot
-        sortedSlotDocs.forEach((doc, index) => {
-          const versionNumber = index + 1; // Version numbers start from 1
-          const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
+      if (docsOfType.length > 0) {
+        Object.entries(groupedDocs).forEach(([slot, slotDocs]) => {
+          const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+          totalCount += sortedSlotDocs.length;
           
-          if (isUnderReview) {
-            console.log(`Document ${doc.file_name} in ${slot} is under review with version ${versionNumber}`);
-            underReviewVersion = versionNumber;
-          }
+          // Track the latest (highest version) status for each slot
+          let latestUnderReviewVersion = null;
+          let latestApprovedVersion = null;
+          let latestRejectedVersion = null;
+          
+          // Find the latest document that's under review, approved, or rejected in this slot
+          sortedSlotDocs.forEach((doc, index) => {
+            const versionNumber = doc.version_number || (index + 1); // Use actual version_number if available, otherwise calculate
+            const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
+            const isApproved = doc.status === 'approved';
+            const isRejected = doc.status === 'rejected';
+            
+            // Track only the latest version for each status
+            if (isUnderReview) {
+              if (!latestUnderReviewVersion || versionNumber > latestUnderReviewVersion) {
+                latestUnderReviewVersion = versionNumber;
+                underReviewVersions[slot] = versionNumber;
+              }
+            } else if (isApproved) {
+              if (!latestApprovedVersion || versionNumber > latestApprovedVersion) {
+                latestApprovedVersion = versionNumber;
+                approvedVersions[slot] = versionNumber;
+              }
+            } else if (isRejected) {
+              if (!latestRejectedVersion || versionNumber > latestRejectedVersion) {
+                latestRejectedVersion = versionNumber;
+                rejectedVersions[slot] = versionNumber;
+              }
+            }
+          });
+          
+          maxVersion = Math.max(maxVersion, sortedSlotDocs.length);
         });
-        
-        maxVersion = Math.max(maxVersion, sortedSlotDocs.length);
-      });
+      }
       
-      // Initialize document type
+      // Initialize document type (show even if no documents exist yet)
       typeMap.set(type, {
         id: type,
         name: type.replace(/-|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         icon: getDocumentTypeIcon(type),
         count: totalCount,
-        latestVersion: maxVersion, // Latest version across all slots
-        underReviewVersion: underReviewVersion,
+        latestVersion: maxVersion || 0, // Latest version across all slots (0 if no documents)
+        underReviewVersions: underReviewVersions, // Object with slot -> version mapping
+        approvedVersions: approvedVersions, // Object with slot -> version mapping
+        rejectedVersions: rejectedVersions, // Object with slot -> version mapping
         documents: docsOfType
       });
     });
@@ -144,7 +346,9 @@ const AdminDocumentVersions = () => {
       name: type.name,
       count: type.count,
       latestVersion: type.latestVersion,
-      underReviewVersion: type.underReviewVersion
+      underReviewVersions: type.underReviewVersions,
+      approvedVersions: type.approvedVersions,
+      rejectedVersions: type.rejectedVersions
     })));
     
     return result;
@@ -164,18 +368,42 @@ const AdminDocumentVersions = () => {
       const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       
       sortedSlotDocs.forEach((doc, index) => {
+        // Preserve approved/rejected status - these take priority
+        let finalStatus = doc.status || 'pending';
+        let finalVersionStatus = doc.version_status || 'active';
+        
+        // If document is approved or rejected, preserve that status
+        if (doc.status === 'approved' || doc.status === 'rejected') {
+          finalStatus = doc.status;
+          finalVersionStatus = doc.version_status || 'active';
+        } 
+        // If document is under review, use that status
+        else if (doc.version_status === 'under_review' || doc.status === 'under_review') {
+          finalStatus = 'under_review';
+          finalVersionStatus = 'under_review';
+        }
+        // Otherwise, use the status from the document
+        else {
+          finalStatus = doc.status || doc.version_status || 'pending';
+          finalVersionStatus = doc.version_status || doc.status || 'active';
+        }
+        
         const processedDoc = {
           ...doc,
           version: index + 1, // Independent version numbering per slot
           isLatest: index === sortedSlotDocs.length - 1, // Last document in slot is latest
-          // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
-          status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+          // Preserve the actual status from backend (approved, rejected, under_review, pending, etc.)
+          status: finalStatus,
+          version_status: finalVersionStatus
         };
         
         console.log(`Processing document ${doc.file_name} in ${slot}:`, {
           original_status: doc.status,
-          version_status: doc.version_status,
+          original_version_status: doc.version_status,
           final_status: processedDoc.status,
+          final_version_status: processedDoc.version_status,
+          isApproved: processedDoc.status === 'approved',
+          isRejected: processedDoc.status === 'rejected',
           slot: slot,
           version: processedDoc.version
         });
@@ -219,15 +447,40 @@ const AdminDocumentVersions = () => {
           return isDocumentTypeAllowed(doc.document_type);
         })
         .map(doc => {
+          // Preserve approved/rejected status - these take priority
+          let finalStatus = doc.status || 'pending';
+          let finalVersionStatus = doc.version_status || 'active';
+          
+          // If document is approved or rejected, preserve that status
+          if (doc.status === 'approved' || doc.status === 'rejected') {
+            finalStatus = doc.status;
+            // After approval/rejection, version_status should be 'active' (not under_review)
+            finalVersionStatus = doc.version_status || 'active';
+          } 
+          // If document is under review, use that status
+          else if (doc.version_status === 'under_review' || doc.status === 'under_review') {
+            finalStatus = 'under_review';
+            finalVersionStatus = 'under_review';
+          }
+          // Otherwise, use the status from the document
+          else {
+            finalStatus = doc.status || doc.version_status || 'pending';
+            finalVersionStatus = doc.version_status || doc.status || 'active';
+          }
+          
           const processedDoc = {
             ...doc,
-            // Use status if it's 'under_review', otherwise use version_status or default to 'pending'
-            status: doc.status === 'under_review' ? 'under_review' : (doc.version_status || doc.status || 'pending')
+            // Preserve the actual status from backend (approved, rejected, under_review, pending, etc.)
+            status: finalStatus,
+            version_status: finalVersionStatus
           };
           console.log(`Refreshed document ${doc.file_name}:`, {
             version_status: doc.version_status,
             original_status: doc.status,
             final_status: processedDoc.status,
+            final_version_status: processedDoc.version_status,
+            isApproved: processedDoc.status === 'approved',
+            isRejected: processedDoc.status === 'rejected',
             document_type: doc.document_type,
             allowed: isDocumentTypeAllowed(doc.document_type)
           });
@@ -359,7 +612,17 @@ const AdminDocumentVersions = () => {
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="font-heading font-semibold text-lg text-foreground mb-4">
                 Document Types
+                {reviewerRole && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (Role: {reviewerRole})
+                  </span>
+                )}
               </h3>
+              {!reviewerRole && (
+                <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
+                  ⚠️ No reviewer role set. Documents may not be filtered correctly.
+                </div>
+              )}
               <div className="space-y-2">
                 {getDocumentTypes().map((docType) => (
                   <button
@@ -384,14 +647,37 @@ const AdminDocumentVersions = () => {
                         <p className="text-xs opacity-75 mt-1">
                           {docType.count} version{docType.count !== 1 ? 's' : ''}
                         </p>
-                        <div className="flex items-center space-x-2 mt-1">
+                        <div className="flex items-center space-x-2 mt-1 flex-wrap gap-1">
                           <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
                             Latest: v{docType.latestVersion}
                           </span>
-                          {docType.underReviewVersion && (
-                            <span className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">
-                              Under Review: v{docType.underReviewVersion}
-                            </span>
+                          {/* Show only the latest status per slot - priority: Under Review > Approved > Rejected */}
+                          {Object.keys(docType.underReviewVersions || {}).length > 0 && (
+                            Object.entries(docType.underReviewVersions).map(([slot, version]) => (
+                              <span key={slot} className="inline-block px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">
+                                Under Review {slot}: v{version}
+                              </span>
+                            ))
+                          )}
+                          {/* Show approved only if not under review for that slot */}
+                          {Object.keys(docType.approvedVersions || {}).length > 0 && (
+                            Object.entries(docType.approvedVersions)
+                              .filter(([slot]) => !docType.underReviewVersions?.[slot]) // Don't show approved if under review
+                              .map(([slot, version]) => (
+                                <span key={slot} className="inline-block px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded">
+                                  Approved {slot}: v{version}
+                                </span>
+                              ))
+                          )}
+                          {/* Show rejected only if not under review for that slot */}
+                          {Object.keys(docType.rejectedVersions || {}).length > 0 && (
+                            Object.entries(docType.rejectedVersions)
+                              .filter(([slot]) => !docType.underReviewVersions?.[slot]) // Don't show rejected if under review
+                              .map(([slot, version]) => (
+                                <span key={slot} className="inline-block px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded">
+                                  Rejected {slot}: v{version}
+                                </span>
+                              ))
                           )}
                         </div>
                       </div>
@@ -466,11 +752,20 @@ const AdminDocumentVersions = () => {
                                                 Latest
                                               </span>
                                             )}
-                                            {doc.status === 'under_review' && (
+                                            {/* Show approved/rejected status first, then under review - only one at a time */}
+                                            {doc.status === 'approved' ? (
+                                              <span className="px-2 py-1 bg-green-500 text-white text-xs rounded">
+                                                Approved
+                                              </span>
+                                            ) : doc.status === 'rejected' ? (
+                                              <span className="px-2 py-1 bg-red-500 text-white text-xs rounded">
+                                                Rejected
+                                              </span>
+                                            ) : (doc.status === 'under_review' || doc.version_status === 'under_review') ? (
                                               <span className="px-2 py-1 bg-orange-500 text-white text-xs rounded">
                                                 Under Review
                                               </span>
-                                            )}
+                                            ) : null}
                                           </div>
                                         </div>
                                       </div>
@@ -488,7 +783,7 @@ const AdminDocumentVersions = () => {
                                         </div>
                                         <div className="flex items-center justify-between">
                                           <span>Uploaded:</span>
-                                          <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : 'Unknown'}</span>
+                                          <span>{doc.created_at ? new Date(doc.created_at).toLocaleString() : 'Unknown'}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
                                           <span>By:</span>
@@ -502,12 +797,34 @@ const AdminDocumentVersions = () => {
                                       <div className="flex items-center space-x-1">
                                         {/* Review Status Indicator (Read-only) */}
                                         <div className={`px-3 py-1 text-sm border rounded-md ${
-                                          doc.status === 'under_review' 
+                                          doc.status === 'approved' 
+                                            ? 'bg-green-100 text-green-700 border-green-300' 
+                                            : doc.status === 'rejected'
+                                            ? 'bg-red-100 text-red-700 border-red-300'
+                                            : doc.status === 'under_review' || doc.version_status === 'under_review'
                                             ? 'bg-orange-100 text-orange-700 border-orange-300' 
-                                            : 'bg-green-100 text-green-700 border-green-300'
+                                            : 'bg-gray-100 text-gray-700 border-gray-300'
                                         }`}>
-                                          <Icon name={doc.status === 'under_review' ? 'Clock' : 'Check'} size={16} />
+                                          <Icon 
+                                            name={
+                                              doc.status === 'approved' ? 'CheckCircle' 
+                                              : doc.status === 'rejected' ? 'XCircle'
+                                              : doc.status === 'under_review' || doc.version_status === 'under_review' ? 'Clock' 
+                                              : 'Check'
+                                            } 
+                                            size={16} 
+                                          />
                                         </div>
+                                        {doc.status === 'approved' && doc.approved_at && (
+                                          <span className="text-xs text-muted-foreground px-2">
+                                            Approved {new Date(doc.approved_at).toLocaleDateString()}
+                                          </span>
+                                        )}
+                                        {doc.status === 'rejected' && doc.rejection_reason && (
+                                          <span className="text-xs text-red-600 px-2" title={doc.rejection_reason}>
+                                            Rejected
+                                          </span>
+                                        )}
                                         <button
                                           onClick={() => handleViewDocument(doc)}
                                           className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"

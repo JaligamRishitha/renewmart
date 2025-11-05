@@ -187,17 +187,8 @@ const CollaborationWork = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-border">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewTask(subtask.task_id, landId)}
-                      >
-                        <Icon name="ExternalLink" size={14} />
-                        View Task
-                      </Button>
-                    </div>
+                  <div className="flex items-center justify-end pt-3 border-t border-border">
+                    
                     <div className="flex items-center gap-2">
                       {subtask.status !== 'pending' && (
                         <Button

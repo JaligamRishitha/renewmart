@@ -3,34 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/AppIcon';
 import Header from '../../components/ui/Header';
-import { taskAPI, documentsAPI } from '../../services/api';
+import { taskAPI, documentsAPI, landsAPI } from '../../services/api';
 import ProjectCard from './ProjectCard';
 
-// Role-specific document types from Workflow.txt
-const ROLE_DOCUMENTS = {
+// Default role-specific document types (fallback)
+const DEFAULT_ROLE_DOCUMENTS = {
   're_sales_advisor': [
     'land-valuation',
-    'ownership-documents',
-    'sale-contract',
-    'land_valuation',
-    'ownership_documents',
-    'sale_contract'
+    'sale-contracts',
+    'topographical-surveys',
+    'grid-connectivity'
   ],
   're_analyst': [
-    'topographical-survey',
-    'grid-connectivity',
-    'financial-model',
-    'topographical_survey',
-    'grid_connectivity',
-    'financial_model'
+    'financial-models'
   ],
   're_governance_lead': [
-    'zoning-approval',
-    'environmental-assessment',
-    'government-noc',
-    'zoning_approval',
-    'environmental_assessment',
-    'government_noc'
+    'land-valuation',
+    'ownership-documents',
+    'zoning-approvals',
+    'environmental-impact',
+    'government-nocs'
   ]
 };
 
@@ -60,6 +52,8 @@ const ReviewerDashboard = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Store project-specific mappings: { land_id: { role_key: [docTypes] } }
+  const [projectMappings, setProjectMappings] = useState({});
 
   // Get user's reviewer role
   const reviewerRole = user?.roles?.find(role => 
@@ -89,7 +83,51 @@ const ReviewerDashboard = () => {
 
       // Group tasks by project (land)
       const projectMap = new Map();
+      const landIds = new Set();
 
+      // First pass: collect all land IDs
+      for (const task of tasksResponse || []) {
+        if (task.land_id) {
+          landIds.add(task.land_id);
+        }
+      }
+
+      // Fetch all project mappings in parallel
+      const mappingsCache = {};
+      await Promise.all(
+        Array.from(landIds).map(async (landId) => {
+          try {
+            const mappings = await landsAPI.getProjectDocumentRoleMappings(landId);
+            // Convert from {docType: [roleKeys]} to {roleKey: [docTypes]}
+            const roleToDocTypes = {};
+            if (mappings.project_mappings) {
+              Object.keys(mappings.project_mappings).forEach(docType => {
+                mappings.project_mappings[docType].forEach(roleKey => {
+                  if (!roleToDocTypes[roleKey]) {
+                    roleToDocTypes[roleKey] = [];
+                  }
+                  roleToDocTypes[roleKey].push(docType);
+                });
+              });
+            }
+            mappingsCache[landId] = roleToDocTypes;
+            // Also update state for future use
+            setProjectMappings(prev => ({
+              ...prev,
+              [landId]: roleToDocTypes
+            }));
+          } catch (err) {
+            console.error(`Failed to fetch project mappings for land ${landId}:`, err);
+            mappingsCache[landId] = {}; // Use defaults
+            setProjectMappings(prev => ({
+              ...prev,
+              [landId]: {}
+            }));
+          }
+        })
+      );
+
+      // Second pass: process tasks and documents
       for (const task of tasksResponse || []) {
         if (task.land_id) {
           if (!projectMap.has(task.land_id)) {
@@ -119,8 +157,12 @@ const ReviewerDashboard = () => {
           // Fetch documents for this land (filtered by role)
           try {
             const docsResponse = await documentsAPI.getDocuments(task.land_id);
+            // Use project mappings if available, otherwise use defaults
+            const currentMapping = mappingsCache[task.land_id] || {};
+            const allowedTypes = currentMapping[reviewerRole] || DEFAULT_ROLE_DOCUMENTS[reviewerRole] || [];
+            
             const filteredDocs = (docsResponse || []).filter(doc => 
-              ROLE_DOCUMENTS[reviewerRole]?.includes(doc.document_type?.toLowerCase())
+              allowedTypes.includes(doc.document_type)
             );
             
             // Avoid duplicates

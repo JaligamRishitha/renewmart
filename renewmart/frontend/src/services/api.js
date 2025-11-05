@@ -249,6 +249,16 @@ export const landsAPI = {
     return response.data;
   },
   
+  getProjectDocumentRoleMappings: async (landId) => {
+    const response = await api.get(`/lands/${landId}/document-role-mappings`);
+    return response.data;
+  },
+  
+  saveProjectDocumentRoleMappings: async (landId, mappings) => {
+    const response = await api.post(`/lands/${landId}/document-role-mappings`, { mappings });
+    return response.data;
+  },
+  
   deleteLand: async (landId) => {
     const response = await api.delete(`/lands/${landId}`);
     return response.data;
@@ -444,6 +454,20 @@ export const documentsAPI = {
   archiveDocumentVersion: async (documentId, reason = null) => {
     const response = await api.post(`/document-versions/${documentId}/archive`, null, {
       params: { reason }
+    });
+    return response.data;
+  },
+
+  approveDocumentVersion: async (documentId, reason = null) => {
+    const response = await api.post(`/document-versions/${documentId}/approve`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  rejectDocumentVersion: async (documentId, rejectionReason) => {
+    const response = await api.post(`/document-versions/${documentId}/reject`, null, {
+      params: { rejection_reason: rejectionReason }
     });
     return response.data;
   },
@@ -908,6 +932,22 @@ export const documentVersionsAPI = {
   // Get document status summary for a land/project
   getStatusSummary: async (landId) => {
     const response = await api.get(`/document-versions/land/${landId}/status-summary`);
+    return response.data;
+  },
+
+  // Approve a document version
+  approveDocument: async (documentId, reason = null) => {
+    const response = await api.post(`/document-versions/${documentId}/approve`, null, {
+      params: { reason }
+    });
+    return response.data;
+  },
+
+  // Reject a document version
+  rejectDocument: async (documentId, rejectionReason) => {
+    const response = await api.post(`/document-versions/${documentId}/reject`, null, {
+      params: { rejection_reason: rejectionReason }
+    });
     return response.data;
   },
 

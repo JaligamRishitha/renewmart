@@ -4,7 +4,7 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
 
-const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
+const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect, reviewStatuses }) => {
   const [sortField, setSortField] = useState('startDate');
   const [sortDirection, setSortDirection] = useState('desc');
   const navigate = useNavigate();
@@ -179,7 +179,11 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
                   )}
                 </td>
                 <td className="px-4 py-4">
-                  <StatusBadge status={task?.status} />
+                  <StatusBadge 
+                    status={task?.status} 
+                    reviewStatus={reviewStatuses?.[task?.id] || reviewStatuses?.[task?.reviewerRole]}
+                    completionPercentage={reviewStatuses?.[task?.id]?.completion_percentage || reviewStatuses?.[task?.reviewerRole]?.completion_percentage}
+                  />
                 </td>
                 <td className="px-4 py-4">
                   <StatusBadge status={task?.priority} />
@@ -226,7 +230,12 @@ const TaskTable = ({ tasks, onBulkAction, selectedTasks, onTaskSelect }) => {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <StatusBadge status={task?.status} size="sm" />
+                <StatusBadge 
+                  status={task?.status} 
+                  size="sm"
+                  reviewStatus={reviewStatuses?.[task?.id] || reviewStatuses?.[task?.reviewerRole]}
+                  completionPercentage={reviewStatuses?.[task?.id]?.completion_percentage || reviewStatuses?.[task?.reviewerRole]?.completion_percentage}
+                />
                 <StatusBadge status={task?.priority} size="sm" />
               </div>
             </div>

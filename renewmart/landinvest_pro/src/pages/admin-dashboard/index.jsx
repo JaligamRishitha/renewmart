@@ -27,6 +27,7 @@ const AdminDashboard = () => {
     search: ''
   });
   const [notifications, setNotifications] = useState([]);
+  const [reviewStatuses, setReviewStatuses] = useState({});
 
   // Mock data for metrics
   const metricsData = [
@@ -313,6 +314,65 @@ const AdminDashboard = () => {
     setNotifications(initialNotifications);
   }, []);
 
+  // Fetch review statuses for tasks
+  useEffect(() => {
+    const fetchReviewStatuses = async () => {
+      try {
+        // TODO: Replace with actual API call when backend is integrated
+        // Example implementation:
+        // 
+        // const statusesMap = {};
+        // for (const task of filteredTasks) {
+        //   if (task.land_id) {
+        //     // Fetch review status for this land and reviewer role
+        //     const roleKey = task.reviewerRole?.toLowerCase().replace(/\s+/g, '_');
+        //     // Map role names: "RE Sales Advisor" -> "re_sales_advisor", etc.
+        //     const roleMapping = {
+        //       're_sales_advisor': 're_sales_advisor',
+        //       're_analyst': 're_analyst',
+        //       're_governance_lead': 're_governance_lead'
+        //     };
+        //     const mappedRole = roleMapping[roleKey] || roleKey;
+        //     
+        //     const reviewStatus = await reviewsAPI.getReviewStatus(task.land_id, mappedRole);
+        //     // Map by task id or reviewer role
+        //     statusesMap[task.id] = reviewStatus;
+        //     statusesMap[task.reviewerRole] = reviewStatus; // Also map by role for fallback
+        //   }
+        // }
+        // setReviewStatuses(statusesMap);
+        
+        // Expected structure:
+        // {
+        //   [taskId]: {
+        //     completion_percentage: 100,  // When 100%, status will show "Completed"
+        //     status: "approved" | "completed" | "in_progress" | "pending",
+        //     published: true | false,
+        //     subtasksCompleted: number,
+        //     totalSubtasks: number,
+        //     documentsApproved: number,
+        //     totalDocuments: number,
+        //     ...
+        //   },
+        //   [reviewerRole]: { ... } // Fallback mapping
+        // }
+        
+        const statusesMap = {};
+        
+        // For mock data, this will remain empty, but the structure is ready
+        // When real API integration is added, uncomment and implement the code above
+        
+        setReviewStatuses(statusesMap);
+      } catch (error) {
+        console.error('Error fetching review statuses:', error);
+        // Don't fail silently - set empty object to prevent errors
+        setReviewStatuses({});
+      }
+    };
+
+    fetchReviewStatuses();
+  }, [filteredTasks]);
+
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="admin" notifications={{ dashboard: 3, projects: 7 }} />
@@ -407,6 +467,7 @@ const AdminDashboard = () => {
                 selectedTasks={selectedTasks}
                 onTaskSelect={setSelectedTasks}
                 onBulkAction={handleBulkAction}
+                reviewStatuses={reviewStatuses}
               />
             </div>
 
