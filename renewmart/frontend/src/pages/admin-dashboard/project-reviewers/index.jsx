@@ -833,7 +833,7 @@ const ProjectReviewersPage = () => {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Landowner:</span>
                   <div className="font-body text-foreground">{project?.landownerName}</div>
@@ -845,6 +845,20 @@ const ProjectReviewersPage = () => {
                 <div>
                   <span className="text-muted-foreground">Capacity:</span>
                   <div className="font-body text-foreground">{project?.capacity_mw} MW</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Price per MW:</span>
+                  <div className="font-body text-foreground">
+                    {project?.price_per_mwh ? `£${project.price_per_mwh.toFixed(2)}/MWh` : 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Estimated Revenue:</span>
+                  <div className="font-body text-foreground">
+                    {project?.capacity_mw && project?.price_per_mwh 
+                      ? `£${((project.capacity_mw * project.price_per_mwh * 8760) / 1000000).toFixed(1)}M/year`
+                      : 'N/A'}
+                  </div>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Due Date:</span>

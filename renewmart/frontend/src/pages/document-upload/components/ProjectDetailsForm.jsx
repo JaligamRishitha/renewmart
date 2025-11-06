@@ -84,6 +84,16 @@ const ProjectDetailsForm = ({
           required
         />
 
+        <Input
+          label="Post Code"
+          type="text"
+          placeholder="Enter post code"
+          value={projectDetails?.postCode || ''}
+          onChange={(e) => handleInputChange('postCode', e?.target?.value)}
+          error={errors?.postCode}
+          required
+        />
+
         <Select
           label="Land Type"
           placeholder="Select land type"

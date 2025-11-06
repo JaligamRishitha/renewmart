@@ -88,14 +88,39 @@ async def express_interest(
     
     # Check if land is in appropriate status (published lands are available for investor interest)
     if land_result.status not in ["published", "ready_to_buy"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Can only express interest in published or ready-to-buy lands"
-        )
+        # Check if project is locked by another investor
+        if land_result.status == "interest_locked":
+            # Check if current investor has an active interest
+            check_own_interest = text("""
+                SELECT interest_id FROM investor_interests 
+                WHERE investor_id = :investor_id AND land_id = :land_id
+                AND (
+                    withdrawal_requested = FALSE 
+                    OR withdrawal_status IS NULL 
+                    OR withdrawal_status != 'approved'
+                )
+                AND status != 'rejected'
+            """)
+            own_interest = db.execute(check_own_interest, {
+                "investor_id": current_user["user_id"],
+                "land_id": str(interest_data.land_id)
+            }).fetchone()
+            
+            if not own_interest:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This project is currently locked as another investor has expressed interest. Please try again later."
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Can only express interest in published or ready-to-buy lands"
+            )
     
     # Check if investor already expressed interest
     existing_check = text("""
-        SELECT interest_id FROM investor_interests 
+        SELECT interest_id, status, approved_at 
+        FROM investor_interests 
         WHERE investor_id = :investor_id AND land_id = :land_id
     """)
     
@@ -105,10 +130,39 @@ async def express_interest(
     }).fetchone()
     
     if existing_result:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already expressed interest in this land"
-        )
+        # Check if this investor was rejected within the last week
+        if existing_result.status == 'rejected' and existing_result.approved_at:
+            from datetime import datetime, timedelta, timezone
+            
+            rejection_date = existing_result.approved_at
+            # Handle both datetime objects and strings
+            if isinstance(rejection_date, str):
+                try:
+                    rejection_date = datetime.fromisoformat(rejection_date.replace('Z', '+00:00'))
+                except:
+                    rejection_date = datetime.fromisoformat(rejection_date)
+            
+            # Ensure timezone-aware datetime
+            if rejection_date.tzinfo is None:
+                rejection_date = rejection_date.replace(tzinfo=timezone.utc)
+            
+            # Check if rejection was less than 1 week ago
+            now = datetime.now(timezone.utc)
+            one_week_ago = now - timedelta(days=7)
+            
+            if rejection_date > one_week_ago:
+                days_remaining = ((rejection_date + timedelta(days=7)) - now).days + 1
+                if days_remaining < 0:
+                    days_remaining = 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"You cannot express interest in this project yet. Your previous interest was rejected. You can express interest again in {days_remaining} day(s)."
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You have already expressed interest in this land"
+            )
     
     # Validate that both NDA and CTA are accepted
     if not getattr(interest_data, 'nda_accepted', False) or not getattr(interest_data, 'cta_accepted', False):
@@ -149,6 +203,21 @@ async def express_interest(
             "nda_accepted": getattr(interest_data, 'nda_accepted', False),
             "cta_accepted": getattr(interest_data, 'cta_accepted', False),
             "master_advisor_id": str(master_advisor_id) if master_advisor_id else None
+        })
+        
+        # Lock the project - update land status to interest_locked
+        lock_land_query = text("""
+            UPDATE lands 
+            SET 
+                status = 'interest_locked',
+                interest_locked_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE land_id = :land_id
+            AND status IN ('published', 'ready_to_buy')
+        """)
+        
+        db.execute(lock_land_query, {
+            "land_id": str(interest_data.land_id)
         })
         
         db.commit()
@@ -556,6 +625,42 @@ async def approve_withdrawal(
             "interest_id": str(interest_id),
             "approved_by": str(user_id)
         })
+        
+        # Check if there are any other active interests (not withdrawn) for this land
+        check_other_interests_query = text("""
+            SELECT COUNT(*) as active_count
+            FROM investor_interests
+            WHERE land_id = (
+                SELECT land_id FROM investor_interests WHERE interest_id = :interest_id
+            )
+            AND (
+                withdrawal_requested = FALSE 
+                OR withdrawal_status IS NULL 
+                OR withdrawal_status != 'approved'
+            )
+        """)
+        
+        other_interests_result = db.execute(check_other_interests_query, {
+            "interest_id": str(interest_id)
+        }).fetchone()
+        
+        # If no other active interests, unlock the project
+        if other_interests_result and other_interests_result.active_count == 0:
+            unlock_land_query = text("""
+                UPDATE lands 
+                SET 
+                    status = 'published',
+                    interest_locked_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE land_id = (
+                    SELECT land_id FROM investor_interests WHERE interest_id = :interest_id
+                )
+                AND status = 'interest_locked'
+            """)
+            
+            db.execute(unlock_land_query, {
+                "interest_id": str(interest_id)
+            })
         
         db.commit()
         
@@ -1878,6 +1983,14 @@ async def approve_interest(
         )
     
     try:
+        # Get land_id before updating
+        land_id_query = text("""
+            SELECT land_id FROM investor_interests WHERE interest_id = :interest_id
+        """)
+        land_id_result = db.execute(land_id_query, {"interest_id": str(interest_id)}).fetchone()
+        land_id = land_id_result.land_id if land_id_result else None
+        
+        # Update interest status to approved
         update_query = text("""
             UPDATE investor_interests 
             SET status = 'approved',
@@ -1890,6 +2003,23 @@ async def approve_interest(
             "interest_id": str(interest_id),
             "approved_by": str(user_id)
         })
+        
+        # Ensure project stays locked when interest is approved
+        if land_id:
+            lock_land_query = text("""
+                UPDATE lands 
+                SET 
+                    status = 'interest_locked',
+                    interest_locked_at = COALESCE(interest_locked_at, CURRENT_TIMESTAMP),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE land_id = :land_id
+                AND status IN ('published', 'interest_locked')
+            """)
+            
+            db.execute(lock_land_query, {
+                "land_id": str(land_id)
+            })
+        
         db.commit()
         
         return MessageResponse(message="Interest approved successfully")
@@ -1941,6 +2071,14 @@ async def reject_interest(
         )
     
     try:
+        # Get land_id before updating
+        land_id_query = text("""
+            SELECT land_id FROM investor_interests WHERE interest_id = :interest_id
+        """)
+        land_id_result = db.execute(land_id_query, {"interest_id": str(interest_id)}).fetchone()
+        land_id = land_id_result.land_id if land_id_result else None
+        
+        # Update interest status to rejected
         update_query = text("""
             UPDATE investor_interests 
             SET status = 'rejected',
@@ -1953,9 +2091,46 @@ async def reject_interest(
             "interest_id": str(interest_id),
             "approved_by": str(user_id)
         })
+        
+        # Unlock the project - check if there are any other active interests (not rejected/withdrawn)
+        if land_id:
+            check_other_interests_query = text("""
+                SELECT COUNT(*) as active_count
+                FROM investor_interests
+                WHERE land_id = :land_id
+                AND interest_id != :interest_id
+                AND status = 'pending'
+                AND (
+                    withdrawal_requested = FALSE 
+                    OR withdrawal_status IS NULL 
+                    OR withdrawal_status != 'approved'
+                )
+            """)
+            
+            other_interests_result = db.execute(check_other_interests_query, {
+                "land_id": str(land_id),
+                "interest_id": str(interest_id)
+            }).fetchone()
+            
+            # If no other active interests, unlock the project
+            if other_interests_result and other_interests_result.active_count == 0:
+                unlock_land_query = text("""
+                    UPDATE lands 
+                    SET 
+                        status = 'published',
+                        interest_locked_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE land_id = :land_id
+                    AND status = 'interest_locked'
+                """)
+                
+                db.execute(unlock_land_query, {
+                    "land_id": str(land_id)
+                })
+        
         db.commit()
         
-        return MessageResponse(message="Interest rejected successfully")
+        return MessageResponse(message="Interest rejected successfully. Project has been unlocked and is now available to all investors.")
         
     except Exception as e:
         db.rollback()

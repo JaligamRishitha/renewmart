@@ -2,30 +2,58 @@ import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import StatusBadge from './StatusBadge';
-import { investorsAPI } from '../../../services/api';
+import { investorsAPI, landsAPI } from '../../../services/api';
 import toast from 'react-hot-toast';
 
 const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [investorInterests, setInvestorInterests] = useState([]);
   const [loadingInterests, setLoadingInterests] = useState(false);
+  const [fullProjectData, setFullProjectData] = useState(null);
+  const [loadingProject, setLoadingProject] = useState(false);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Fetch full project details when modal opens
   useEffect(() => {
-    if (project && (project.status === 'published' || project.status === 'rtb')) {
-      fetchInvestorInterests();
+    if (project?.id || project?.land_id) {
+      fetchFullProjectDetails();
     }
   }, [project]);
 
+  const fetchFullProjectDetails = async () => {
+    const projectId = project?.id || project?.land_id;
+    if (!projectId) return;
+    
+    try {
+      setLoadingProject(true);
+      const fullData = await landsAPI.getLandById(projectId);
+      console.log('[ProjectDetailModal] Fetched full project data:', fullData);
+      setFullProjectData(fullData);
+    } catch (err) {
+      console.error('[ProjectDetailModal] Error fetching full project details:', err);
+      // Fallback to provided project data
+      setFullProjectData(project);
+    } finally {
+      setLoadingProject(false);
+    }
+  };
+
+  useEffect(() => {
+    if (fullProjectData && (fullProjectData.status === 'published' || fullProjectData.status === 'rtb')) {
+      fetchInvestorInterests();
+    }
+  }, [fullProjectData]);
+
   const fetchInvestorInterests = async () => {
-    if (!project?.id) return;
+    const projectId = fullProjectData?.id || fullProjectData?.land_id;
+    if (!projectId) return;
     
     try {
       setLoadingInterests(true);
-      const interests = await investorsAPI.getLandInterests(project.id);
+      const interests = await investorsAPI.getLandInterests(projectId);
       console.log('[ProjectDetailModal] Fetched investor interests:', interests);
       setInvestorInterests(interests || []);
     } catch (err) {
@@ -37,7 +65,10 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
     }
   };
 
-  if (!project) return null;
+  // Use full project data if available, otherwise fallback to provided project
+  const displayProject = fullProjectData || project;
+  
+  if (!displayProject) return null;
 
   const formatDate = (dateString) => {
     return new Date(dateString)?.toLocaleDateString('en-US', {
@@ -80,7 +111,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
         </div>
 
         {/* Tabs */}
-        {(project.status === 'published' || project.status === 'rtb') && (
+        {(displayProject.status === 'published' || displayProject.status === 'rtb') && (
           <div className="px-6 border-b border-border flex space-x-1 bg-muted/20">
             <button
               onClick={() => setActiveTab('details')}
@@ -114,7 +145,12 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'details' ? (
+          {loadingProject ? (
+            <div className="flex items-center justify-center py-12">
+              <Icon name="Loader2" size={32} className="animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">Loading project details...</span>
+            </div>
+          ) : activeTab === 'details' ? (
             <>
           {/* Project Header */}
           <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-6 mb-6 border border-primary/20">
@@ -125,20 +161,26 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                 </div>
                 <div>
                   <h3 className="font-heading font-bold text-2xl text-foreground mb-1">
-                    {project.name}
+                    {displayProject.name || displayProject.title}
                   </h3>
                   <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                     <Icon name="MapPin" size={14} />
-                    <span>{project.location}</span>
+                    <span>{displayProject.location || displayProject.location_text}</span>
+                    {displayProject.post_code && (
+                      <>
+                        <span className="mx-1">•</span>
+                        <span>{displayProject.post_code}</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
-              <StatusBadge status={project.status} />
+              <StatusBadge status={displayProject.status} />
             </div>
             
-            {project.description && (
+            {(displayProject.description || displayProject.project_description) && (
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {project.description}
+                {displayProject.description || displayProject.project_description}
               </p>
             )}
           </div>
@@ -151,7 +193,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                 <span className="text-xs font-medium">Capacity</span>
               </div>
               <div className="font-heading font-bold text-xl text-foreground">
-                {project.capacity} <span className="text-sm font-normal">MW</span>
+                {displayProject.capacity || displayProject.capacity_mw} <span className="text-sm font-normal">MW</span>
               </div>
             </div>
             
@@ -161,7 +203,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                 <span className="text-xs font-medium">Type</span>
               </div>
               <div className="font-heading font-bold text-lg text-foreground capitalize">
-                {project.type || project.energy_key || project.energyType || 'N/A'}
+                {displayProject.type || displayProject.energy_key || displayProject.energyType || 'N/A'}
               </div>
             </div>
             
@@ -171,32 +213,32 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
                 <span className="text-xs font-medium">Land Area</span>
               </div>
               <div className="font-heading font-bold text-lg text-foreground">
-                {project.areaAcres || project.area_acres
-                  ? `${parseFloat(project.areaAcres || project.area_acres).toFixed(2)} acres`
+                {displayProject.areaAcres || displayProject.area_acres
+                  ? `${parseFloat(displayProject.areaAcres || displayProject.area_acres).toFixed(2)} acres`
                   : 'N/A'}
               </div>
             </div>
             
-            {project.timeline && (
+            {(displayProject.timeline || displayProject.timeline_text) && (
               <div className="bg-muted/30 rounded-lg p-4 border border-border">
                 <div className="flex items-center space-x-2 text-muted-foreground mb-2">
                   <Icon name="Clock" size={16} />
                   <span className="text-xs font-medium">Timeline</span>
                 </div>
                 <div className="font-heading font-bold text-sm text-foreground">
-                  {project.timeline}
+                  {displayProject.timeline || displayProject.timeline_text}
                 </div>
               </div>
             )}
             
-            {project.estimatedRevenue && (
+            {displayProject.estimatedRevenue && (
               <div className="bg-muted/30 rounded-lg p-4 border border-border">
                 <div className="flex items-center space-x-2 text-muted-foreground mb-2">
                   <Icon name="PoundSterling" size={16} />
                   <span className="text-xs font-medium">Est. Revenue</span>
                 </div>
                 <div className="font-heading font-bold text-lg text-foreground">
-                  {formatCurrency(project.estimatedRevenue)}M
+                  {formatCurrency(displayProject.estimatedRevenue)}M
                 </div>
               </div>
             )}
@@ -212,28 +254,86 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
               <div className="bg-muted/20 rounded-lg p-4 border border-border">
                 <div className="text-sm text-muted-foreground mb-1">Status</div>
                 <div className="font-body text-sm text-foreground capitalize">
-                  {project.status.replace(/-/g, ' ')}
+                  {displayProject.status?.replace(/-/g, ' ') || 'N/A'}
                 </div>
               </div>
               
               <div className="bg-muted/20 rounded-lg p-4 border border-border">
                 <div className="text-sm text-muted-foreground mb-1">Last Updated</div>
                 <div className="font-body text-sm text-foreground">
-                  {formatDate(project.lastUpdated)}
+                  {formatDate(displayProject.lastUpdated || displayProject.updated_at)}
                 </div>
               </div>
               
-              {project.timeline && (
+              {displayProject.post_code && (
                 <div className="bg-muted/20 rounded-lg p-4 border border-border">
-                  <div className="text-sm text-muted-foreground mb-1">Project Timeline</div>
-                  <div className="font-body text-sm text-foreground">{project.timeline}</div>
+                  <div className="text-sm text-muted-foreground mb-1">Post Code</div>
+                  <div className="font-body text-sm text-foreground">{displayProject.post_code}</div>
                 </div>
               )}
+              
+              {displayProject.land_type && (
+                <div className="bg-muted/20 rounded-lg p-4 border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">Land Type</div>
+                  <div className="font-body text-sm text-foreground capitalize">
+                    {displayProject.land_type?.replace(/_/g, ' ') || displayProject.landType?.replace(/_/g, ' ') || 'N/A'}
+                  </div>
+                </div>
+              )}
+              
+              {displayProject.price_per_mwh && (
+                <div className="bg-muted/20 rounded-lg p-4 border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">Price per MWh</div>
+                  <div className="font-body text-sm text-foreground">
+                    {formatCurrency(displayProject.price_per_mwh || displayProject.pricePerMWh)}
+                  </div>
+                </div>
+              )}
+              
+              {displayProject.contract_term_years && (
+                <div className="bg-muted/20 rounded-lg p-4 border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">Contract Duration</div>
+                  <div className="font-body text-sm text-foreground">
+                    {displayProject.contract_term_years || displayProject.contractTermYears} years
+                  </div>
+                </div>
+              )}
+              
+              
+              
+              {displayProject.potential_partners && (
+                <div className="bg-muted/20 rounded-lg p-4 border border-border md:col-span-2">
+                  <div className="text-sm text-muted-foreground mb-1">Potential Partners</div>
+                  <div className="font-body text-sm text-foreground">
+                    {displayProject.potential_partners || displayProject.potentialPartners || 'N/A'}
+                  </div>
+                </div>
+              )}
+              
+              {(displayProject.timeline || displayProject.timeline_text) && (
+                <div className="bg-muted/20 rounded-lg p-4 border border-border">
+                  <div className="text-sm text-muted-foreground mb-1">Project Timeline</div>
+                  <div className="font-body text-sm text-foreground">
+                    {displayProject.timeline || displayProject.timeline_text || 'N/A'}
+                  </div>
+                </div>
+              )}
+              
+             
             </div>
+            
+            {displayProject.project_description && (
+              <div className="bg-muted/20 rounded-lg p-4 border border-border mt-4">
+                <div className="text-sm text-muted-foreground mb-2">Project Description</div>
+                <div className="font-body text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                  {displayProject.project_description || displayProject.description || 'N/A'}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Status-specific information */}
-          {project.status === 'draft' && (
+          {displayProject.status === 'draft' && (
             <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-start space-x-3">
                 <Icon name="AlertCircle" size={20} className="text-yellow-600 mt-0.5" />
@@ -247,7 +347,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
             </div>
           )}
 
-          {project.status === 'submitted' && (
+          {displayProject.status === 'submitted' && (
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start space-x-3">
                 <Icon name="Clock" size={20} className="text-blue-600 mt-0.5" />
@@ -261,7 +361,7 @@ const ProjectDetailModal = ({ project, onClose, initialTab = 'details' }) => {
             </div>
           )}
 
-          {project.status === 'published' && (
+          {displayProject.status === 'published' && (
             <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-start space-x-3">
                 <Icon name="CheckCircle" size={20} className="text-green-600 mt-0.5" />

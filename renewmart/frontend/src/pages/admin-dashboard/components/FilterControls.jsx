@@ -22,9 +22,12 @@ const FilterControls = ({ filters, onFilterChange, onClearFilters }) => {
 
   const statusOptions = [
     { value: '', label: 'All Statuses' },
-    { value: 'published', label: 'Published' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'submitted', label: 'Submitted' },
     { value: 'under_review', label: 'Under Review' },
-   
+    { value: 'approved', label: 'Approved' },
+    { value: 'published', label: 'Published' },
+    { value: 'rejected', label: 'Rejected' }
   ];
 
   const priorityOptions = [

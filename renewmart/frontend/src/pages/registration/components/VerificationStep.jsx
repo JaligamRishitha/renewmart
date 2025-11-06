@@ -4,20 +4,26 @@ import Input from '../../../components/ui/Input';
 import Icon from '../../../components/AppIcon';
 import { authAPI } from '../../../services/api';
 
-const VerificationStep = ({ formData, onComplete, errors, setErrors, isUserRegistered }) => {
+const VerificationStep = ({ formData, onComplete, errors, setErrors, isUserRegistered, isPreRegister = false }) => {
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationSent, setVerificationSent] = useState(false);
   const [debugCode, setDebugCode] = useState(null);
+  const [hasRequestedCode, setHasRequestedCode] = useState(false);
 
   useEffect(() => {
-    // Request verification code when component mounts if user is registered
-    if (isUserRegistered) {
-      requestVerificationCode();
+    // Request verification code when component mounts
+    // For pre-registration: always request when component mounts
+    // For post-registration: only request if user is registered
+    if (isPreRegister || isUserRegistered) {
+      if (!hasRequestedCode) {
+        requestVerificationCode();
+        setHasRequestedCode(true);
+      }
     }
-  }, [isUserRegistered]);
+  }, [isPreRegister, isUserRegistered]);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -30,7 +36,8 @@ const VerificationStep = ({ formData, onComplete, errors, setErrors, isUserRegis
     try {
       setIsResending(true);
       setErrors({});
-      const response = await authAPI.requestVerificationCode(formData.email);
+      // Use pre-registration endpoint if isPreRegister is true
+      const response = await authAPI.requestVerificationCode(formData.email, isPreRegister);
       setVerificationSent(true);
       setResendCooldown(60);
       setVerificationCode('');
@@ -60,6 +67,9 @@ const VerificationStep = ({ formData, onComplete, errors, setErrors, isUserRegis
       await onComplete(verificationCode);
     } catch (error) {
       // Error is handled in parent component
+      console.error('Verification error in child component:', error);
+    } finally {
+      // Always reset loading state, even if error occurs
       setIsVerifying(false);
     }
   };

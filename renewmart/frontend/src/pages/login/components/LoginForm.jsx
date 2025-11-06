@@ -279,8 +279,8 @@ const LoginForm = () => {
             type="button"
             onClick={() => {
               setFormData({
-                email: 'landowner@renewmart.com',
-                password: 'Land2024!',
+                email: 'landowner@gmail.com',
+                password: 'Test@123',
                 role: 'landowner',
                 rememberMe: false
               });
@@ -289,14 +289,14 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-green-600">Landowner:</strong> landowner@renewmart.com / Land2024!
+            <strong className="text-green-600">Landowner:</strong> landowner@gmail.com / Test@123
           </button>
           <button
             type="button"
             onClick={() => {
               setFormData({
-                email: 'investor@renewmart.com',
-                password: 'Invest2024!',
+                email: 'rishithajaligam1312@gmail.com',
+                password: 'Test@123',
                 role: 'investor',
                 rememberMe: false
               });
@@ -305,14 +305,14 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-blue-600">Investor:</strong> investor@renewmart.com / Invest2024!
+            <strong className="text-blue-600">Investor:</strong> rishithajaligam1312@gmail.com / Test@123
           </button>
           <button
             type="button"
             onClick={() => {
               setFormData({
-                email: 'admin@renewmart.com',
-                password: 'Admin2024!',
+                email: 'admin@gmail.com',
+                password: 'Test@123',
                 role: 'administrator',
                 rememberMe: false
               });
@@ -321,14 +321,14 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-purple-600">Administrator:</strong> admin@renewmart.com / Admin2024!
+            <strong className="text-purple-600">Administrator:</strong> admin@gmail.com / Test@123
           </button>
           <button
             type="button"
             onClick={() => {
               setFormData({
-                email: 'sales@renewmart.com',
-                password: 'Sales2024!',
+                email: 'saleadvisor@gmail.com',
+                password: 'Test@123',
                 role: 're_sales_advisor',
                 rememberMe: false
               });
@@ -337,14 +337,14 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-orange-600">RE Sales Advisor:</strong> sales@renewmart.com / Sales2024!
+            <strong className="text-orange-600">RE Sales Advisor:</strong> saleadvisor@gmail.com / Test@123
           </button>
           <button
             type="button"
             onClick={() => {
               setFormData({
-                email: 'analyst@renewmart.com',
-                password: 'Analyst2024!',
+                email: 'analyst@gmail.com',
+                password: 'Test@123',
                 role: 're_analyst',
                 rememberMe: false
               });
@@ -353,7 +353,7 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-cyan-600">RE Analyst:</strong> analyst@renewmart.com / Analyst2024!
+            <strong className="text-cyan-600">RE Analyst:</strong> analyst@gmail.com / Test@123
           </button>
           <button
             type="button"
@@ -369,14 +369,14 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-indigo-600">Project Manager:</strong> manager@renewmart.com / Manager2024!
+            <strong className="text-indigo-600">Project Manager:</strong> manager@gmail.com / Test@123
           </button>
           <button
             type="button"
             onClick={() => {
               setFormData({
-                email: 'governance@renewmart.com',
-                password: 'Gov2024!',
+                email: 'govlead@gmail.com',
+                password: 'Test@123',
                 role: 're_governance_lead',
                 rememberMe: false
               });
@@ -385,7 +385,7 @@ const LoginForm = () => {
             className="w-full text-left p-2 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors text-xs"
             disabled={loading}
           >
-            <strong className="text-red-600">RE Governance Lead:</strong> governance@renewmart.com / Gov2024!
+            <strong className="text-red-600">RE Governance Lead:</strong> govlead@gmail.com / Test@123
           </button>
         </div>
         <p className="text-xs text-muted-foreground mt-2 italic">

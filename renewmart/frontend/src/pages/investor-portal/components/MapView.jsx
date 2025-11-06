@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
-const MapView = ({ projects, onProjectSelect, selectedProject }) => {
+const MapView = ({ projects, onProjectSelect, selectedProject, projectInterests = {} }) => {
   const [mapCenter, setMapCenter] = useState({ lat: 39.8283, lng: -98.5795 }); // Center of US
   const [zoom, setZoom] = useState(5);
 
@@ -166,14 +166,47 @@ const MapView = ({ projects, onProjectSelect, selectedProject }) => {
             >
               View Details
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => onProjectSelect(selectedProject?.id, 'interest')}
-              className="flex-1"
-            >
-              Express Interest
-            </Button>
+            {projectInterests[selectedProject?.id] ? (
+              <div className="flex-1 flex items-center justify-center px-3 py-2 rounded-md border border-border bg-muted/50">
+                <div className="flex items-center space-x-2">
+                  {projectInterests[selectedProject?.id].status === 'approved' && (
+                    <>
+                      <Icon name="CheckCircle" size={14} className="text-green-600" />
+                      <span className="text-sm font-medium text-green-600">Approved</span>
+                    </>
+                  )}
+                  {projectInterests[selectedProject?.id].status === 'pending' && (
+                    <>
+                      <Icon name="Clock" size={14} className="text-yellow-600" />
+                      <span className="text-sm font-medium text-yellow-600">Pending</span>
+                    </>
+                  )}
+                  {projectInterests[selectedProject?.id].status === 'rejected' && (
+                    <>
+                      <Icon name="XCircle" size={14} className="text-red-600" />
+                      <span className="text-sm font-medium text-red-600">Rejected</span>
+                    </>
+                  )}
+                  {!['approved', 'pending', 'rejected'].includes(projectInterests[selectedProject?.id].status) && (
+                    <>
+                      <Icon name="Clock" size={14} className="text-muted-foreground" />
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {projectInterests[selectedProject?.id].status || 'Pending'}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onProjectSelect(selectedProject?.id, 'interest')}
+                className="flex-1"
+              >
+                Express Interest
+              </Button>
+            )}
           </div>
         </div>
       )}

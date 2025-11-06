@@ -56,7 +56,55 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
       setError(null);
       
       const statuses = await reviewsAPI.getAllReviewStatuses(landId);
-      setReviewStatuses(statuses || {});
+      console.log('[ReviewStatusPanel] Fetched review statuses:', statuses);
+      
+      // Calculate completion_percentage for each status
+      const processedStatuses = {};
+      if (statuses && typeof statuses === 'object') {
+        Object.keys(statuses).forEach(roleKey => {
+          const status = statuses[roleKey];
+          if (status) {
+            // Calculate completion percentage based on subtasks and documents
+            const totalSubtasks = status.totalSubtasks || status.total_subtasks || 0;
+            const subtasksCompleted = status.subtasksCompleted || status.subtasks_completed || 0;
+            const totalDocuments = status.totalDocuments || status.total_documents || 0;
+            const documentsApproved = status.documentsApproved || status.documents_approved || 0;
+            
+            let completionPercentage = 0;
+            
+            // If published, it's 100% complete
+            if (status.published === true) {
+              completionPercentage = 100;
+            } else if (status.status === 'approved') {
+              // If approved, it's 100% complete
+              completionPercentage = 100;
+            } else {
+              // Calculate based on subtasks and documents
+              const totalItems = totalSubtasks + totalDocuments;
+              const completedItems = subtasksCompleted + documentsApproved;
+              
+              if (totalItems > 0) {
+                completionPercentage = Math.round((completedItems / totalItems) * 100);
+              } else if (status.status === 'in_progress') {
+                // If in progress but no items, set to 50% as a default
+                completionPercentage = 50;
+              } else if (status.status === 'pending') {
+                completionPercentage = 0;
+              }
+            }
+            
+            processedStatuses[roleKey] = {
+              ...status,
+              completion_percentage: completionPercentage,
+              assigned_to: status.reviewer_id || status.reviewerId,
+              assigned_to_name: status.reviewerName || status.reviewer_name
+            };
+          }
+        });
+      }
+      
+      console.log('[ReviewStatusPanel] Processed review statuses:', processedStatuses);
+      setReviewStatuses(processedStatuses);
     } catch (err) {
       console.error('Error fetching review statuses:', err);
       setError('Failed to load review status');
@@ -255,15 +303,6 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
         console.log(`🔧 Adding task to role:`, roleId);
         roleData[roleId].total += 1;
         
-        // Determine task completion status
-        const isCompleted = task.status === 'completed' || 
-                           task.status === 'approved' || 
-                           task.completed === true;
-        
-        if (isCompleted) {
-          roleData[roleId].completed += 1;
-        }
-        
         // Add task to role's task list with subtasks
         // Use task_type first (like admin review panel), then fallback to title/name
         const getTaskDisplayName = (task) => {
@@ -274,24 +313,25 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
         };
         
         const taskName = getTaskDisplayName(task);
+        
         const taskData = {
           id: task.task_id || task.id,
           name: taskName,
-          completed: isCompleted,
+          completed: false, // Will be determined based on subtasks
           description: task.description || '',
-          status: task.status || (isCompleted ? 'completed' : 'pending'),
+          status: 'pending', // Will be determined based on subtasks
           task_type: task.task_type, // Keep original task_type for reference
           reviewer: task.reviewer // Include reviewer info
         };
         
-        // Add subtasks if they exist
+        // Process subtasks first to determine task completion
         if (task.subtasks && Array.isArray(task.subtasks) && task.subtasks.length > 0) {
           console.log(`🔧 Processing subtasks for task:`, taskName, task.subtasks);
           
           let completedSubtasks = 0;
           taskData.subtasks = task.subtasks.map(subtask => {
-            const isSubtaskCompleted = subtask.status === 'completed' || 
-                                      subtask.status === 'approved' || 
+            const isSubtaskCompleted = (subtask.status || '').toLowerCase() === 'completed' || 
+                                      (subtask.status || '').toLowerCase() === 'approved' || 
                                       subtask.completed === true;
             
             if (isSubtaskCompleted) {
@@ -307,22 +347,69 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
             };
           });
           
-          // Update task completion based on subtasks
-          if (taskData.subtasks.length > 0) {
-            taskData.completion_percentage = Math.round((completedSubtasks / taskData.subtasks.length) * 100);
+          // Calculate completion percentage
+          const completionPercentage = taskData.subtasks.length > 0 
+            ? Math.round((completedSubtasks / taskData.subtasks.length) * 100) 
+            : 0;
+          
+          taskData.completion_percentage = completionPercentage;
+          
+          // Determine task completion status based on subtasks
+          // Task is only completed if ALL subtasks are completed (100%)
+          if (completionPercentage === 100) {
+            taskData.completed = true;
+            taskData.status = 'completed';
+          } else if (completionPercentage > 0) {
+            taskData.completed = false;
+            taskData.status = 'in_progress';
+          } else {
+            taskData.completed = false;
+            taskData.status = 'pending';
           }
           
-          console.log(`🔧 Processed subtasks:`, taskData.subtasks);
+          console.log(`🔧 Task completion determined from subtasks:`, {
+            taskName,
+            completionPercentage,
+            completedSubtasks,
+            totalSubtasks: taskData.subtasks.length,
+            taskStatus: taskData.status,
+            taskCompleted: taskData.completed
+          });
+        } else {
+          // No subtasks - use task's own status
+          const taskStatus = (task.status || '').toLowerCase();
+          const isCompleted = taskStatus === 'completed' || 
+                             taskStatus === 'approved' || 
+                             task.completed === true ||
+                             task.completed_at !== null ||
+                             task.completed_at !== undefined;
+          
+          const isInProgress = taskStatus === 'in_progress' || 
+                              taskStatus === 'in progress' ||
+                              taskStatus === 'active';
+          
+          taskData.completed = isCompleted;
+          taskData.status = isCompleted ? 'completed' : (isInProgress ? 'in_progress' : 'pending');
+        }
+        
+        // Count completed tasks for role statistics
+        if (taskData.completed) {
+          roleData[roleId].completed += 1;
         }
         
         roleData[roleId].tasks.push(taskData);
 
         // Update role status based on task statuses
-        if (isCompleted) {
-          if (roleData[roleId].status !== 'in_progress') {
+        // Priority: completed > in_progress > pending
+        // Use taskData.status which is now correctly calculated from subtasks
+        if (taskData.status === 'completed') {
+          // Only set role to completed if all tasks are completed
+          if (roleData[roleId].completed === roleData[roleId].total) {
             roleData[roleId].status = 'completed';
+          } else {
+            roleData[roleId].status = 'in_progress';
           }
-        } else if (task.status === 'in_progress') {
+        } else if (taskData.status === 'in_progress') {
           roleData[roleId].status = 'in_progress';
         }
         
@@ -416,16 +503,42 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
     }
 
     const totalRoles = reviewerRoles.length;
-    let completedRoles = 0;
+    let totalCompletion = 0;
 
     reviewerRoles.forEach(role => {
       const status = reviewStatuses[role.id];
-      if (status && (status.status === 'approved' || status.status === 'completed')) {
-        completedRoles++;
+      if (status) {
+        // Use completion_percentage if available, otherwise calculate from status
+        let roleCompletion = 0;
+        
+        if (status.completion_percentage !== undefined && status.completion_percentage !== null) {
+          roleCompletion = Number(status.completion_percentage);
+        } else if (status.status === 'approved' || status.published === true) {
+          roleCompletion = 100;
+        } else if (status.status === 'in_progress') {
+          // Calculate from subtasks and documents
+          const totalSubtasks = status.totalSubtasks || status.total_subtasks || 0;
+          const subtasksCompleted = status.subtasksCompleted || status.subtasks_completed || 0;
+          const totalDocuments = status.totalDocuments || status.total_documents || 0;
+          const documentsApproved = status.documentsApproved || status.documents_approved || 0;
+          
+          const totalItems = totalSubtasks + totalDocuments;
+          const completedItems = subtasksCompleted + documentsApproved;
+          
+          if (totalItems > 0) {
+            roleCompletion = Math.round((completedItems / totalItems) * 100);
+          } else {
+            roleCompletion = 50; // Default for in_progress with no items
+          }
+        } else if (status.status === 'pending') {
+          roleCompletion = 0;
+        }
+        
+        totalCompletion += roleCompletion;
       }
     });
 
-    return Math.round((completedRoles / totalRoles) * 100);
+    return Math.round(totalCompletion / totalRoles);
   };
 
   if (loading) {
@@ -555,10 +668,26 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                             <span>Last updated: {formatDate(status.updated_at)}</span>
                           </div>
                         )}
-                        {status.completion_percentage && (
+                        {(status.completion_percentage !== undefined && status.completion_percentage !== null) && (
                           <div className="flex items-center space-x-1">
                             <Icon name="BarChart3" size={12} />
                             <span>Progress: {status.completion_percentage}%</span>
+                          </div>
+                        )}
+                        {status.totalSubtasks !== undefined && status.totalSubtasks > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <Icon name="CheckSquare" size={12} />
+                            <span>
+                              Subtasks: {status.subtasksCompleted || status.subtasks_completed || 0}/{status.totalSubtasks || status.total_subtasks || 0}
+                            </span>
+                          </div>
+                        )}
+                        {status.totalDocuments !== undefined && status.totalDocuments > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <Icon name="FileText" size={12} />
+                            <span>
+                              Documents: {status.documentsApproved || status.documents_approved || 0}/{status.totalDocuments || status.total_documents || 0}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -610,11 +739,15 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
               </div>
 
               {/* Progress Bar for Individual Role */}
-              {status && status.completion_percentage && (
+              {status && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-gray-600">Review Progress</span>
-                    <span className="text-xs font-semibold text-gray-800">{status.completion_percentage}%</span>
+                    <span className="text-xs font-semibold text-gray-800">
+                      {status.completion_percentage !== undefined && status.completion_percentage !== null 
+                        ? `${status.completion_percentage}%` 
+                        : '0%'}
+                    </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-1.5">
                     <div 
@@ -625,7 +758,11 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                         isRejected ? 'bg-red-500' :
                         'bg-gray-400'
                       }`}
-                      style={{ width: `${status.completion_percentage}%` }}
+                      style={{ 
+                        width: `${status.completion_percentage !== undefined && status.completion_percentage !== null 
+                          ? status.completion_percentage 
+                          : 0}%` 
+                      }}
                     ></div>
                   </div>
                 </div>
@@ -635,47 +772,7 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
         })}
       </div>
 
-      {/* Summary */}
-      <div className="mt-6 pt-4 border-t border-gray-200">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <div className="text-lg font-semibold text-green-600">
-              {reviewerRoles.filter(role => {
-                const status = reviewStatuses[role.id];
-                return status && (status.status === 'approved' || status.status === 'completed');
-              }).length}
-            </div>
-            <div className="text-xs text-gray-500">Completed</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold text-blue-600">
-              {reviewerRoles.filter(role => {
-                const status = reviewStatuses[role.id];
-                return status && status.status === 'in_progress';
-              }).length}
-            </div>
-            <div className="text-xs text-gray-500">In Progress</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold text-yellow-600">
-              {reviewerRoles.filter(role => {
-                const status = reviewStatuses[role.id];
-                return status && status.status === 'pending';
-              }).length}
-            </div>
-            <div className="text-xs text-gray-500">Pending</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold text-gray-600">
-              {reviewerRoles.filter(role => {
-                const status = reviewStatuses[role.id];
-                return !status;
-              }).length}
-            </div>
-            <div className="text-xs text-gray-500">Not Assigned</div>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Task Status Modal */}
       {showTaskModal && (
@@ -784,12 +881,18 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                                     >
                                       <div className="flex items-center space-x-3 flex-1">
                                         <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                                          task.completed ? 'bg-green-100' : task.status === 'in_progress' ? 'bg-blue-100' : 'bg-yellow-100'
+                                          task.completed && task.completion_percentage === 100 ? 'bg-green-100' : 
+                                          task.status === 'in_progress' || (task.completion_percentage > 0 && task.completion_percentage < 100) ? 'bg-blue-100' : 
+                                          'bg-yellow-100'
                                         }`}>
                                           <Icon 
-                                            name={task.completed ? "Check" : task.status === 'in_progress' ? "Clock" : "Circle"} 
+                                            name={task.completed && task.completion_percentage === 100 ? "Check" : 
+                                                  task.status === 'in_progress' || (task.completion_percentage > 0 && task.completion_percentage < 100) ? "Clock" : 
+                                                  "Circle"} 
                                             size={12} 
-                                            className={task.completed ? "text-green-600" : task.status === 'in_progress' ? "text-blue-600" : "text-yellow-600"} 
+                                            className={task.completed && task.completion_percentage === 100 ? "text-green-600" : 
+                                                      task.status === 'in_progress' || (task.completion_percentage > 0 && task.completion_percentage < 100) ? "text-blue-600" : 
+                                                      "text-yellow-600"} 
                                           />
                                         </div>
                                         <div className="text-left flex-1">
@@ -801,11 +904,13 @@ const ReviewStatusPanel = ({ landId, projectData }) => {
                                           )}
                                         </div>
                                         <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                          task.completed ? 'bg-green-100 text-green-800' : 
-                                          task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : 
+                                          task.completed && task.completion_percentage === 100 ? 'bg-green-100 text-green-800' : 
+                                          task.status === 'in_progress' || (task.completion_percentage > 0 && task.completion_percentage < 100) ? 'bg-blue-100 text-blue-800' : 
                                           'bg-yellow-100 text-yellow-800'
                                         }`}>
-                                          {task.status?.replace('_', ' ') || (task.completed ? 'Completed' : 'Pending')}
+                                          {task.completed && task.completion_percentage === 100 ? 'Completed' :
+                                           task.status === 'in_progress' || (task.completion_percentage > 0 && task.completion_percentage < 100) ? 'In Progress' :
+                                           'Pending'}
                                         </span>
                                         <Icon 
                                           name={isExpanded ? "ChevronUp" : "ChevronDown"} 

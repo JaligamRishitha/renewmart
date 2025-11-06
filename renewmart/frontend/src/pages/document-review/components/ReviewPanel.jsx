@@ -268,10 +268,10 @@ const ReviewPanel = ({
     const reviewStatus = roleStatuses[reviewerRole] || {};
     
     // Calculate completion percentage from actual subtasks (most accurate)
-    // Use actual subtasks array if available, otherwise use reviewStatus data
+    // Always prioritize actual subtasks data over stored reviewStatus
     const totalSubtasks = subtasks.length > 0 ? subtasks.length : (reviewStatus.totalSubtasks || reviewStatus.total_subtasks || 0);
     const completedSubtasks = subtasks.length > 0 
-      ? subtasks.filter(s => s.status === 'completed').length
+      ? subtasks.filter(s => (s.status || '').toLowerCase() === 'completed').length
       : (reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || 0);
     
     // Calculate completion percentage from actual subtasks
@@ -319,8 +319,12 @@ const ReviewPanel = ({
       statusLabel: statusLabel,
       completionPercentage: completionPercentage,
       reviewStatus: reviewStatus,
-      subtasksCompleted: reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || subtasks.filter(s => s.status === 'completed').length,
-      totalSubtasks: reviewStatus.totalSubtasks || reviewStatus.total_subtasks || subtasks.length,
+      subtasksCompleted: subtasks.length > 0 
+        ? subtasks.filter(s => (s.status || '').toLowerCase() === 'completed').length
+        : (reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || 0),
+      totalSubtasks: subtasks.length > 0 
+        ? subtasks.length 
+        : (reviewStatus.totalSubtasks || reviewStatus.total_subtasks || 0),
       documentsApproved: reviewStatus.documentsApproved || reviewStatus.documents_approved || 0,
       totalDocuments: reviewStatus.totalDocuments || reviewStatus.total_documents || 0,
       timestamp: new Date().toISOString()
@@ -717,9 +721,23 @@ const ReviewPanel = ({
   const handleRatingClick = (rating) => setOverallRating(rating);
 
   const getCompletionPercentage = () => {
-    if (!subtasks?.length) return 0;
-    const completedCount = subtasks.filter(s => s.status === 'completed').length;
+    if (!subtasks || subtasks.length === 0) return 0;
+    const completedCount = subtasks.filter(s => s.status === 'completed' || s.status === 'COMPLETED').length;
     return Math.round((completedCount / subtasks.length) * 100);
+  };
+  
+  // Get actual subtask counts for display
+  const getSubtaskCounts = () => {
+    if (!subtasks || subtasks.length === 0) {
+      return { total: 0, completed: 0, pending: 0 };
+    }
+    const completed = subtasks.filter(s => s.status === 'completed' || s.status === 'COMPLETED').length;
+    const pending = subtasks.filter(s => s.status === 'pending' || s.status === 'PENDING' || !s.status).length;
+    return {
+      total: subtasks.length,
+      completed,
+      pending
+    };
   };
 
   // Calculate document approval progress
@@ -973,31 +991,38 @@ const ReviewPanel = ({
                   </div>
 
                   {/* Summary */}
-                  {(subtasks?.length > 0 || hasTemplates) && (
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2 pt-2 border-t border-border">
-                      <span className="flex items-center gap-1">
-                        <Icon name="ListChecks" size={14} />
-                        {subtasks?.length > 0 ? subtasks.length : groupedSubtasks?.reduce((total, section) => total + section.items.length, 0) || 0} {hasTemplates && !subtasks?.length ? 'Template Items' : 'Subtasks'}
-                      </span>
-                      {subtasks?.length > 0 ? (
-                        <>
-                          <span className="flex items-center gap-1">
-                            <Icon name="CheckCircle2" size={14} className="text-green-500" />
-                            {subtasks.filter(s => s.status === 'completed').length} Completed
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Icon name="Clock" size={14} className="text-orange-500" />
-                            {subtasks.filter(s => s.status === 'pending').length} Pending
-                          </span>
-                        </>
-                      ) : hasTemplates ? (
+                  {(subtasks?.length > 0 || hasTemplates) && (() => {
+                    const counts = getSubtaskCounts();
+                    return (
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2 pt-2 border-t border-border">
                         <span className="flex items-center gap-1">
-                          <Icon name="FileText" size={14} className="text-blue-500" />
-                          Template Review Items
+                          <Icon name="ListChecks" size={14} />
+                          {counts.total > 0 ? counts.total : groupedSubtasks?.reduce((total, section) => total + section.items.length, 0) || 0} {hasTemplates && !subtasks?.length ? 'Template Items' : 'Subtasks'}
                         </span>
-                      ) : null}
-                    </div>
-                  )}
+                        {counts.total > 0 ? (
+                          <>
+                            <span className="flex items-center gap-1">
+                              <Icon name="CheckCircle2" size={14} className="text-green-500" />
+                              {counts.completed} Completed
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Icon name="Clock" size={14} className="text-orange-500" />
+                              {counts.pending} Pending
+                            </span>
+                            <span className="flex items-center gap-1 ml-auto">
+                              <Icon name="BarChart3" size={14} className="text-primary" />
+                              {getCompletionPercentage()}% Complete
+                            </span>
+                          </>
+                        ) : hasTemplates ? (
+                          <span className="flex items-center gap-1">
+                            <Icon name="FileText" size={14} className="text-blue-500" />
+                            Template Review Items
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* BODY */}
@@ -1090,30 +1115,38 @@ const ReviewPanel = ({
                               <div className="flex items-center justify-between p-3">
                                 <div className="flex items-center space-x-3 flex-1">
                                   <button
-                                    onClick={() => handleCheckboxChange(item, item.status !== 'completed')}
+                                    onClick={() => {
+                                      const currentStatus = (item.status || '').toLowerCase();
+                                      const isCurrentlyCompleted = currentStatus === 'completed';
+                                      handleCheckboxChange(item, !isCurrentlyCompleted);
+                                    }}
                                     disabled={!canChangeSubtaskStatus}
                                     className={`flex-shrink-0 w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${
-                                      item.status === 'completed'
+                                      (item.status || '').toLowerCase() === 'completed'
                                         ? 'bg-green-500 border-green-500'
                                         : 'border-border hover:border-primary'
                                     } ${!canChangeSubtaskStatus ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                                    title={!canChangeSubtaskStatus ? 'Admin view-only: Only the assigned reviewer can change status' : ''}
+                                    title={!canChangeSubtaskStatus ? 'Admin view-only: Only the assigned reviewer can change status' : (item.status === 'completed' ? 'Mark as pending' : 'Mark as completed')}
                                   >
-                                    {item.status === 'completed' && <Icon name="Check" size={20} className="text-white" />}
+                                    {(item.status || '').toLowerCase() === 'completed' && <Icon name="Check" size={20} className="text-white" />}
                                   </button>
-                                  <span className={`text-sm flex-1 ${item.status === 'completed' ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                  <span className={`text-sm flex-1 ${(item.status || '').toLowerCase() === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
                                     {item.title || item}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span
                                     className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                      item.status === 'completed'
+                                      (item.status || '').toLowerCase() === 'completed'
                                         ? 'bg-green-500/10 text-green-600 border border-green-500/20'
+                                        : (item.status || '').toLowerCase() === 'in_progress' || (item.status || '').toLowerCase() === 'in progress'
+                                        ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                                         : 'bg-orange-500/10 text-orange-600 border border-orange-500/20'
                                     }`}
                                   >
-                                    {item.status === 'completed' ? 'Completed' : 'Pending'}
+                                    {(item.status || '').toLowerCase() === 'completed' ? 'Completed' : 
+                                     (item.status || '').toLowerCase() === 'in_progress' || (item.status || '').toLowerCase() === 'in progress' ? 'In Progress' :
+                                     'Pending'}
                                   </span>
                                   
                                   {/* Document icon - show when reviewer has uploaded documents */}
@@ -1359,17 +1392,32 @@ const ReviewPanel = ({
 
                   {/* Subtask Review Progress */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>Subtask Review Progress</span>
-                      <span>{getCompletionPercentage()}% Complete</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-foreground">Subtask Review Progress</span>
+                      <span className="text-muted-foreground">{getCompletionPercentage()}% Complete</span>
                     </div>
 
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
-                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          getCompletionPercentage() === 100 ? 'bg-green-500' : 
+                          getCompletionPercentage() > 0 ? 'bg-primary' : 
+                          'bg-gray-400'
+                        }`}
                         style={{ width: `${getCompletionPercentage()}%` }}
                       />
                     </div>
+                    
+                    {/* Subtask Count Details */}
+                    {(() => {
+                      const counts = getSubtaskCounts();
+                      return counts.total > 0 ? (
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{counts.completed} of {counts.total} subtasks completed</span>
+                          <span>{counts.pending} remaining</span>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
 
                   {(() => {
@@ -1419,26 +1467,29 @@ const ReviewPanel = ({
                       </p>
                     </div>
                     {(() => {
-                      // Get review status for current role
+                      // Always calculate from actual subtasks data (most accurate)
+                      const totalSubtasks = subtasks.length;
+                      const completedSubtasks = subtasks.filter(s => (s.status || '').toLowerCase() === 'completed').length;
+                      const completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+                      
+                      // Get review status for additional context
                       const reviewStatus = roleStatuses[reviewerRole] || {};
                       
-                      // Calculate completion percentage
-                      let completionPercentage = reviewStatus.completion_percentage;
-                      if (completionPercentage === undefined || completionPercentage === null) {
-                        // Calculate from subtasks if available
-                        const totalSubtasks = reviewStatus.totalSubtasks || reviewStatus.total_subtasks || subtasks.length;
-                        const completedSubtasks = reviewStatus.subtasksCompleted || reviewStatus.subtasks_completed || 
-                                                  (subtasks.filter(s => s.status === 'completed').length);
-                        completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
-                      }
-                      
-                      // Determine status based on completion percentage
-                      // 100% = Completed, 0% = Pending, > 0% = In Progress
+                      // Determine status based on completion percentage and published status
+                      // Published reviews are always completed
                       let displayStatus = 'pending';
                       let statusLabel = 'PENDING';
                       let statusClasses = 'text-orange-500 bg-orange-500/10 border-orange-500/20';
                       
-                      if (completionPercentage >= 100) {
+                      if (reviewStatus.published === true) {
+                        displayStatus = 'completed';
+                        statusLabel = 'COMPLETED';
+                        statusClasses = 'text-green-500 bg-green-500/10 border-green-500/20';
+                      } else if (reviewStatus.status === 'approved') {
+                        displayStatus = 'completed';
+                        statusLabel = 'APPROVED';
+                        statusClasses = 'text-green-500 bg-green-500/10 border-green-500/20';
+                      } else if (completionPercentage >= 100) {
                         displayStatus = 'completed';
                         statusLabel = 'COMPLETED';
                         statusClasses = 'text-green-500 bg-green-500/10 border-green-500/20';
@@ -1449,9 +1500,14 @@ const ReviewPanel = ({
                       }
                       
                       return (
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusClasses}`}>
-                          {statusLabel}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusClasses}`}>
+                            {statusLabel}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {completedSubtasks}/{totalSubtasks} subtasks ({completionPercentage}%)
+                          </span>
+                        </div>
                       );
                     })()}
                   </div>

@@ -258,7 +258,7 @@ const DocumentsModal = ({ project, onClose }) => {
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div>
               {/* Document Count */}
               <div className="flex items-center justify-between mb-4">
                 <p className="text-sm text-muted-foreground">
@@ -266,84 +266,111 @@ const DocumentsModal = ({ project, onClose }) => {
                 </p>
               </div>
 
-              {/* Documents List */}
-              {documents.map((doc) => (
-                <div
-                  key={doc.document_id}
-                  className="flex items-center justify-between p-4 bg-muted/30 border border-border rounded-lg hover:bg-muted/50 transition-smooth"
-                >
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
-                    {/* File Icon */}
-                    <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <Icon name={getFileIcon(doc.file_name)} size={20} className="text-primary" />
-                    </div>
-                    
-                    {/* File Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <p className="font-body font-medium text-foreground truncate">
-                          {doc.file_name}
-                        </p>
-                        {doc.is_draft && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">
-                            Draft
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-3 text-xs text-muted-foreground">
-                        {doc.document_type && (
-                          <span className="flex items-center space-x-1">
-                            <Icon name="Tag" size={12} />
-                            <span>{doc.document_type}</span>
-                            {getRolesText(doc.document_type) && (
-                              <span className="text-xs text-muted-foreground/70">
-                                (Can view: {getRolesText(doc.document_type)})
+              {/* Documents Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.document_id}
+                    className="flex flex-col p-4 bg-muted/30 border border-border rounded-lg hover:bg-muted/50 transition-smooth"
+                  >
+                    {/* Header with Icon and Actions */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        {/* File Icon */}
+                        <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <Icon name={getFileIcon(doc.file_name)} size={20} className="text-primary" />
+                        </div>
+                        
+                        {/* File Name */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <p className="font-body font-medium text-foreground text-sm truncate" title={doc.file_name}>
+                              {doc.file_name}
+                            </p>
+                            {doc.is_draft && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded flex-shrink-0">
+                                Draft
                               </span>
                             )}
-                          </span>
-                        )}
-                        {doc.version_number && (
-                          <span className="flex items-center space-x-1">
-                            <Icon name="Hash" size={12} />
-                            <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleView(doc)}
+                          iconName="Eye"
+                          title="View Document"
+                          className="h-8 w-8 p-0"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownload(doc)}
+                          iconName={downloading === doc.document_id ? "Loader" : "Download"}
+                          title="Download"
+                          disabled={downloading === doc.document_id}
+                          className={`h-8 w-8 p-0 ${downloading === doc.document_id ? "animate-spin" : ""}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Document Details Grid */}
+                    <div className="space-y-2 flex-1">
+                      {/* Document Type */}
+                      {doc.document_type && (
+                        <div className="flex items-start space-x-2">
+                          <Icon name="Tag" size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-muted-foreground mb-0.5">Type</p>
+                            <p className="text-sm text-foreground font-medium truncate">{doc.document_type}</p>
+                            {getRolesText(doc.document_type) && (
+                              <p className="text-xs text-muted-foreground/70 mt-0.5">
+                                Can view: {getRolesText(doc.document_type)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Version */}
+                      {doc.version_number && (
+                        <div className="flex items-start space-x-2">
+                          <Icon name="Hash" size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-muted-foreground mb-0.5">Version</p>
+                            <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium inline-block">
                               v{doc.version_number}
                               {doc.is_latest_version && ' (Latest)'}
                             </span>
-                          </span>
-                        )}
-                        <span className="flex items-center space-x-1">
-                          <Icon name="HardDrive" size={12} />
-                          <span>{formatFileSize(doc.file_size)}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <Icon name="Clock" size={12} />
-                          <span>{formatDate(doc.created_at)}</span>
-                        </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* File Size */}
+                      <div className="flex items-start space-x-2">
+                        <Icon name="HardDrive" size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-muted-foreground mb-0.5">Size</p>
+                          <p className="text-sm text-foreground">{formatFileSize(doc.file_size)}</p>
+                        </div>
+                      </div>
+
+                      {/* Created Date */}
+                      <div className="flex items-start space-x-2">
+                        <Icon name="Clock" size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-muted-foreground mb-0.5">Uploaded</p>
+                          <p className="text-sm text-foreground">{formatDate(doc.created_at)}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleView(doc)}
-                      iconName="Eye"
-                      title="View Document"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDownload(doc)}
-                      iconName={downloading === doc.document_id ? "Loader" : "Download"}
-                      title="Download"
-                      disabled={downloading === doc.document_id}
-                      className={downloading === doc.document_id ? "animate-spin" : ""}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>

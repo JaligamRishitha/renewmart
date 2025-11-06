@@ -78,6 +78,10 @@ const MyInterests = () => {
   };
 
   const filteredInterests = interests.filter(interest => {
+    // Only show approved interests - don't show pending, rejected, or other statuses
+    if (interest.status !== 'approved') return false;
+    
+    // Apply additional filters if set
     if (filters.status && interest.status !== filters.status) return false;
     if (filters.search && !interest.project_title?.toLowerCase().includes(filters.search.toLowerCase())) return false;
     return true;
@@ -273,7 +277,7 @@ const MyInterests = () => {
             </div>
           </div>
           <p className="text-muted-foreground">
-            Projects you've expressed interest in and their current status
+            Projects where your interest has been approved by a sales advisor
           </p>
         </div>
 
@@ -296,11 +300,13 @@ const MyInterests = () => {
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                disabled
               >
-                {statusOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
+                <option value="">Approved Only</option>
               </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Only approved interests are shown in this tab
+              </p>
             </div>
             <div className="flex items-end">
               <Button
@@ -321,33 +327,12 @@ const MyInterests = () => {
           <div className="bg-white rounded-lg shadow-sm border border-border p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Interests</p>
-                <p className="text-2xl font-bold text-foreground mt-1">{interests.length}</p>
-              </div>
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Icon name="Heart" size={24} className="text-primary" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-border p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {interests.filter(i => i.status === 'pending').length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Icon name="Clock" size={24} className="text-yellow-600" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-border p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Approved</p>
+                <p className="text-sm font-medium text-muted-foreground">Approved Interests</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
                   {interests.filter(i => i.status === 'approved').length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total: {interests.length}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -358,13 +343,48 @@ const MyInterests = () => {
           <div className="bg-white rounded-lg shadow-sm border border-border p-4">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm font-medium text-muted-foreground">Pending Approval</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {interests.filter(i => i.status === 'pending').length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Awaiting review
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Icon name="Clock" size={24} className="text-yellow-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-border p-4">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-muted-foreground">Under Review</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
                   {interests.filter(i => i.status === 'under_review').length}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Being reviewed
+                </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Icon name="Eye" size={24} className="text-blue-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Rejected</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {interests.filter(i => i.status === 'rejected').length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Not approved
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <Icon name="XCircle" size={24} className="text-red-600" />
               </div>
             </div>
           </div>
@@ -374,8 +394,11 @@ const MyInterests = () => {
         <div className="bg-white rounded-lg shadow-sm border border-border overflow-hidden">
           <div className="px-6 py-4 border-b border-border">
             <h2 className="font-heading font-semibold text-lg text-foreground">
-              Interested Projects ({filteredInterests.length})
+              Approved Interests ({filteredInterests.length})
             </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Only projects with approved interest are shown here
+            </p>
           </div>
           
           {loading ? (
@@ -393,11 +416,11 @@ const MyInterests = () => {
           ) : filteredInterests.length === 0 ? (
             <div className="text-center py-12">
               <Icon name="Heart" size={48} className="text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground font-medium">No interests found</p>
+              <p className="text-muted-foreground font-medium">No approved interests found</p>
               <p className="text-sm text-muted-foreground mt-2">
-                {filters.status || filters.search ? 'Try adjusting your filters' : 'Start exploring opportunities to express interest'}
+                {filters.search ? 'Try adjusting your search filter' : 'Your interests will appear here once they are approved by a sales advisor'}
               </p>
-              {!filters.status && !filters.search && (
+              {!filters.search && (
                 <Button variant="default" onClick={() => navigate('/investor/portal')} className="mt-4" iconName="TrendingUp">
                   Browse Opportunities
                 </Button>

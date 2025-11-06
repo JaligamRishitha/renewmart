@@ -30,7 +30,7 @@ async def get_admin_projects(
 ):
     """Get all projects for admin review (admin only)."""
     
-    # Query to get all submitted projects with landowner details and investor interest count
+    # Query to get all submitted projects with landowner details, investor interest count, and reviewer assignment status
     query = text("""
         SELECT 
             l.land_id,
@@ -60,10 +60,15 @@ async def get_admin_projects(
             u.first_name,
             u.last_name,
             u.phone,
-            COALESCE(COUNT(DISTINCT ii.interest_id), 0) as investor_interest_count
+            COALESCE(COUNT(DISTINCT ii.interest_id), 0) as investor_interest_count,
+            CASE 
+                WHEN COUNT(DISTINCT t.task_id) FILTER (WHERE t.assigned_to IS NOT NULL) > 0 THEN true
+                ELSE false
+            END as has_reviewers
         FROM lands l
         LEFT JOIN "user" u ON l.landowner_id = u.user_id
         LEFT JOIN investor_interests ii ON l.land_id = ii.land_id
+        LEFT JOIN tasks t ON l.land_id = t.land_id AND t.assigned_to IS NOT NULL
         WHERE 1=1
         AND l.status != 'draft'
     """ + (" AND l.status = :status_filter" if status_filter else "") + """
@@ -102,6 +107,14 @@ async def get_admin_projects(
         if has_site_image:
             image_url = f"/api/lands/{row.land_id}/site-image"
         
+        # Check if reviewers are assigned
+        has_reviewers = row.has_reviewers if hasattr(row, 'has_reviewers') else False
+        
+        # Determine display status: if no reviewers assigned and status is not published/approved/rejected, show as pending
+        display_status = row.status or "unknown"
+        if not has_reviewers and display_status not in ['published', 'approved', 'rejected', 'rtb', 'interest_locked']:
+            display_status = "pending"
+        
         project = {
             "id": str(row.land_id),
             "land_id": str(row.land_id),
@@ -121,7 +134,9 @@ async def get_admin_projects(
             "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
             "areaAcres": float(row.area_acres) if row.area_acres else 0,
             "area_acres": float(row.area_acres) if row.area_acres else None,
-            "status": row.status or "unknown",
+            "status": display_status,
+            "original_status": row.status or "unknown",  # Keep original status for reference
+            "has_reviewers": has_reviewers,
             "timeline": row.timeline_text or "Not specified",
             "timeline_text": row.timeline_text or None,
             "contractTerm": f"{row.contract_term_years} years" if row.contract_term_years else "Not specified",
@@ -168,9 +183,25 @@ async def get_admin_summary(
             COUNT(CASE WHEN status = 'rtb' THEN 1 END) as ready_to_buy,
             COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
             COALESCE(SUM(area_acres), 0) as total_land_area,
-            COALESCE(SUM(capacity_mw), 0) as total_capacity
-        FROM lands
-        WHERE status != 'draft'
+            COALESCE(SUM(capacity_mw), 0) as total_capacity,
+            COALESCE(SUM(
+                CASE 
+                    WHEN capacity_mw IS NOT NULL AND price_per_mwh IS NOT NULL 
+                    THEN capacity_mw * price_per_mwh * 8760  -- 8760 hours per year for annual revenue
+                    ELSE 0 
+                END
+            ), 0) as estimated_revenue,
+            COUNT(CASE 
+                WHEN l.status NOT IN ('published', 'approved', 'rejected', 'rtb', 'interest_locked', 'draft', 'submitted')
+                AND NOT EXISTS (
+                    SELECT 1 FROM tasks t 
+                    WHERE t.land_id = l.land_id 
+                    AND t.assigned_to IS NOT NULL
+                )
+                THEN 1 
+            END) as pending_without_reviewers
+        FROM lands l
+        WHERE l.status != 'draft'
     """)
     
     result = db.execute(summary_query).fetchone()
@@ -194,9 +225,15 @@ async def get_admin_summary(
     """)
     interest_result = db.execute(interest_query).fetchone()
     
+    # Calculate pending reviews: include projects without reviewers
+    pending_without_reviewers = result.pending_without_reviewers if hasattr(result, 'pending_without_reviewers') else 0
+    # Pending reviews = submitted status + projects without reviewers (excluding those already counted as submitted)
+    # The query already excludes projects with status 'submitted' from pending_without_reviewers, so we add them
+    total_pending = result.pending_reviews + pending_without_reviewers
+    
     return {
         "totalProjects": result.total_projects,
-        "pendingReviews": result.pending_reviews,
+        "pendingReviews": total_pending,
         "underReview": result.under_review,
         "approved": result.approved,
         "published": result.published,
@@ -204,6 +241,7 @@ async def get_admin_summary(
         "rejected": result.rejected,
         "totalLandArea": float(result.total_land_area),
         "totalCapacity": float(result.total_capacity),
+        "estimatedRevenue": float(result.estimated_revenue) if hasattr(result, 'estimated_revenue') else 0.0,
         "totalLandowners": landowner_result.landowner_count,
         "totalInvestorInterests": int(interest_result.total_interests) if interest_result.total_interests else 0,
         "totalInvestors": int(interest_result.total_investors) if interest_result.total_investors else 0
@@ -611,11 +649,11 @@ async def create_land(
         # Create land with direct INSERT
         insert_query = text("""
             INSERT INTO lands (
-                land_id, landowner_id, title, location_text, coordinates, 
-                area_acres, land_type, energy_key, status
+                land_id, landowner_id, title, location_text, post_code, coordinates, 
+                area_acres, land_type, energy_key, potential_partners, project_description
             ) VALUES (
-                :land_id, :landowner_id, :title, :location_text, :coordinates,
-                :area_acres, :land_type, :energy_key, 'draft'
+                :land_id, :landowner_id, :title, :location_text, :post_code, :coordinates,
+                :area_acres, :land_type, :energy_key, :potential_partners, :project_description
             )
         """)
         
@@ -624,10 +662,13 @@ async def create_land(
             "landowner_id": current_user["user_id"],
             "title": land_data.title,
             "location_text": land_data.location_text,
+            "post_code": land_data.post_code,
             "coordinates": coordinates_json,
             "area_acres": float(land_data.area_acres) if land_data.area_acres else None,
             "land_type": land_data.land_type,
-            "energy_key": energy_key_value
+            "energy_key": energy_key_value,
+            "potential_partners": land_data.potential_partners,
+            "project_description": land_data.project_description
         })
         
         db.commit()
@@ -717,7 +758,7 @@ async def get_land(
 ):
     """Get land by ID."""
     query = text("""
-        SELECT l.land_id, l.landowner_id, l.title, l.location_text,
+        SELECT l.land_id, l.landowner_id, l.title, l.location_text, l.post_code,
                l.coordinates, 
                l.area_acres,
                NULLIF(NULLIF(l.land_type, ''), ' ') as land_type,
@@ -725,7 +766,7 @@ async def get_land(
                l.admin_notes, l.energy_key, l.capacity_mw, l.price_per_mwh,
                l.timeline_text, 
                l.contract_term_years,
-               l.developer_name,
+               l.developer_name, l.potential_partners, l.project_description,
                l.project_priority, l.project_due_date,
                l.published_at, l.interest_locked_at, l.created_at, l.updated_at
         FROM lands l
@@ -803,6 +844,7 @@ async def get_land(
         landowner_id=result.landowner_id,
         title=result.title,
         location_text=result.location_text,
+        post_code=result.post_code,
         coordinates=result.coordinates,
         area_acres=area_acres_value,
         land_type=land_type_value,
@@ -814,6 +856,8 @@ async def get_land(
         timeline_text=result.timeline_text,
         contract_term_years=contract_term_value,
         developer_name=result.developer_name,
+        potential_partners=result.potential_partners,
+        project_description=result.project_description,
         project_priority=result.project_priority,
         project_due_date=result.project_due_date,
         published_at=result.published_at,
@@ -873,19 +917,26 @@ async def update_land(
     update_fields = []
     params = {"land_id": str(land_id)}
     
+    # Debug: Log incoming update data
+    print(f"[update_land] Received update data for land_id {land_id}:")
+    print(f"[update_land] Update data keys: {list(update_data.keys())}")
+    for key, value in update_data.items():
+        print(f"[update_land]   {key}: {value} (type: {type(value)})")
+    
     for field, value in update_data.items():
         # Map energy_key field (no column mapping needed - matches database)
         db_field = field
         
         # String fields
-        if field in ["title", "location_text", "land_type", "admin_notes", "energy_key", 
-                     "timeline_text", "developer_name", "project_priority"]:
+        if field in ["title", "location_text", "post_code", "land_type", "admin_notes", "energy_key", 
+                     "timeline_text", "developer_name", "project_priority", "potential_partners", "project_description"]:
             update_fields.append(f"{db_field} = :{field}")
             # Convert enum to string if needed
             if field == "energy_key" and value:
                 params[field] = str(value) if hasattr(value, 'value') else value
             else:
-                params[field] = value
+                # Handle None/null values - set to NULL in database
+                params[field] = value if value is not None else None
         # Numeric fields
         elif field in ["area_acres", "capacity_mw", "price_per_mwh"]:
             update_fields.append(f"{field} = :{field}")
@@ -914,6 +965,13 @@ async def update_land(
             update_fields.append(f"{field} = :{field}")
             # Convert string to timestamp if needed
             params[field] = value
+        else:
+            # Log unhandled fields
+            print(f"[update_land] WARNING: Unhandled field '{field}' with value '{value}'")
+    
+    # Debug: Log what will be updated
+    print(f"[update_land] Fields to update: {update_fields}")
+    print(f"[update_land] Parameters: {params}")
     
     if update_fields:
         update_query = text(f"""
@@ -922,8 +980,12 @@ async def update_land(
             WHERE land_id = :land_id
         """)
         
+        print(f"[update_land] Executing query: {update_query}")
         db.execute(update_query, params)
         db.commit()
+        print(f"[update_land] Update successful")
+    else:
+        print(f"[update_land] No fields to update")
     
     return await get_land(land_id, current_user, db)
 
@@ -1256,9 +1318,26 @@ async def get_published_lands(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     location: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ):
-    """Get all published lands for marketplace (public endpoint)."""
+    """Get all published lands for marketplace (public endpoint).
+    Excludes interest_locked projects unless the current user is the investor who expressed interest."""
+    
+    # Try to get current user if authenticated (optional)
+    current_user_id = None
+    try:
+        if credentials:
+            from auth import verify_token
+            token = credentials.credentials
+            payload = verify_token(token)
+            if payload:
+                user_id = payload.get("user_id")
+                if user_id:
+                    current_user_id = str(user_id)
+    except Exception:
+        # If authentication fails, continue as unauthenticated user
+        pass
     
     # Build dynamic query for published lands
     base_query = """
@@ -1277,13 +1356,18 @@ async def get_published_lands(
             l.developer_name,
             l.published_at,
             l.created_at,
+            l.status,
             CASE 
                 WHEN l.site_image IS NOT NULL THEN true
                 ELSE false
             END as has_site_image,
             u.first_name || ' ' || u.last_name as landowner_name,
             u.email as landowner_email,
-            COUNT(DISTINCT ii.interest_id) as interest_count
+            COUNT(DISTINCT CASE 
+                WHEN ii.status IN ('pending', 'approved') 
+                AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+                THEN ii.interest_id 
+            END) as interest_count
         FROM lands l
         LEFT JOIN "user" u ON l.landowner_id = u.user_id
         LEFT JOIN investor_interests ii ON l.land_id = ii.land_id
@@ -1291,6 +1375,19 @@ async def get_published_lands(
     """
     
     params = {"skip": skip, "limit": limit}
+    
+    # Exclude ALL projects with active interests from marketplace
+    # Projects with interests should only be visible in "My Interest" section, not marketplace
+    base_query += """
+        AND NOT EXISTS (
+            SELECT 1 FROM investor_interests ii_active
+            WHERE ii_active.land_id = l.land_id
+            AND ii_active.status IN ('pending', 'approved')
+            AND (ii_active.withdrawal_requested = FALSE 
+                 OR ii_active.withdrawal_status IS NULL 
+                 OR ii_active.withdrawal_status != 'approved')
+        )
+    """
     
     # Apply filters
     if energy_type:
@@ -1367,7 +1464,8 @@ async def get_published_lands(
             "published_at": row.published_at.isoformat() if row.published_at else None,
             "published_date": row.published_at.isoformat() if row.published_at else None,
             "interestCount": row.interest_count or 0,
-            "isAvailable": True,
+            "status": row.status or "published",
+            "isAvailable": (row.interest_count or 0) == 0,  # Only available if no active interests
             "image_url": image_url,
             "has_site_image": has_site_image
         }

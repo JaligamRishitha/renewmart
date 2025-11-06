@@ -128,6 +128,7 @@ const AdminDashboard = () => {
   const getStatusLabel = (status) => {
     const statusMap = {
       submitted: "Pending",
+      pending: "Pending",  // Added for projects without reviewers
       under_review: "In Progress",
       approved: "Approved",
       published: "Published",
@@ -151,7 +152,16 @@ const AdminDashboard = () => {
         return false;
       }
     }
-    if (filters?.status && project?.status !== filters?.status) return false;
+    if (filters?.status) {
+      // Handle "pending" filter - match both "pending" status and projects without reviewers
+      if (filters.status === 'pending') {
+        if (project?.status !== 'pending' && project?.status !== 'submitted') {
+          return false;
+        }
+      } else if (project?.status !== filters?.status) {
+        return false;
+      }
+    }
     if (
       filters?.startDateFrom &&
       new Date(project?.submittedDate || project?.created_at) < new Date(filters.startDateFrom)
@@ -177,7 +187,7 @@ const AdminDashboard = () => {
   const metricsData = summaryData
     ? [
         {
-          title: "Pending Reviews",
+          title: "Pending Projects",
           value: summaryData.pendingReviews.toString(),
           change: `${summaryData.totalProjects} total projects`,
           changeType: "neutral",
@@ -205,6 +215,14 @@ const AdminDashboard = () => {
           changeType: "neutral",
           icon: "Zap",
           color: "warning",
+        },
+        {
+          title: "Estimated Revenue",
+          value: `£${(summaryData.estimatedRevenue / 1000000).toFixed(1)}M`,
+          change: `Annual revenue estimate`,
+          changeType: "increase",
+          icon: "PoundSterling",
+          color: "success",
         },
         {
           title: "Investor Interest",
@@ -514,7 +532,7 @@ const AdminDashboard = () => {
 
           {/* Metrics Cards */}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
               {metricsData?.map((metric, index) => (
                 <MetricsCard
                   key={index}

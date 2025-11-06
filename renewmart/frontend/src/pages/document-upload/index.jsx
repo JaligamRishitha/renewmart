@@ -194,6 +194,7 @@ const DocumentUpload = () => {
             // Basic Info (from LandBase schema)
             projectName: project.title || project.projectName || '',
             location: project.location_text || project.location || '',
+            postCode: project.post_code || project.postCode || '',
             landArea: project.area_acres 
               ? String(project.area_acres) 
               : (project.landArea ? String(project.landArea) : ''),
@@ -214,8 +215,8 @@ const DocumentUpload = () => {
             
             // Additional Info
             landType: project.land_type || project.landType || '',
-            partners: project.developer_name || project.partners || '',
-            description: project.description || project.admin_notes || '',
+            partners: project.potential_partners || project.developer_name || project.partners || '',
+            description: project.project_description || project.description || project.admin_notes || '',
             additionalNotes: project.additional_notes || project.admin_notes || '',
             coordinates: project.coordinates || { lat: 0, lng: 0 },
             
@@ -531,6 +532,7 @@ const DocumentUpload = () => {
       const landData = {
         title: projectDetails.projectName || 'Untitled Project',
         location_text: projectDetails.location || null,
+        post_code: projectDetails.postCode || null,
         coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
         area_acres: parseNumericOrNull(projectDetails.landArea),
         energy_key: energyKey || null,
@@ -539,7 +541,9 @@ const DocumentUpload = () => {
         timeline_text: projectDetails.timeline || null,
         land_type: projectDetails.landType || null,
         contract_term_years: contractTermYears,
-        developer_name: projectDetails.partners || projectDetails.developerName || null
+        developer_name: projectDetails.partners || projectDetails.developerName || null,
+        potential_partners: projectDetails.partners || null,
+        project_description: projectDetails.description || null
       };
       
       console.log('[Document Upload] Saving draft land data:', landData);
@@ -737,6 +741,7 @@ const DocumentUpload = () => {
       const landData = {
         title: projectDetails.projectName || 'Untitled Project',
         location_text: projectDetails.location || null,
+        post_code: projectDetails.postCode || null,
         coordinates: projectDetails.coordinates || { lat: 0, lng: 0 },
         area_acres: parseNumericOrNull(projectDetails.landArea),
         energy_key: energyKey || null,
@@ -745,7 +750,9 @@ const DocumentUpload = () => {
         timeline_text: projectDetails.timeline || null,
         land_type: projectDetails.landType || null,
         contract_term_years: contractTermYears,
-        developer_name: projectDetails.partners || projectDetails.developerName || null
+        developer_name: projectDetails.partners || projectDetails.developerName || null,
+        potential_partners: projectDetails.partners || null,
+        project_description: projectDetails.description || null
       };
       
       console.log('[Document Upload] Submitting land data:', landData);

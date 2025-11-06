@@ -6,6 +6,7 @@ import NotFound from "pages/NotFound";
 import ProjectManagement from './pages/project-management';
 import Registration from './pages/registration';
 import LoginPage from './pages/login';
+import ForgotPasswordPage from './pages/forgot-password';
 import Marketplace from './pages/Marketplace';
 import Dashboard from './pages/dashboard';
 import DocumentManagement from './pages/document-management';
@@ -77,6 +78,11 @@ const Routes = () => {
         <Route path="/register" element={
           <PublicRoute>
             <Register />
+          </PublicRoute>
+        } />
+        <Route path="/forgot-password" element={
+          <PublicRoute>
+            <ForgotPasswordPage />
           </PublicRoute>
         } />
         

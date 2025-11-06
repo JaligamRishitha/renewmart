@@ -157,10 +157,11 @@ export const authAPI = {
     return response.data;
   },
   
-  requestVerificationCode: async (email) => {
+  requestVerificationCode: async (email, preRegister = false) => {
     try {
-      console.log('API: Requesting verification code for:', email);
-      const response = await api.post('/auth/verify/request', { email });
+      console.log('API: Requesting verification code for:', email, 'preRegister:', preRegister);
+      const url = `/auth/verify/request${preRegister ? '?pre_register=true' : ''}`;
+      const response = await api.post(url, { email });
       console.log('API: Verification code requested:', response.data);
       return response.data;
     } catch (error) {
@@ -177,6 +178,60 @@ export const authAPI = {
       return response.data;
     } catch (error) {
       console.error('API: Confirm verification code error:', error);
+      throw error;
+    }
+  },
+  
+  confirmPreRegisterVerificationCode: async (email, code) => {
+    try {
+      console.log('API: Confirming pre-registration verification code for:', email);
+      const response = await api.post('/auth/verify/pre-register/confirm', { email, code });
+      console.log('API: Pre-registration verification confirmed:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Confirm pre-registration verification code error:', error);
+      throw error;
+    }
+  },
+  
+  // Password Reset API
+  requestPasswordResetCode: async (email) => {
+    try {
+      console.log('API: Requesting password reset code for:', email);
+      const response = await api.post('/auth/password-reset/request', { email });
+      console.log('API: Password reset code requested:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Request password reset code error:', error);
+      throw error;
+    }
+  },
+  
+  verifyPasswordResetCode: async (email, code) => {
+    try {
+      console.log('API: Verifying password reset code for:', email);
+      const response = await api.post('/auth/password-reset/verify', { email, code });
+      console.log('API: Password reset code verified:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Verify password reset code error:', error);
+      throw error;
+    }
+  },
+  
+  resetPassword: async (email, code, newPassword, confirmPassword) => {
+    try {
+      console.log('API: Resetting password for:', email);
+      const response = await api.post('/auth/password-reset/reset', {
+        email,
+        code,
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      });
+      console.log('API: Password reset successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: Reset password error:', error);
       throw error;
     }
   }

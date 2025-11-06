@@ -218,10 +218,7 @@ const LandDetailsPage = () => {
               <div className="bg-card border border-border rounded-lg p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">Basic Information</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Land ID</label>
-                    <p className="text-foreground mt-1">{landData.land_id || 'N/A'}</p>
-                  </div>
+                  
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Status</label>
                     <p className="text-foreground mt-1">
@@ -354,33 +351,7 @@ const LandDetailsPage = () => {
             {/* Sidebar */}
             <div className="space-y-6">
               {/* Quick Actions */}
-              <div className="bg-card border border-border rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                  {!interestStatus && (
-                    <Button
-                      variant="default"
-                      onClick={handleExpressInterest}
-                      className="w-full"
-                      iconName="Heart"
-                      iconPosition="left"
-                      iconSize={16}
-                    >
-                      Express Interest
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate('/investor/portal')}
-                    className="w-full"
-                    iconName="ArrowLeft"
-                    iconPosition="left"
-                    iconSize={16}
-                  >
-                    Back to Marketplace
-                  </Button>
-                </div>
-              </div>
+             
 
               {/* Status Card */}
               {interestStatus && (

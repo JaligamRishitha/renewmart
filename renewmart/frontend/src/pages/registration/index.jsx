@@ -65,6 +65,7 @@ const Registration = () => {
   });
   
   const [isUserRegistered, setIsUserRegistered] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
 
   const totalSteps = 3;
 
@@ -77,7 +78,7 @@ const Registration = () => {
         if (!formData?.lastName?.trim()) newErrors.lastName = 'Last name is required';
         if (!formData?.email?.trim()) {
           newErrors.email = 'Email is required';
-        } else if (!/\S+@\S+\.\S+/?.test(formData?.email)) {
+        } else if (!/\S+@\S+\.\S+/.test(formData?.email)) {
           newErrors.email = 'Please enter a valid email address';
         }
         if (!formData?.password) {
@@ -94,6 +95,10 @@ const Registration = () => {
 
       case 2:
         if (!formData?.role) newErrors.role = 'Please select your role';
+        break;
+
+      case 3:
+        // Verification step - no validation needed here
         break;
 
       default:
@@ -114,51 +119,9 @@ const Registration = () => {
     setErrors({}); // Clear previous errors
 
     try {
-      // If moving to step 3 (verification), register the user first
-      if (currentStep === 2 && !isUserRegistered) {
-        console.log('Registering user before moving to verification step...');
-        // Prepare registration data
-        const registrationData = {
-          email: formData.email,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword || formData.password,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          phone: formData.phone,
-          address: formData.address,
-          role: formData.role
-        };
-        
-        console.log('Registration data:', { ...registrationData, password: '***' });
-        
-        // Register user
-        try {
-          const userResponse = await authAPI.register(registrationData);
-          console.log('User registered successfully:', userResponse);
-          setIsUserRegistered(true);
-          
-          // Request verification code
-          try {
-            console.log('Requesting verification code...');
-            const verifyResponse = await authAPI.requestVerificationCode(formData.email);
-            console.log('Verification code requested:', verifyResponse);
-          } catch (verifyError) {
-            console.error('Failed to request verification code:', verifyError);
-            // Don't block the flow if verification code request fails
-            // The user can manually resend it
-          }
-        } catch (regError) {
-          console.error('Registration error:', regError);
-          // Handle registration errors
-          const errorMessage = regError.response?.data?.detail || 
-                             (regError.response?.status === 400 
-                               ? 'Registration failed. Please check your information and try again.' 
-                               : 'Registration failed. Please try again later.');
-          setErrors({ general: errorMessage });
-          setIsLoading(false);
-          return; // Don't advance to next step if registration fails
-        }
-      }
+      // Step 1 -> Step 2: Move to role selection (no action needed)
+      // Step 2 -> Step 3: Move to verification (no action needed)
+      // Step 3: Registration happens in handleComplete after verification
 
       // Advance to next step
       if (currentStep < totalSteps) {
@@ -186,35 +149,55 @@ const Registration = () => {
     setErrors({});
     
     try {
-      // Verify the code
-      const verifiedUser = await authAPI.confirmVerificationCode(formData.email, verificationCode);
+      // Step 1: Verify the code using pre-registration endpoint
+      await authAPI.confirmPreRegisterVerificationCode(formData.email, verificationCode);
       
-      // Show success toast
+      // Mark email as verified
+      setIsEmailVerified(true);
+      
+      // Step 2: Register the user after verification
+      console.log('Registering user after email verification...');
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword || formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        address: formData.address,
+        role: formData.role
+      };
+      
+      console.log('Registration data:', { ...registrationData, password: '***' });
+      
+      const userResponse = await authAPI.register(registrationData);
+      console.log('User registered successfully:', userResponse);
+      setIsUserRegistered(true);
+      
+      // Show success toast and redirect
       setShowToast({ type: 'success', message: 'Email verified! Account created successfully!' });
-      
-      // Wait 1.5 seconds, then show redirecting message
       setTimeout(() => {
         setShowToast({ type: 'info', message: 'Redirecting to login page...' });
-        
-        // Optionally prefill login with registered email
         localStorage.setItem('pendingRegisteredEmail', formData.email);
-        
-        // Navigate to login after another 1.5 seconds
         setTimeout(() => {
           navigate('/login');
         }, 1500);
       }, 1500);
       
     } catch (error) {
-      console.error('Verification failed:', error);
+      console.error('Verification/Registration failed:', error);
       
-      // Handle verification errors
+      // Handle errors
       if (error.response?.data?.detail) {
         setErrors({ general: error.response.data.detail });
       } else if (error.response?.status === 400) {
-        setErrors({ general: 'Invalid or expired verification code. Please try again.' });
+        if (error.response?.data?.detail?.includes('verification')) {
+          setErrors({ general: 'Invalid or expired verification code. Please try again.' });
+        } else {
+          setErrors({ general: 'Registration failed. Please check your information and try again.' });
+        }
       } else {
-        setErrors({ general: 'Verification failed. Please try again later.' });
+        setErrors({ general: 'An error occurred. Please try again later.' });
       }
     } finally {
       setIsLoading(false);
@@ -229,7 +212,7 @@ const Registration = () => {
       case 2:
         return formData?.role;
       case 3:
-        return true;
+        return true; // Verification step - proceed is handled by verification button
       default:
         return false;
     }
@@ -262,7 +245,8 @@ const Registration = () => {
             onComplete={handleComplete}
             errors={errors}
             setErrors={setErrors}
-            isUserRegistered={isUserRegistered}
+            isUserRegistered={false}
+            isPreRegister={true}
           />
         );
       default:

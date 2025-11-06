@@ -312,6 +312,49 @@ class VerificationConfirm(BaseSchema):
     email: EmailStr = Field(..., description="User email to verify")
     code: str = Field(..., min_length=4, max_length=10, description="Verification code")
 
+class PasswordResetRequest(BaseSchema):
+    email: EmailStr = Field(..., description="User email for password reset")
+
+class PasswordResetVerify(BaseSchema):
+    email: EmailStr = Field(..., description="User email for password reset")
+    code: str = Field(..., min_length=4, max_length=10, description="Password reset verification code")
+
+class PasswordReset(BaseSchema):
+    email: EmailStr = Field(..., description="User email for password reset")
+    code: str = Field(..., min_length=4, max_length=10, description="Password reset verification code")
+    new_password: str = Field(
+        ..., 
+        min_length=8, 
+        max_length=128, 
+        description="New password (min 8 chars, must include uppercase, lowercase, digit, and special character)",
+        example="SecurePass123!"
+    )
+    confirm_password: str = Field(
+        ..., 
+        description="Password confirmation (must match new_password)",
+        example="SecurePass123!"
+    )
+    
+    @validator('new_password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            raise ValueError('Password must contain at least one special character')
+        return v
+    
+    @model_validator(mode='after')
+    def validate_passwords_match(self):
+        if self.new_password and self.confirm_password and self.new_password != self.confirm_password:
+            raise ValueError('Passwords do not match')
+        return self
+
 class Token(BaseSchema):
     access_token: str = Field(
         ..., 
@@ -386,6 +429,7 @@ class SectionDefinition(SectionDefinitionBase):
 class LandBase(BaseSchema):
     title: str = Field(..., min_length=1, max_length=200, description="Land title")
     location_text: Optional[str] = Field(None, max_length=500, description="Location description")
+    post_code: Optional[str] = Field(None, max_length=20, description="Postal/ZIP code")
     coordinates: Optional[Dict[str, Any]] = Field(None, description="GPS coordinates as JSON")
     area_acres: Optional[Decimal] = Field(None, ge=0, le=100000, description="Land area in acres")
     land_type: Optional[str] = Field(None, max_length=100, description="Type of land/terrain")
@@ -396,6 +440,8 @@ class LandBase(BaseSchema):
     timeline_text: Optional[str] = Field(None, max_length=500, description="Implementation timeline")
     contract_term_years: Optional[int] = Field(None, ge=1, le=99, description="Contract term in years")
     developer_name: Optional[str] = Field(None, max_length=200, description="Developer/partner name")
+    potential_partners: Optional[str] = Field(None, max_length=500, description="Potential partners for the project")
+    project_description: Optional[str] = Field(None, max_length=2000, description="Detailed project description")
 
     @validator('coordinates')
     def validate_coordinates(cls, v):
@@ -423,6 +469,7 @@ class LandCreate(LandBase):
 class LandUpdate(BaseSchema):
     title: Optional[str] = None
     location_text: Optional[str] = None
+    post_code: Optional[str] = None
     coordinates: Optional[Dict[str, Any]] = None
     area_acres: Optional[Decimal] = None
     land_type: Optional[str] = None
@@ -433,6 +480,8 @@ class LandUpdate(BaseSchema):
     timeline_text: Optional[str] = None
     contract_term_years: Optional[int] = None
     developer_name: Optional[str] = None
+    potential_partners: Optional[str] = None
+    project_description: Optional[str] = None
     project_priority: Optional[str] = None
     project_due_date: Optional[str] = None
 

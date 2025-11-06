@@ -5,7 +5,7 @@ import Sidebar from '../../components/ui/Sidebar';
 import WorkflowBreadcrumbs from '../../components/ui/WorkflowBreadcrumbs';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
-import { taskAPI, landsAPI, usersAPI } from '../../services/api';
+import { taskAPI, landsAPI, usersAPI, reviewsAPI } from '../../services/api';
 import ReviewStatusPanel from './components/ReviewStatusPanel';
 
 const ProjectDetailsPage = () => {
@@ -18,13 +18,61 @@ const ProjectDetailsPage = () => {
   const [taskDetails, setTaskDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reviewStatuses, setReviewStatuses] = useState({});
 
   useEffect(() => {
     if (landId) {
       fetchProjectData();
       fetchProjectTasks();
+      fetchReviewStatuses();
     }
   }, [landId]);
+
+  const fetchReviewStatuses = async () => {
+    try {
+      const statuses = await reviewsAPI.getAllReviewStatuses(landId);
+      console.log('[ProjectDetails] Fetched review statuses:', statuses);
+      
+      // Calculate completion_percentage for each status
+      const processedStatuses = {};
+      if (statuses && typeof statuses === 'object') {
+        Object.keys(statuses).forEach(roleKey => {
+          const status = statuses[roleKey];
+          if (status) {
+            const totalSubtasks = status.totalSubtasks || status.total_subtasks || 0;
+            const subtasksCompleted = status.subtasksCompleted || status.subtasks_completed || 0;
+            const totalDocuments = status.totalDocuments || status.total_documents || 0;
+            const documentsApproved = status.documentsApproved || status.documents_approved || 0;
+            
+            let completionPercentage = 0;
+            
+            if (status.published === true || status.status === 'approved') {
+              completionPercentage = 100;
+            } else {
+              const totalItems = totalSubtasks + totalDocuments;
+              const completedItems = subtasksCompleted + documentsApproved;
+              
+              if (totalItems > 0) {
+                completionPercentage = Math.round((completedItems / totalItems) * 100);
+              } else if (status.status === 'in_progress') {
+                completionPercentage = 50;
+              }
+            }
+            
+            processedStatuses[roleKey] = {
+              ...status,
+              completion_percentage: completionPercentage
+            };
+          }
+        });
+      }
+      
+      setReviewStatuses(processedStatuses);
+    } catch (err) {
+      console.error('Error fetching review statuses:', err);
+      // Don't set error, just continue without review statuses
+    }
+  };
 
   const fetchProjectData = async () => {
     try {
@@ -161,6 +209,26 @@ const ProjectDetailsPage = () => {
   };
 
   const getTaskCompletionPercentage = () => {
+    // Calculate overall progress from review statuses if available
+    if (reviewStatuses && Object.keys(reviewStatuses).length > 0) {
+      const reviewerRoles = ['re_sales_advisor', 're_analyst', 're_governance_lead'];
+      let totalCompletion = 0;
+      let rolesWithData = 0;
+      
+      reviewerRoles.forEach(role => {
+        const status = reviewStatuses[role];
+        if (status && status.completion_percentage !== undefined) {
+          totalCompletion += status.completion_percentage;
+          rolesWithData++;
+        }
+      });
+      
+      if (rolesWithData > 0) {
+        return Math.round(totalCompletion / rolesWithData);
+      }
+    }
+    
+    // Fallback to task-based calculation
     if (!tasks.length) return 0;
     const completedTasks = tasks.filter(task => task.status === 'completed').length;
     return Math.round((completedTasks / tasks.length) * 100);
@@ -388,7 +456,7 @@ const ProjectDetailsPage = () => {
               </div>
 
               {/* Task Status Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-600">{taskStatusCounts.pending}</div>
                   <div className="text-xs text-muted-foreground">Pending</div>
@@ -401,14 +469,7 @@ const ProjectDetailsPage = () => {
                   <div className="text-2xl font-bold text-green-600">{taskStatusCounts.completed}</div>
                   <div className="text-xs text-muted-foreground">Completed</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-600">{taskStatusCounts.on_hold}</div>
-                  <div className="text-xs text-muted-foreground">On Hold</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{taskStatusCounts.cancelled}</div>
-                  <div className="text-xs text-muted-foreground">Cancelled</div>
-                </div>
+                
               </div>
             </div>
 

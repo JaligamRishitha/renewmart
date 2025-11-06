@@ -3,7 +3,7 @@ import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 import Button from '../../../components/ui/Button';
 
-const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchlist, isWatchlisted = false }) => {
+const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchlist, isWatchlisted = false, interestStatus = null }) => {
   const [isImageLoaded, setIsImageLoaded] = useState(false);
 
   const formatPrice = (price) => {
@@ -115,8 +115,22 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
 
         {/* Status Indicator */}
         {project?.status && (
-          <div className="absolute bottom-3 left-3 px-2 py-1 bg-success text-success-foreground rounded-full text-xs font-medium">
-            {project?.status}
+          <div className={`absolute bottom-3 left-3 px-2 py-1 rounded-full text-xs font-medium ${
+            project.status === 'interest_locked' 
+              ? 'bg-warning text-warning-foreground' 
+              : project.status === 'published'
+              ? 'bg-success text-success-foreground'
+              : 'bg-muted text-muted-foreground'
+          }`}>
+            {project.status === 'interest_locked' ? 'Locked' : project.status === 'published' ? 'Available' : project.status}
+          </div>
+        )}
+        
+        {/* Locked Badge - Show if project is locked and user has interest */}
+        {project?.status === 'interest_locked' && interestStatus && (
+          <div className="absolute top-12 right-3 px-2 py-1 bg-primary/90 text-primary-foreground rounded-full text-xs font-medium flex items-center space-x-1">
+            <Icon name="Lock" size={12} />
+            <span>Your Interest</span>
           </div>
         )}
       </div>
@@ -196,17 +210,57 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
           >
             View Details
           </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => onExpressInterest(project?.id)}
-            className="flex-1"
-            iconName="Heart"
-            iconPosition="left"
-            iconSize={14}
-          >
-            Express Interest
-          </Button>
+          {interestStatus ? (
+            <div className="flex-1 flex items-center justify-center px-3 py-2 rounded-md border border-border">
+              <div className="flex items-center space-x-2">
+                {interestStatus.status === 'approved' && (
+                  <>
+                    <Icon name="CheckCircle" size={14} className="text-green-600" />
+                    <span className="text-sm font-medium text-green-600">Approved</span>
+                  </>
+                )}
+                {interestStatus.status === 'pending' && (
+                  <>
+                    <Icon name="Clock" size={14} className="text-yellow-600" />
+                    <span className="text-sm font-medium text-yellow-600">Pending</span>
+                  </>
+                )}
+                {interestStatus.status === 'rejected' && (
+                  <>
+                    <Icon name="XCircle" size={14} className="text-red-600" />
+                    <span className="text-sm font-medium text-red-600">Rejected</span>
+                    {interestStatus.approved_at && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        (Can retry after 1 week)
+                      </span>
+                    )}
+                  </>
+                )}
+                {!['approved', 'pending', 'rejected'].includes(interestStatus.status) && (
+                  <>
+                    <Icon name="Clock" size={14} className="text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {interestStatus.status || 'Pending'}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onExpressInterest(project?.id)}
+              className="flex-1"
+              iconName="Heart"
+              iconPosition="left"
+              iconSize={14}
+              disabled={project?.status === 'interest_locked' && !interestStatus}
+              title={project?.status === 'interest_locked' && !interestStatus ? 'This project is locked by another investor' : ''}
+            >
+              {project?.status === 'interest_locked' && !interestStatus ? 'Locked' : 'Express Interest'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

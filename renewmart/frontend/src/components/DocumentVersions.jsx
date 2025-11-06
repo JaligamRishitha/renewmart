@@ -275,7 +275,7 @@ const DocumentVersions = ({ landId, documentType, onClose }) => {
                 <span className="font-medium">Total Versions:</span> {versions.length}
               </div>
               <div>
-                <span className="font-medium">Latest Version: v{Math.max(...versions.map(v => v.version_number))}</span> {Math.max(...versions.map(v => v.version_number))}
+                <span className="font-medium">Latest Version: v{Math.max(...versions.map(v => v.version_number))}</span> 
               </div>
               
               <div>

@@ -8,12 +8,14 @@ import NotificationIndicator from '../../components/ui/NotificationIndicator';
 import QuickActions from '../../components/ui/QuickActions';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
 import ProjectCard from './components/ProjectCard';
 import FilterPanel from './components/FilterPanel';
 import MapView from './components/MapView';
 import SavedSearches from './components/SavedSearches';
 import WatchlistPanel from './components/WatchlistPanel';
-import { landsAPI } from '../../services/api';
+import { landsAPI, investorsAPI } from '../../services/api';
+import toast from 'react-hot-toast';
 
 const InvestorPortal = () => {
   const navigate = useNavigate();
@@ -43,14 +45,29 @@ const InvestorPortal = () => {
   const [itemsPerPage] = useState(12);
   const mockSavedSearches = [];
   const mockWatchlistItems = [];
+  
+  // Express Interest Modal state
+  const [showInterestModal, setShowInterestModal] = useState(false);
+  const [selectedProjectForInterest, setSelectedProjectForInterest] = useState(null);
+  const [ndaAccepted, setNdaAccepted] = useState(false);
+  const [ctaAccepted, setCtaAccepted] = useState(false);
+  const [submittingInterest, setSubmittingInterest] = useState(false);
+  
+  // Interest status for each project
+  const [projectInterests, setProjectInterests] = useState({});
 
-  // Fetch published projects
+  // Fetch published projects and interest status
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setIsLoadingProjects(true);
         const data = await landsAPI.getMarketplaceProjects();
         setProjects(data || []);
+        
+        // Fetch interest status for all projects
+        if (data && data.length > 0) {
+          fetchInterestStatus(data);
+        }
       } catch (error) {
         console.error('Error fetching marketplace projects:', error);
         setProjects([]);
@@ -61,9 +78,48 @@ const InvestorPortal = () => {
     
     fetchProjects();
   }, []);
+  
+  // Fetch interest status for projects
+  const fetchInterestStatus = async (projectsList) => {
+    try {
+      const interests = await investorsAPI.getMyInterests();
+      const interestsMap = {};
+      
+      if (interests && Array.isArray(interests)) {
+        interests.forEach(interest => {
+          // Handle both land_id and landId (camelCase) formats
+          const landId = interest.land_id || interest.landId;
+          if (landId) {
+            interestsMap[landId] = interest;
+          }
+        });
+      }
+      
+      setProjectInterests(interestsMap);
+    } catch (error) {
+      console.error('Error fetching interest status:', error);
+      // Don't show error to user, just continue without interest status
+    }
+  };
 
   // Filter projects based on current filters
   const filteredProjects = projects?.filter(project => {
+    // Exclude projects with active interests (interestCount > 0) from marketplace
+    // These projects should only be visible in "My Interest" section
+    if ((project?.interestCount || 0) > 0) {
+      return false; // Hide projects with any active interests
+    }
+    
+    // Exclude locked projects unless user has an active interest (backup check)
+    if (project?.status === 'interest_locked') {
+      const projectId = project?.id || project?.land_id;
+      const interestStatus = projectInterests[projectId];
+      // Only show locked projects if user has an active (pending or approved) interest
+      if (!interestStatus || !['pending', 'approved'].includes(interestStatus.status)) {
+        return false; // Hide locked projects from other investors
+      }
+    }
+    
     if (filters?.search && !project?.name?.toLowerCase()?.includes(filters?.search?.toLowerCase()) && 
         !project?.location?.toLowerCase()?.includes(filters?.search?.toLowerCase())) {
       return false;
@@ -169,15 +225,72 @@ const InvestorPortal = () => {
   const handleExpressInterest = (projectId) => {
     const project = projects?.find(p => p?.id === projectId);
     if (project) {
-      const notification = {
-        id: `interest-${projectId}-${Date.now()}`,
-        type: 'success',
-        title: 'Interest Expressed',
-        message: `Your interest in "${project?.name || project?.title}" has been recorded. The project team will contact you soon.`,
-        timestamp: new Date()
-      };
-      setNotifications(prev => [...prev, notification]);
+      setSelectedProjectForInterest(project);
+      setShowInterestModal(true);
     }
+  };
+  
+  const handleSubmitInterest = async () => {
+    if (!ndaAccepted || !ctaAccepted) {
+      toast.error('Please accept both NDA and CTA to continue');
+      return;
+    }
+    
+    if (!selectedProjectForInterest) {
+      toast.error('No project selected');
+      return;
+    }
+    
+    try {
+      setSubmittingInterest(true);
+      await investorsAPI.expressInterest(selectedProjectForInterest.id, {
+        nda_accepted: ndaAccepted,
+        cta_accepted: ctaAccepted
+      });
+      
+      toast.success('Interest submitted successfully! The project is now locked and visible only to you.');
+      
+      // Close modal and reset form
+      setShowInterestModal(false);
+      setNdaAccepted(false);
+      setCtaAccepted(false);
+      
+      // Refresh projects to get updated status
+      const data = await landsAPI.getMarketplaceProjects();
+      setProjects(data || []);
+      
+      // Refresh interest status
+      if (data && data.length > 0) {
+        await fetchInterestStatus(data);
+      }
+    } catch (err) {
+      console.error('Error submitting interest:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to submit interest';
+      
+      // Handle specific error cases
+      if (errorMessage.includes('locked') || errorMessage.includes('another investor')) {
+        toast.error('This project is currently locked as another investor has expressed interest. Please try again later.');
+      } else if (errorMessage.includes('cannot express interest') || errorMessage.includes('rejected')) {
+        // Extract days remaining if available
+        const daysMatch = errorMessage.match(/(\d+)\s*day/);
+        if (daysMatch) {
+          toast.error(errorMessage, { duration: 6000 });
+        } else {
+          toast.error(errorMessage);
+        }
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setSubmittingInterest(false);
+    }
+  };
+  
+  const handleCloseInterestModal = () => {
+    setShowInterestModal(false);
+    setNdaAccepted(false);
+    setCtaAccepted(false);
+    setSelectedProjectForInterest(null);
   };
 
   const handleSaveToWatchlist = (projectId) => {
@@ -300,7 +413,7 @@ const InvestorPortal = () => {
     <div className="min-h-screen bg-background">
       <Header userRole="investor" notifications={{ opportunities: sortedProjects?.length }} />
       <div className="pt-16">
-        <WorkflowBreadcrumbs />
+       
         <main className="max-w-9xl mx-auto px-4 lg:px-6 py-6">
         {/* Investment Opportunities View */}
         <div className="mb-6">
@@ -371,15 +484,23 @@ const InvestorPortal = () => {
             ) : viewMode === 'grid' ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {paginatedProjects?.map((project) => (
-                    <ProjectCard
-                      key={project?.id}
-                      project={project}
-                      onViewDetails={handleViewDetails}
-                      onExpressInterest={handleExpressInterest}
-                      
-                    />
-                  ))}
+                  {paginatedProjects?.map((project) => {
+                    // Match interest status by project ID (handle both id and land_id formats)
+                    const projectId = project?.id || project?.land_id;
+                    const interestStatus = projectInterests[projectId];
+                    
+                    return (
+                      <ProjectCard
+                        key={projectId}
+                        project={project}
+                        onViewDetails={handleViewDetails}
+                        onExpressInterest={handleExpressInterest}
+                        onSaveToWatchlist={handleSaveToWatchlist}
+                        isWatchlisted={watchlistItems?.some(item => item?.id === projectId)}
+                        interestStatus={interestStatus}
+                      />
+                    );
+                  })}
                 </div>
                 
                 {/* Pagination */}
@@ -402,6 +523,7 @@ const InvestorPortal = () => {
                   projects={sortedProjects}
                   onProjectSelect={handleProjectSelect}
                   selectedProject={selectedProject}
+                  projectInterests={projectInterests}
                 />
               </div>
             )}
@@ -451,6 +573,94 @@ const InvestorPortal = () => {
         onActionComplete={handleQuickAction}
         position="bottom-right"
       />
+      
+      {/* Express Interest Modal */}
+      <Modal
+        isOpen={showInterestModal}
+        onClose={handleCloseInterestModal}
+        title="Express Interest"
+      >
+        <div className="space-y-6">
+          {selectedProjectForInterest && (
+            <div className="mb-4">
+              <p className="text-sm text-muted-foreground mb-2">Project:</p>
+              <p className="font-semibold text-foreground">
+                {selectedProjectForInterest?.name || selectedProjectForInterest?.title}
+              </p>
+            </div>
+          )}
+          
+          <p className="text-muted-foreground">
+            To express interest in this project, please review and accept the following:
+          </p>
+          
+          <div className="bg-info/10 border border-info/20 rounded-lg p-3 mb-4">
+            <div className="flex items-start space-x-2">
+              <Icon name="Info" size={16} className="text-info mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-info">
+                <strong>Note:</strong> Once you express interest, this project will be locked and hidden from other investors until your interest is reviewed by the sales advisor.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="border border-border rounded-lg p-4">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ndaAccepted}
+                  onChange={(e) => setNdaAccepted(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-primary border-border rounded focus:ring-primary"
+                  required
+                />
+                <div className="flex-1">
+                  <span className="font-medium text-foreground">NDA (Non-Disclosure Agreement)</span>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    I agree to keep all project information confidential and not disclose it to any third parties without authorization.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="border border-border rounded-lg p-4">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ctaAccepted}
+                  onChange={(e) => setCtaAccepted(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-primary border-border rounded focus:ring-primary"
+                  required
+                />
+                <div className="flex-1">
+                  <span className="font-medium text-foreground">CTA (Consent to Assign)</span>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    I consent to having my interest assigned to a sales advisor for review and approval.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={handleCloseInterestModal}
+              disabled={submittingInterest}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleSubmitInterest}
+              disabled={!ndaAccepted || !ctaAccepted || submittingInterest}
+              iconName="Send"
+              iconPosition="right"
+            >
+              {submittingInterest ? 'Submitting...' : 'Submit Interest'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
       
       {/* Footer */}
       <Footer />
