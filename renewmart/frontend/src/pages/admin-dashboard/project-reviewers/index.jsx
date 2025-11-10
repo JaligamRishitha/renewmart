@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from '../../../components/ui/Header';
 import Sidebar from '../../../components/ui/Sidebar';
@@ -8,6 +8,8 @@ import AssignReviewerModal from '../components/AssignReviewerModal';
 import ProjectEditModal from '../components/ProjectEditModal';
 import AssignMasterSalesAdvisorModal from '../../../pages/project-details/components/AssignMasterSalesAdvisorModal';
 import ConfigDocRoleModal from '../components/ConfigDocRoleModal';
+import TeamsStyleMessaging from '../../../pages/reviewer-dashboard/components/TeamsStyleMessaging';
+import { useAuth } from '../../../contexts/AuthContext';
 import { landsAPI, taskAPI, usersAPI, investorsAPI, reviewsAPI } from '../../../services/api';
 
 // Helper functions moved outside component to avoid dependency issues
@@ -125,6 +127,7 @@ const calculateCompletionPercentage = (reviewStatus) => {
 const ProjectReviewersPage = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +138,7 @@ const ProjectReviewersPage = () => {
   const [showProjectEditModal, setShowProjectEditModal] = useState(false);
   const [showAssignAdvisorModal, setShowAssignAdvisorModal] = useState(false);
   const [showConfigDocRoleModal, setShowConfigDocRoleModal] = useState(false);
+  const [showMessaging, setShowMessaging] = useState(false);
   const [masterAdvisor, setMasterAdvisor] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openAccordions, setOpenAccordions] = useState({});
@@ -144,6 +148,12 @@ const ProjectReviewersPage = () => {
   const [localStorageStatuses, setLocalStorageStatuses] = useState({}); // Store statuses from localStorage (from ReviewPanel)
   const [statusUpdateTrigger, setStatusUpdateTrigger] = useState(0); // Trigger re-renders when status updates
   const [taskSubtasks, setTaskSubtasks] = useState({}); // Store subtasks for each task (key: task_id)
+  
+  // Use refs to store latest values to prevent infinite loops in callbacks
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   // Default task types for each role
   const defaultTaskTypes = {
@@ -173,132 +183,186 @@ const ProjectReviewersPage = () => {
 
   // Fetch review statuses for all tasks to determine completion
   // Fetch per task using task's assigned_to (reviewer_id) to get unique status per reviewer
-  useEffect(() => {
-    const fetchReviewStatuses = async () => {
-      if (!projectId || tasks.length === 0) return;
+  const fetchReviewStatuses = useCallback(async () => {
+    const currentTasks = tasksRef.current;
+    if (!projectId || !currentTasks || currentTasks.length === 0) return;
+    
+    try {
+      // Fetch all review statuses from API
+      const allStatuses = await reviewsAPI.getAllReviewStatuses(projectId);
+      console.log('[Project Reviewers] Fetched review statuses from API:', allStatuses);
       
-      try {
-        // Fetch all review statuses from API
-        const allStatuses = await reviewsAPI.getAllReviewStatuses(projectId);
-        console.log('[Project Reviewers] Fetched review statuses from API:', allStatuses);
-        
-        // Also fetch individual review status for each task using reviewer_id
-        // This ensures we get unique status per reviewer, not per role
-        const statusMap = {};
-        
-        // First, store all statuses from API (for backward compatibility)
-        if (allStatuses && typeof allStatuses === 'object') {
-          Object.keys(allStatuses).forEach(roleKey => {
-            const status = allStatuses[roleKey];
-            if (status === null || status === undefined) return;
-            
-            const completionPercentage = calculateCompletionPercentage(status);
-            const enhancedStatus = {
-              ...status,
-              completion_percentage: completionPercentage
-            };
-            
-            statusMap[roleKey] = enhancedStatus;
-            
-            // Also store with normalized key for compatibility
-            const normalizedKey = normalizeRole(roleKey);
-            if (normalizedKey !== roleKey) {
-              statusMap[normalizedKey] = enhancedStatus;
-            }
-          });
-        }
-        
-        // Now fetch review status for each task individually by trying to match reviewer_id
-        // We'll try to get review status by querying with the task's assigned_to
-        await Promise.all(
-          tasks.map(async (task) => {
-            if (!task.assigned_to || !task.assigned_role) return;
-            
-            try {
-              // Try to get review status for this specific role
-              const roleStatus = await reviewsAPI.getReviewStatus(projectId, task.assigned_role);
-              
-              // Check if this review status matches the task's assigned reviewer
-              if (roleStatus && roleStatus.reviewer_id === task.assigned_to) {
-                // This review status belongs to this specific reviewer
-                const completionPercentage = calculateCompletionPercentage(roleStatus);
-                const enhancedStatus = {
-                  ...roleStatus,
-                  completion_percentage: completionPercentage
-                };
-                
-                // Store with key: role_assignedTo for unique per reviewer
-                const uniqueKey = `${task.assigned_role}_${task.assigned_to}`;
-                statusMap[uniqueKey] = enhancedStatus;
-                
-                console.log(`[Project Reviewers] Found unique review status for task ${task.task_id}, reviewer ${task.assigned_to}:`, {
-                  uniqueKey,
-                  completionPercentage,
-                  status: roleStatus.status
-                });
-              }
-            } catch (err) {
-              // If fetching fails, it's okay - we'll use the fallback
-              console.warn(`[Project Reviewers] Could not fetch review status for task ${task.task_id}:`, err);
-            }
-          })
-        );
-        
-        console.log('[Project Reviewers] Final status map:', statusMap);
-        setReviewStatuses(statusMap);
-      } catch (err) {
-        console.error('[Project Reviewers] Error fetching review statuses:', err);
-        setReviewStatuses({});
-      }
-    };
-    
-    fetchReviewStatuses();
-    
-    // Refresh review statuses every 5 seconds to catch updates from review panel
-    const refreshInterval = setInterval(fetchReviewStatuses, 5000);
-    
-    return () => clearInterval(refreshInterval);
-  }, [projectId, tasks]);
-
-  // 🔹 Read statuses from localStorage (from ReviewPanel Task Details tab)
-  useEffect(() => {
-    const loadLocalStorageStatuses = () => {
-      if (!tasks || tasks.length === 0) return;
+      // Also fetch individual review status for each task using reviewer_id
+      // This ensures we get unique status per reviewer, not per role
+      const statusMap = {};
       
-      const statusesMap = {};
-      tasks.forEach(task => {
-        // For each task, check for status with the specific assigned reviewer
-        // Key format: task_status_{taskId}_{reviewerRole}_{assignedTo}
-        const assignedTo = task.assigned_to;
-        if (!assignedTo) {
-          console.warn(`[Project Reviewers] Task ${task.task_id} has no assigned_to, skipping localStorage lookup`);
-          return;
-        }
-        
-        // Try all three reviewer roles with the specific assigned reviewer
-        const reviewerRoles = ['re_sales_advisor', 're_analyst', 're_governance_lead'];
-        reviewerRoles.forEach(roleId => {
-          // Check if this task is assigned to this role
-          if (task.assigned_role === roleId) {
-            const storageKey = `task_status_${task.task_id}_${roleId}_${assignedTo}`;
-            try {
-              const stored = localStorage.getItem(storageKey);
-              if (stored) {
-                const statusData = JSON.parse(stored);
-                statusesMap[storageKey] = statusData;
-                console.log(`[Project Reviewers] Found status for task ${task.task_id}, role ${roleId}, reviewer ${assignedTo}`);
-              }
-            } catch (error) {
-              console.error(`[Project Reviewers] Error reading localStorage for ${storageKey}:`, error);
-            }
+      // First, store all statuses from API (for backward compatibility)
+      if (allStatuses && typeof allStatuses === 'object') {
+        Object.keys(allStatuses).forEach(roleKey => {
+          const status = allStatuses[roleKey];
+          if (status === null || status === undefined) return;
+          
+          const completionPercentage = calculateCompletionPercentage(status);
+          const enhancedStatus = {
+            ...status,
+            completion_percentage: completionPercentage
+          };
+          
+          statusMap[roleKey] = enhancedStatus;
+          
+          // Also store with normalized key for compatibility
+          const normalizedKey = normalizeRole(roleKey);
+          if (normalizedKey !== roleKey) {
+            statusMap[normalizedKey] = enhancedStatus;
           }
         });
-      });
+      }
       
-      setLocalStorageStatuses(statusesMap);
-      setStatusUpdateTrigger(prev => prev + 1); // Trigger re-render
-      console.log('[Project Reviewers] Loaded statuses from localStorage:', statusesMap);
-    };
+      // Now fetch review status for each task individually by trying to match reviewer_id
+      // We'll try to get review status by querying with the task's assigned_to
+      await Promise.all(
+        currentTasks.map(async (task) => {
+          if (!task.assigned_to || !task.assigned_role) return;
+          
+          try {
+            // Try to get review status for this specific role
+            const roleStatus = await reviewsAPI.getReviewStatus(projectId, task.assigned_role);
+            
+            // Check if this review status matches the task's assigned reviewer
+            if (roleStatus && roleStatus.reviewer_id === task.assigned_to) {
+              // This review status belongs to this specific reviewer
+              const completionPercentage = calculateCompletionPercentage(roleStatus);
+              const enhancedStatus = {
+                ...roleStatus,
+                completion_percentage: completionPercentage
+              };
+              
+              // Store with key: role_assignedTo for unique per reviewer
+              const uniqueKey = `${task.assigned_role}_${task.assigned_to}`;
+              statusMap[uniqueKey] = enhancedStatus;
+              
+              console.log(`[Project Reviewers] Found unique review status for task ${task.task_id}, reviewer ${task.assigned_to}:`, {
+                uniqueKey,
+                completionPercentage,
+                status: roleStatus.status
+              });
+            }
+          } catch (err) {
+            // If fetching fails, it's okay - we'll use the fallback
+            console.warn(`[Project Reviewers] Could not fetch review status for task ${task.task_id}:`, err);
+          }
+        })
+      );
+      
+      console.log('[Project Reviewers] Final status map:', statusMap);
+      setReviewStatuses(prev => {
+        // Only update if there are actual changes
+        const prevStr = JSON.stringify(prev);
+        const newStr = JSON.stringify(statusMap);
+        if (prevStr === newStr) {
+          return prev; // No changes, return previous state
+        }
+        return statusMap;
+      });
+    } catch (err) {
+      console.error('[Project Reviewers] Error fetching review statuses:', err);
+      setReviewStatuses({});
+    }
+  }, [projectId]); // Only depend on projectId, use ref for tasks
+  
+  useEffect(() => {
+    if (!projectId) return;
+    
+    // Check if tasks exist using ref (won't cause re-render)
+    const currentTasks = tasksRef.current;
+    if (!currentTasks || currentTasks.length === 0) {
+      // If no tasks yet, wait a bit and try again
+      const timeout = setTimeout(() => {
+        const retryTasks = tasksRef.current;
+        if (retryTasks && retryTasks.length > 0) {
+          fetchReviewStatuses();
+        }
+      }, 1000);
+      return () => clearTimeout(timeout);
+    }
+    
+    // Initial fetch
+    fetchReviewStatuses();
+    
+    // Refresh review statuses every 10 seconds to catch updates from review panel
+    const refreshInterval = setInterval(fetchReviewStatuses, 10000);
+    
+    return () => clearInterval(refreshInterval);
+  }, [projectId, fetchReviewStatuses]); // Only depend on projectId, not tasks
+
+  // 🔹 Read statuses from localStorage (from ReviewPanel Task Details tab)
+  const loadLocalStorageStatuses = useCallback(() => {
+    const currentTasks = tasksRef.current;
+    if (!currentTasks || currentTasks.length === 0) return;
+    
+    const statusesMap = {};
+    currentTasks.forEach(task => {
+      // For each task, check for status with the specific assigned reviewer
+      // Key format: task_status_{taskId}_{reviewerRole}_{assignedTo}
+      const assignedTo = task.assigned_to;
+      if (!assignedTo) {
+        console.warn(`[Project Reviewers] Task ${task.task_id} has no assigned_to, skipping localStorage lookup`);
+        return;
+      }
+      
+      // Try all three reviewer roles with the specific assigned reviewer
+      const reviewerRoles = ['re_sales_advisor', 're_analyst', 're_governance_lead'];
+      reviewerRoles.forEach(roleId => {
+        // Check if this task is assigned to this role
+        if (task.assigned_role === roleId) {
+          const storageKey = `task_status_${task.task_id}_${roleId}_${assignedTo}`;
+          try {
+            const stored = localStorage.getItem(storageKey);
+            if (stored) {
+              const statusData = JSON.parse(stored);
+              statusesMap[storageKey] = statusData;
+              console.log(`[Project Reviewers] Found status for task ${task.task_id}, role ${roleId}, reviewer ${assignedTo}`);
+            }
+          } catch (error) {
+            console.error(`[Project Reviewers] Error reading localStorage for ${storageKey}:`, error);
+          }
+        }
+      });
+    });
+    
+    // Only update if there are actual changes to prevent unnecessary re-renders
+    setLocalStorageStatuses(prev => {
+      const prevKeys = Object.keys(prev).sort().join(',');
+      const newKeys = Object.keys(statusesMap).sort().join(',');
+      if (prevKeys === newKeys) {
+        // Check if values changed
+        const valuesChanged = Object.keys(statusesMap).some(key => {
+          return JSON.stringify(prev[key]) !== JSON.stringify(statusesMap[key]);
+        });
+        if (!valuesChanged) {
+          return prev; // No changes, return previous state
+        }
+      }
+      return statusesMap;
+    });
+    console.log('[Project Reviewers] Loaded statuses from localStorage:', statusesMap);
+  }, []); // No dependencies - uses ref for tasks
+  
+  useEffect(() => {
+    if (!projectId) return;
+    
+    // Check if tasks exist using ref (won't cause re-render)
+    const currentTasks = tasksRef.current;
+    if (!currentTasks || currentTasks.length === 0) {
+      // If no tasks yet, wait a bit and try again
+      const timeout = setTimeout(() => {
+        const retryTasks = tasksRef.current;
+        if (retryTasks && retryTasks.length > 0) {
+          loadLocalStorageStatuses();
+        }
+      }, 1000);
+      return () => clearTimeout(timeout);
+    }
     
     // Load immediately
     loadLocalStorageStatuses();
@@ -319,17 +383,17 @@ const ProjectReviewersPage = () => {
     };
     window.addEventListener('storage', handleStorageChange);
     
-    // Also check periodically (for same-tab updates)
+    // Also check periodically (for same-tab updates) - increased interval to reduce refresh frequency
     const storageCheckInterval = setInterval(() => {
       loadLocalStorageStatuses();
-    }, 2000); // Check every 2 seconds
+    }, 10000); // Check every 10 seconds
     
     return () => {
       window.removeEventListener('taskStatusUpdated', handleStatusUpdate);
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(storageCheckInterval);
     };
-  }, [tasks]);
+  }, [projectId, loadLocalStorageStatuses]); // Only depend on projectId and callback, not tasks
 
   const fetchProjectData = async () => {
     try {
@@ -548,35 +612,30 @@ const ProjectReviewersPage = () => {
 
   // normalizeRole is already declared above - reusing the same function
 
-  // Group tasks by reviewer role and task type
-  const groupedTasks = tasks.reduce((acc, task) => {
-    const role = normalizeRole(task.assigned_role);
-    const taskType = normalizeTaskType(task.task_type);
-    
-    console.log(`📋 Grouping task: role="${role}", taskType="${taskType}" (original: "${task.assigned_role}", "${task.task_type}")`);
-    
-    if (!acc[role]) {
-      acc[role] = {};
-    }
-    if (!acc[role][taskType]) {
-      acc[role][taskType] = [];
-    }
-    acc[role][taskType].push(task);
-    return acc;
-  }, {});
-
-  // Debug logging
-  useEffect(() => {
-    console.log('📋 All tasks:', tasks);
-    console.log('📋 Grouped tasks:', groupedTasks);
-    console.log('📋 Task types per role:', Object.keys(groupedTasks).map(role => ({
-      role,
-      taskTypes: Object.keys(groupedTasks[role] || {})
-    })));
+  // Group tasks by reviewer role and task type - memoized to prevent unnecessary recalculations
+  const groupedTasks = useMemo(() => {
+    return tasks.reduce((acc, task) => {
+      const role = normalizeRole(task.assigned_role);
+      const taskType = normalizeTaskType(task.task_type);
+      
+      console.log(`📋 Grouping task: role="${role}", taskType="${taskType}" (original: "${task.assigned_role}", "${task.task_type}")`);
+      
+      if (!acc[role]) {
+        acc[role] = {};
+      }
+      if (!acc[role][taskType]) {
+        acc[role][taskType] = [];
+      }
+      acc[role][taskType].push(task);
+      return acc;
+    }, {});
   }, [tasks]);
 
   // Auto-expand task type accordions that have assignments
+  // Only run once when projectId changes, not when tasks change
   useEffect(() => {
+    if (!projectId) return;
+    
     const reviewerRolesList = [
       { id: 're_sales_advisor' },
       { id: 're_analyst' },
@@ -603,7 +662,7 @@ const ProjectReviewersPage = () => {
       setOpenTaskTypeAccordions(newOpenAccordions);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks]);
+  }, [projectId]); // Only depend on projectId, not tasks
 
   const reviewerRoles = [
     { 
@@ -792,6 +851,15 @@ const ProjectReviewersPage = () => {
                     iconSize={18}
                   >
                     Edit Project
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowMessaging(!showMessaging)}
+                    iconName="MessageCircle"
+                    iconSize={18}
+                    className="relative"
+                  >
+                    Messages
                   </Button>
                 </div>
               </div>
@@ -1393,6 +1461,54 @@ const ProjectReviewersPage = () => {
           onClose={() => setShowAssignAdvisorModal(false)}
           onAssign={handleMasterAdvisorAssigned}
         />
+      )}
+
+      {/* Messaging Panel - Slide in from right */}
+      {showMessaging && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+            onClick={() => setShowMessaging(false)}
+          />
+          {/* Messaging Panel */}
+          <div className={`fixed top-0 right-0 h-full w-full md:w-[50rem] bg-card border-l border-border shadow-elevation-3 z-50 transform transition-transform duration-300 ease-in-out ${
+            showMessaging ? 'translate-x-0' : 'translate-x-full'
+          }`}>
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+                <h3 className="font-heading font-semibold text-lg text-foreground flex items-center gap-2">
+                  <Icon name="MessageCircle" size={20} className="text-primary" />
+                  Project Messages
+                </h3>
+                <button
+                  onClick={() => setShowMessaging(false)}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  title="Close messaging"
+                >
+                  <Icon name="X" size={20} className="text-muted-foreground" />
+                </button>
+              </div>
+              
+              {/* Messaging Content */}
+              <div className="flex-1 overflow-hidden min-h-0">
+                {project && (
+                  <TeamsStyleMessaging 
+                    currentUser={user}
+                    landId={projectId}
+                    onMessageSent={(message) => {
+                      console.log('Message sent:', message);
+                    }}
+                    onMessageReceived={(message) => {
+                      console.log('Message received:', message);
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

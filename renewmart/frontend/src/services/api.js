@@ -55,6 +55,9 @@ api.interceptors.request.use(
   }
 );
 
+// Flag to prevent multiple redirects
+let isRedirecting = false;
+
 // Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => {
@@ -72,10 +75,30 @@ api.interceptors.response.use(
     
     if (error.response?.status === 401) {
       console.log('API Interceptor: 401 Unauthorized - removing auth token');
-      // Token expired or invalid
+      
+      // Don't redirect if we're already on login page or already redirecting
+      const currentPath = window.location.pathname;
+      if (currentPath === '/login' || currentPath.startsWith('/login') || isRedirecting) {
+        console.log('API Interceptor: Already on login page or redirecting, skipping redirect');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        return Promise.reject(error);
+      }
+      
+      // Prevent multiple redirects
+      isRedirecting = true;
+      
+      // Token expired or invalid - clear storage
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      
+      // Use replace to avoid adding to history and prevent back button issues
+      window.location.replace('/login');
+      
+      // Reset flag after a delay (in case redirect fails)
+      setTimeout(() => {
+        isRedirecting = false;
+      }, 1000);
     }
     return Promise.reject(error);
   }
@@ -1224,6 +1247,19 @@ export const notificationsAPI = {
   
   getUnreadCount: async () => {
     const response = await api.get('/notifications/unread-count');
+    return response.data;
+  }
+};
+
+// Marketplace Settings API
+export const marketplaceSettingsAPI = {
+  getSettings: async () => {
+    const response = await api.get('/marketplace-settings');
+    return response.data;
+  },
+  
+  saveSettings: async (settings) => {
+    const response = await api.post('/marketplace-settings', settings);
     return response.data;
   }
 };

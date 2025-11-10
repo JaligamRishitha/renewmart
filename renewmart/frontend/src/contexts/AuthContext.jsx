@@ -92,26 +92,39 @@ export const AuthProvider = ({ children }) => {
         const userData = localStorage.getItem('user');
 
         if (token && userData && userData !== 'undefined') {
-          const user = JSON.parse(userData);
-          
-          // Verify token is still valid
           try {
-            const currentUser = await authAPI.getCurrentUser();
-            dispatch({
-              type: AUTH_ACTIONS.LOGIN_SUCCESS,
-              payload: { user: currentUser, token },
-            });
-          } catch (error) {
-            // Token is invalid, clear storage
+            const user = JSON.parse(userData);
+            
+            // Verify token is still valid
+            try {
+              const currentUser = await authAPI.getCurrentUser();
+              dispatch({
+                type: AUTH_ACTIONS.LOGIN_SUCCESS,
+                payload: { user: currentUser, token },
+              });
+            } catch (error) {
+              // Token is invalid (401 or other error)
+              // Don't redirect here - let the API interceptor handle it
+              // Just clear storage and set loading to false
+              console.log('Auth initialization: Token validation failed', error.response?.status || error.message);
+              localStorage.removeItem('authToken');
+              localStorage.removeItem('user');
+              dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
+            }
+          } catch (parseError) {
+            // Invalid user data in localStorage
+            console.error('Auth initialization: Invalid user data in localStorage', parseError);
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
             dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
           }
         } else {
+          // No token or user data, just set loading to false
           dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
+        // Ensure we always set loading to false, even on unexpected errors
         dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
       }
     };

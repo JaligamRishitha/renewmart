@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 import Button from '../../../components/ui/Button';
+import { useMarketplaceSettings } from '../../../context/MarketplaceSettingsContext';
 
 const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchlist, isWatchlisted = false, interestStatus = null }) => {
+  const { settings } = useMarketplaceSettings();
   const [isImageLoaded, setIsImageLoaded] = useState(false);
 
   const formatPrice = (price) => {
@@ -35,10 +37,21 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
       'Solar': 'text-yellow-600 bg-yellow-50',
       'Wind': 'text-blue-600 bg-blue-50',
       'Hydroelectric': 'text-cyan-600 bg-cyan-50',
-      'Biomass': 'text-green-600 bg-green-50',
+      'Biomass': 'text-green-600 bg-green-50' ,
       'Geothermal': 'text-orange-600 bg-orange-50'
     };
     return colorMap?.[type] || 'text-primary bg-primary/10';
+  };
+
+  const getProjectTypeTextColor = (type) => {
+    const colorMap = {
+      'Solar': 'text-yellow-600',
+      'Wind': 'text-blue-600',
+      'Hydroelectric': 'text-cyan-600',
+      'Biomass': 'text-green-600',
+      'Geothermal': 'text-orange-600'
+    };
+    return colorMap?.[type] || 'text-primary';
   };
 
   // Get project type image from assets - same logic as admin marketplace
@@ -74,7 +87,7 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
       return '/assets/images/biomass.png';
     } else if (rawType.includes('geothermal') || rawType.includes('geo')) {
       return '/assets/images/geothermal.png';
-    } else if (rawType.includes('hydro') || rawType.includes('water')) {
+    } else if (rawType.includes('hydroelectric') || rawType.includes('water')) {
       return '/assets/images/hydro.png';
     }
     
@@ -87,7 +100,7 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
   return (
     <div className="bg-card border border-border rounded-lg shadow-elevation-1 hover:shadow-elevation-2 transition-all duration-300 overflow-hidden group">
       {/* Project Image */}
-      <div className="relative h-48 overflow-hidden bg-muted">
+      <div className="relative h-44 overflow-hidden bg-muted">
         <Image
           src={imgSrc}
           alt={`${project?.name || 'Project'} renewable energy project`}
@@ -96,10 +109,12 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
         />
         
         {/* Project Type Badge */}
-        <div className={`absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getProjectTypeColor(project?.type)}`}>
-          <Icon name={getProjectTypeIcon(project?.type)} size={12} />
-          <span>{project?.type}</span>
-        </div>
+        {settings?.showEnergyType !== false && (
+          <div className="absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 bg-white shadow-sm">
+            <Icon name={getProjectTypeIcon(project?.type)} size={12} className={getProjectTypeTextColor(project?.type)} />
+            <span className={getProjectTypeTextColor(project?.type)}>{project?.type}</span>
+          </div>
+        )}
 
         {/* Watchlist Button */}
         <button
@@ -135,49 +150,69 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
         )}
       </div>
       {/* Project Details */}
-      <div className="p-4">
+      <div className="p-3.5">
         {/* Header */}
-        <div className="mb-3">
+        <div className="mb-2.5">
           <h3 className="font-heading font-semibold text-lg text-foreground mb-1 line-clamp-1">
             {project?.name}
           </h3>
-          <div className="flex items-center text-muted-foreground text-sm">
-            <Icon name="MapPin" size={14} className="mr-1" />
-            <span className="line-clamp-1">{project?.location}</span>
-          </div>
+          {settings?.showLocation !== false && (
+            <div className="flex items-center text-muted-foreground text-sm">
+              <Icon name="MapPin" size={14} className="mr-1" />
+              <span className="line-clamp-1">{project?.location}</span>
+            </div>
+          )}
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Capacity</div>
-            <div className="font-heading font-semibold text-foreground">
-              {formatCapacity(project?.capacity)}
-            </div>
+        {(settings?.showCapacity !== false || settings?.showPrice !== false) && (
+          <div className="grid grid-cols-2 gap-2.5 mb-3">
+            {settings?.showCapacity !== false && (
+              <div className="bg-muted rounded-lg p-2.5">
+                <div className="text-xs text-muted-foreground mb-0.5">Capacity</div>
+                <div className="font-heading font-semibold text-sm text-foreground">
+                  {formatCapacity(project?.capacity)}
+                </div>
+              </div>
+            )}
+            {settings?.showPrice !== false && (
+              <div className="bg-muted rounded-lg p-2.5">
+                <div className="text-xs text-muted-foreground mb-0.5">Price/MWh</div>
+                <div className="font-heading font-semibold text-sm text-foreground">
+                  {formatPrice(project?.pricePerMWh)}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Price/MWh</div>
-            <div className="font-heading font-semibold text-foreground">
-              {formatPrice(project?.pricePerMWh)}
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Timeline & Contract */}
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Timeline:</span>
-            <span className="font-medium text-foreground">{project?.timeline}</span>
+        {(settings?.showTimeline !== false || settings?.showContractTerm !== false) && (
+          <div className="space-y-1.5 mb-3">
+            {settings?.showTimeline !== false && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Timeline:</span>
+                <span className="font-medium text-foreground">{project?.timeline}</span>
+              </div>
+            )}
+            {settings?.showContractTerm !== false && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Contract:</span>
+                <span className="font-medium text-foreground">
+                  {project?.contract || 
+                   (project?.contract_term_years ? `${project.contract_term_years} years` : null) ||
+                   (project?.contractTerm ? `${project.contractTerm} years` : null) ||
+                   (project?.contractDuration ? project.contractDuration : null) ||
+                   'N/A'}
+                </span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Contract:</span>
-            <span className="font-medium text-foreground">{project?.contractDuration}</span>
-          </div>
-        </div>
+        )}
 
         {/* Partners */}
         {project?.partners && project?.partners?.length > 0 && (
-          <div className="mb-4">
+          <div className="mb-3">
             <div className="text-xs text-muted-foreground mb-2">Partners</div>
             <div className="flex flex-wrap gap-1">
               {project?.partners?.slice(0, 2)?.map((partner, index) => (
@@ -198,39 +233,39 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
         )}
 
         {/* Actions */}
-        <div className="flex space-x-2">
+        <div className="flex space-x-3">
           <Button
             variant="outline"
             size="sm"
             onClick={() => onViewDetails(project?.id)}
-            className="flex-1"
+            className="flex-1 min-w-0"
             iconName="Eye"
             iconPosition="left"
             iconSize={14}
           >
-            View Details
+            <span className="truncate">Details</span>
           </Button>
           {interestStatus ? (
-            <div className="flex-1 flex items-center justify-center px-3 py-2 rounded-md border border-border">
-              <div className="flex items-center space-x-2">
+            <div className="flex-1 min-w-0 flex items-center justify-center px-3 py-2 rounded-md border border-border">
+              <div className="flex items-center space-x-2 min-w-0">
                 {interestStatus.status === 'approved' && (
                   <>
-                    <Icon name="CheckCircle" size={14} className="text-green-600" />
-                    <span className="text-sm font-medium text-green-600">Approved</span>
+                    <Icon name="CheckCircle" size={14} className="text-green-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-green-600 truncate">Approved</span>
                   </>
                 )}
                 {interestStatus.status === 'pending' && (
                   <>
-                    <Icon name="Clock" size={14} className="text-yellow-600" />
-                    <span className="text-sm font-medium text-yellow-600">Pending</span>
+                    <Icon name="Clock" size={14} className="text-yellow-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-yellow-600 truncate">Pending</span>
                   </>
                 )}
                 {interestStatus.status === 'rejected' && (
                   <>
-                    <Icon name="XCircle" size={14} className="text-red-600" />
-                    <span className="text-sm font-medium text-red-600">Rejected</span>
+                    <Icon name="XCircle" size={14} className="text-red-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-red-600 truncate">Rejected</span>
                     {interestStatus.approved_at && (
-                      <span className="text-xs text-muted-foreground ml-1">
+                      <span className="text-xs text-muted-foreground ml-1 truncate">
                         (Can retry after 1 week)
                       </span>
                     )}
@@ -238,8 +273,8 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
                 )}
                 {!['approved', 'pending', 'rejected'].includes(interestStatus.status) && (
                   <>
-                    <Icon name="Clock" size={14} className="text-muted-foreground" />
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <Icon name="Clock" size={14} className="text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm font-medium text-muted-foreground truncate">
                       {interestStatus.status || 'Pending'}
                     </span>
                   </>
@@ -251,14 +286,16 @@ const ProjectCard = ({ project, onViewDetails, onExpressInterest, onSaveToWatchl
               variant="default"
               size="sm"
               onClick={() => onExpressInterest(project?.id)}
-              className="flex-1"
+              className="flex-1 min-w-0"
               iconName="Heart"
               iconPosition="left"
               iconSize={14}
               disabled={project?.status === 'interest_locked' && !interestStatus}
               title={project?.status === 'interest_locked' && !interestStatus ? 'This project is locked by another investor' : ''}
             >
-              {project?.status === 'interest_locked' && !interestStatus ? 'Locked' : 'Express Interest'}
+              <span className="truncate">
+                {project?.status === 'interest_locked' && !interestStatus ? 'Locked' : 'Interest'}
+              </span>
             </Button>
           )}
         </div>

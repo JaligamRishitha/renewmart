@@ -14,6 +14,7 @@ const AdminProjectDocuments = () => {
   const [versions, setVersions] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [reviewers, setReviewers] = useState({}); // Store reviewer info: {userId: {name, roles}}
+  const [allDocuments, setAllDocuments] = useState([]); // Store all documents for lookup
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -61,8 +62,9 @@ const AdminProjectDocuments = () => {
       // Also check documents that are under review via review_locked_by
       // This creates virtual assignments from documents that are locked for review
       try {
-        const allDocuments = await documentsAPI.getDocuments(projectId);
-        const documentsUnderReview = (allDocuments || []).filter(doc => 
+        const allDocs = await documentsAPI.getDocuments(projectId);
+        setAllDocuments(allDocs || []); // Store for later use in version loading
+        const documentsUnderReview = (allDocs || []).filter(doc => 
           doc.review_locked_by && 
           doc.version_status === 'under_review' &&
           !doc.subtask_id
@@ -72,7 +74,7 @@ const AdminProjectDocuments = () => {
 
         // Create a map of document_id -> doc_slot for quick lookup
         const documentSlotMap = {};
-        (allDocuments || []).forEach(doc => {
+        (allDocs || []).forEach(doc => {
           if (doc.document_id) {
             documentSlotMap[doc.document_id] = doc.doc_slot || 'D1';
           }
@@ -169,7 +171,7 @@ const AdminProjectDocuments = () => {
       const response = await documentVersionsAPI.getDocumentVersions(projectId, documentType);
       console.log('Document versions response:', response);
       
-      // Fetch reviewer information for each version that has review_locked_by
+      // Fetch reviewer and uploader information for each version
       const versionsWithReviewers = await Promise.all(
         response.map(async (version) => {
           // Log version structure to debug field mapping
@@ -181,9 +183,11 @@ const AdminProjectDocuments = () => {
             last_name: version.last_name,
             uploaded_by: version.uploaded_by,
             uploader_email: version.uploader_email,
-            email: version.email
+            email: version.email,
+            all_keys: Object.keys(version)
           });
           
+          // Fetch reviewer info if review_locked_by exists
           if (version.review_locked_by) {
             // Check if we already have this reviewer
             if (!reviewers[version.review_locked_by]) {
@@ -202,12 +206,67 @@ const AdminProjectDocuments = () => {
               }
             }
           }
+          
+          // If uploader_name is missing/empty, try to get it from allDocuments or fetch from API
+          const hasUploaderName = version.uploader_name && 
+                                   version.uploader_name !== 'null' && 
+                                   version.uploader_name !== 'undefined' && 
+                                   version.uploader_name.trim() !== '';
+          
+          if (!hasUploaderName) {
+            // First, try to get uploaded_by from allDocuments
+            const docFromAll = allDocuments.find(d => d.document_id === version.document_id);
+            const uploadedById = version.uploaded_by || docFromAll?.uploaded_by;
+            
+            if (uploadedById) {
+              try {
+                const uploaderData = await usersAPI.getUserById(uploadedById);
+                if (uploaderData && uploaderData.first_name) {
+                  version.uploader_name = `${uploaderData.first_name} ${uploaderData.last_name || ''}`.trim();
+                } else if (uploaderData && uploaderData.email) {
+                  version.uploader_name = uploaderData.email;
+                }
+              } catch (err) {
+                console.error(`Failed to fetch uploader ${uploadedById}:`, err);
+              }
+            }
+            
+            // If still no name, try to use uploader_email or email from version
+            if (!version.uploader_name || version.uploader_name.trim() === '') {
+              version.uploader_name = version.uploader_email || version.email || null;
+            }
+          }
+          
+          // Also ensure created_at is properly formatted if it exists
+          if (version.created_at && (version.created_at === 'null' || version.created_at === 'undefined')) {
+            version.created_at = null;
+          }
+          
+          // If created_at is missing, try to get it from allDocuments
+          if (!version.created_at) {
+            const docFromAll = allDocuments.find(d => d.document_id === version.document_id);
+            if (docFromAll?.created_at) {
+              version.created_at = docFromAll.created_at;
+            } else if (docFromAll?.uploaded_at) {
+              version.created_at = docFromAll.uploaded_at;
+            }
+          }
+          
           return version;
         })
       );
       
       setVersions(versionsWithReviewers);
       setSelectedDocumentType(documentType);
+      
+      // Log assignments for debugging
+      console.log('Current assignments:', assignments);
+      console.log('Selected document type:', documentType);
+      console.log('Filtered assignments:', assignments.filter(a => {
+        const assignmentType = a.document_type?.toLowerCase();
+        const selectedType = documentType.toLowerCase();
+        return assignmentType === selectedType;
+      }));
     } catch (err) {
       console.error('Failed to load document versions:', err);
       setError('Failed to load document versions: ' + (err.response?.data?.detail || err.message));
@@ -245,14 +304,21 @@ const AdminProjectDocuments = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString || dateString === 'null' || dateString === 'undefined') return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      console.error('Error formatting date:', dateString, err);
+      return 'N/A';
+    }
   };
 
   const formatRoleName = (role) => {
@@ -431,7 +497,17 @@ const AdminProjectDocuments = () => {
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    Assignments ({selectedDocumentType ? assignments.filter(a => a.document_type === selectedDocumentType).length : assignments.length})
+                    Assignments ({(() => {
+                      if (!selectedDocumentType) return assignments.length;
+                      const selectedType = selectedDocumentType.toLowerCase();
+                      return assignments.filter(a => {
+                        const assignmentType = a.document_type?.toLowerCase();
+                        // Also try matching with underscores/hyphens normalized
+                        const normalizedAssignmentType = assignmentType?.replace(/-/g, '_');
+                        const normalizedSelectedType = selectedType.replace(/-/g, '_');
+                        return assignmentType === selectedType || normalizedAssignmentType === normalizedSelectedType;
+                      }).length;
+                    })()})
                   </button>
                 </div>
               </div>
@@ -574,16 +650,29 @@ const AdminProjectDocuments = () => {
                                                   </div>
                                                   <div className="flex items-center justify-between">
                                                     <span>Uploaded:</span>
-                                                    <span>{version.created_at ? formatDate(version.created_at) : (version.upload_date ? formatDate(version.upload_date) : 'N/A')}</span>
+                                                    <span>
+                                                      {formatDate(
+                                                        version.created_at || 
+                                                        version.upload_date || 
+                                                        version.uploaded_at ||
+                                                        version.uploaded_date
+                                                      )}
+                                                    </span>
                                                   </div>
                                                   <div className="flex items-center justify-between">
                                                     <span>By:</span>
                                                     <span className="truncate">
-                                                      {version.uploader_name || 
-                                                       (version.uploaded_by_name ? `${version.uploaded_by_name}` : null) ||
-                                                       (version.first_name && version.last_name ? `${version.first_name} ${version.last_name}` : null) ||
-                                                       (version.uploader_email || version.email) ||
-                                                       'Unknown'}
+                                                      {(() => {
+                                                        // Try multiple field name variations
+                                                        const uploaderName = version.uploader_name || 
+                                                                              version.uploaded_by_name ||
+                                                                              (version.first_name && version.last_name ? `${version.first_name} ${version.last_name}`.trim() : null) ||
+                                                                              version.uploader_email ||
+                                                                              version.email;
+                                                        return uploaderName && uploaderName !== 'null' && uploaderName !== 'undefined' && uploaderName.trim() !== '' 
+                                                          ? uploaderName 
+                                                          : 'Unknown';
+                                                      })()}
                                                     </span>
                                                   </div>
                                                 </div>
@@ -705,10 +794,16 @@ const AdminProjectDocuments = () => {
                         </p>
                       </div>
                     ) : (() => {
-                      // Filter assignments by selected document type
-                      const filteredAssignments = assignments.filter(assignment => 
-                        assignment.document_type === selectedDocumentType
-                      );
+                      // Filter assignments by selected document type (case-insensitive, normalize hyphens/underscores)
+                      const filteredAssignments = assignments.filter(assignment => {
+                        if (!selectedDocumentType) return true;
+                        const assignmentType = assignment.document_type?.toLowerCase();
+                        const selectedType = selectedDocumentType.toLowerCase();
+                        // Normalize hyphens to underscores for comparison
+                        const normalizedAssignmentType = assignmentType?.replace(/-/g, '_');
+                        const normalizedSelectedType = selectedType.replace(/-/g, '_');
+                        return assignmentType === selectedType || normalizedAssignmentType === normalizedSelectedType;
+                      });
                       
                       // Group assignments by slot (D1, D2)
                       const assignmentsBySlot = filteredAssignments.reduce((acc, assignment) => {

@@ -17,8 +17,51 @@ from models.schemas import (
     SectionDefinition, MessageResponse
 )
 from pydantic import BaseModel
+from utils.geocoding import geocode_if_needed, coordinates_are_valid
 
 router = APIRouter(prefix="/lands", tags=["lands"])
+
+
+def normalize_energy_key(energy_key: Optional[str]) -> Optional[str]:
+    """
+    Normalize energy_key to match valid database values in lu_energy_type table.
+    Maps common variations to correct database values.
+    
+    Valid values: 'solar', 'wind', 'hydroelectric', 'biomass', 'geothermal'
+    """
+    if not energy_key:
+        return None
+    
+    # Convert to lowercase for case-insensitive matching
+    energy_key_lower = str(energy_key).lower().strip()
+    
+    # Mapping of common variations to database values
+    energy_key_mapping = {
+        'hydro': 'hydroelectric',
+        'hydro electric': 'hydroelectric',
+        'hydro-electric': 'hydroelectric',
+        'hydroelectric': 'hydroelectric',  # Already correct
+        'solar': 'solar',
+        'wind': 'wind',
+        'biomass': 'biomass',
+        'geothermal': 'geothermal',
+        'geo-thermal': 'geothermal',
+        'geo thermal': 'geothermal'
+    }
+    
+    # Return normalized value or original if not in mapping
+    normalized = energy_key_mapping.get(energy_key_lower)
+    if normalized:
+        return normalized
+    
+    # If exact match (case-insensitive) with valid values, return lowercase
+    valid_keys = ['solar', 'wind', 'hydroelectric', 'biomass', 'geothermal']
+    if energy_key_lower in valid_keys:
+        return energy_key_lower
+    
+    # Return original if no mapping found (will fail foreign key constraint, but at least we tried)
+    print(f"[normalize_energy_key] Warning: Unknown energy_key '{energy_key}', returning as-is")
+    return energy_key_lower
 
 
 # Admin Dashboard
@@ -628,8 +671,19 @@ async def create_land(
         import uuid
         land_id = uuid.uuid4()
         
+        # Geocode postcode if coordinates are missing or invalid
+        coordinates_to_use = land_data.coordinates
+        if land_data.post_code:
+            geocoded_coords = await geocode_if_needed(
+                postcode=land_data.post_code,
+                existing_coordinates=land_data.coordinates
+            )
+            if geocoded_coords:
+                coordinates_to_use = geocoded_coords
+                print(f"[create_land] Geocoded postcode {land_data.post_code} to coordinates: {geocoded_coords}")
+        
         # Prepare coordinates as JSON string if it's a dict
-        coordinates_json = land_data.coordinates
+        coordinates_json = coordinates_to_use
         if isinstance(coordinates_json, dict):
             coordinates_json = json.dumps(coordinates_json)
         
@@ -637,7 +691,9 @@ async def create_land(
         energy_key_value = None
         if land_data.energy_key:
             # Convert to string if it's an enum
-            energy_key_value = str(land_data.energy_key) if hasattr(land_data.energy_key, 'value') else land_data.energy_key
+            energy_key_str = str(land_data.energy_key) if hasattr(land_data.energy_key, 'value') else land_data.energy_key
+            # Normalize energy_key to match database values
+            energy_key_value = normalize_energy_key(energy_key_str)
         
         # Ensure 'draft' status exists in lu_status table
         db.execute(text("""
@@ -913,6 +969,39 @@ async def update_land(
                 detail=f"Cannot revert project status from '{current_status}' to 'draft'. Once submitted, a project cannot revert to draft status."
             )
     
+    # Geocode postcode if it's being updated or if coordinates are missing/invalid
+    postcode_to_geocode = None
+    existing_coords = None
+    
+    # Check if postcode is being updated
+    if 'post_code' in update_data and update_data['post_code']:
+        postcode_to_geocode = update_data['post_code']
+        # Get existing coordinates from database if not being updated
+        if 'coordinates' not in update_data:
+            existing_coords_query = text("SELECT coordinates FROM lands WHERE land_id = :land_id")
+            existing_coords_result = db.execute(existing_coords_query, {"land_id": str(land_id)}).fetchone()
+            if existing_coords_result and existing_coords_result.coordinates:
+                existing_coords = existing_coords_result.coordinates
+                if isinstance(existing_coords, str):
+                    try:
+                        existing_coords = json.loads(existing_coords)
+                    except:
+                        existing_coords = None
+        else:
+            existing_coords = update_data.get('coordinates')
+    
+    # Perform geocoding if needed
+    if postcode_to_geocode:
+        geocoded_coords = await geocode_if_needed(
+            postcode=postcode_to_geocode,
+            existing_coordinates=existing_coords
+        )
+        if geocoded_coords:
+            # Update coordinates in the update_data if they weren't explicitly set
+            if 'coordinates' not in update_data or not coordinates_are_valid(update_data.get('coordinates')):
+                update_data['coordinates'] = geocoded_coords
+                print(f"[update_land] Geocoded postcode {postcode_to_geocode} to coordinates: {geocoded_coords}")
+    
     # Build dynamic update query
     update_fields = []
     params = {"land_id": str(land_id)}
@@ -931,9 +1020,11 @@ async def update_land(
         if field in ["title", "location_text", "post_code", "land_type", "admin_notes", "energy_key", 
                      "timeline_text", "developer_name", "project_priority", "potential_partners", "project_description"]:
             update_fields.append(f"{db_field} = :{field}")
-            # Convert enum to string if needed
+            # Convert enum to string if needed and normalize energy_key
             if field == "energy_key" and value:
-                params[field] = str(value) if hasattr(value, 'value') else value
+                energy_key_str = str(value) if hasattr(value, 'value') else value
+                # Normalize energy_key to match database values
+                params[field] = normalize_energy_key(energy_key_str)
             else:
                 # Handle None/null values - set to NULL in database
                 params[field] = value if value is not None else None
@@ -947,14 +1038,40 @@ async def update_land(
             params[field] = int(value) if value is not None else None
         # JSON fields
         elif field == "coordinates":
-            update_fields.append(f"{field} = :{field}")
+            # Use explicit JSONB cast in SQL for safety
+            update_fields.append(f"{field} = CAST(:{field} AS JSONB)")
             if value is not None:
-                # Properly serialize dict/object to JSON string for PostgreSQL
+                # Normalize coordinates - prefer lat/lng format, remove duplicates
                 if isinstance(value, dict):
-                    params[field] = json.dumps(value)
+                    # Normalize to use only lat/lng (not latitude/longitude)
+                    normalized_coords = {}
+                    if 'lat' in value or 'latitude' in value:
+                        normalized_coords['lat'] = value.get('lat') or value.get('latitude')
+                    if 'lng' in value or 'longitude' in value:
+                        normalized_coords['lng'] = value.get('lng') or value.get('longitude')
+                    # Only include if we have both lat and lng
+                    if 'lat' in normalized_coords and 'lng' in normalized_coords:
+                        params[field] = json.dumps(normalized_coords)
+                    else:
+                        params[field] = json.dumps(value)
                 elif isinstance(value, str):
-                    # If already a JSON string, use it as-is
-                    params[field] = value
+                    # If already a JSON string, try to parse and normalize
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, dict):
+                            normalized_coords = {}
+                            if 'lat' in parsed or 'latitude' in parsed:
+                                normalized_coords['lat'] = parsed.get('lat') or parsed.get('latitude')
+                            if 'lng' in parsed or 'longitude' in parsed:
+                                normalized_coords['lng'] = parsed.get('lng') or parsed.get('longitude')
+                            if 'lat' in normalized_coords and 'lng' in normalized_coords:
+                                params[field] = json.dumps(normalized_coords)
+                            else:
+                                params[field] = value
+                        else:
+                            params[field] = value
+                    except:
+                        params[field] = value
                 else:
                     # Try to convert to JSON string
                     params[field] = json.dumps(value)
@@ -973,21 +1090,34 @@ async def update_land(
     print(f"[update_land] Fields to update: {update_fields}")
     print(f"[update_land] Parameters: {params}")
     
-    if update_fields:
-        update_query = text(f"""
-            UPDATE lands 
-            SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
-            WHERE land_id = :land_id
-        """)
+    try:
+        if update_fields:
+            update_query = text(f"""
+                UPDATE lands 
+                SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+                WHERE land_id = :land_id
+            """)
+            
+            print(f"[update_land] Executing query: {update_query}")
+            db.execute(update_query, params)
+            db.commit()
+            print(f"[update_land] Update successful")
+        else:
+            print(f"[update_land] No fields to update")
         
-        print(f"[update_land] Executing query: {update_query}")
-        db.execute(update_query, params)
-        db.commit()
-        print(f"[update_land] Update successful")
-    else:
-        print(f"[update_land] No fields to update")
+        return await get_land(land_id, current_user, db)
     
-    return await get_land(land_id, current_user, db)
+    except Exception as e:
+        db.rollback()
+        error_msg = str(e)
+        print(f"[update_land] Error updating land: {error_msg}")
+        print(f"[update_land] Error type: {type(e).__name__}")
+        import traceback
+        print(f"[update_land] Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update land: {error_msg}"
+        )
 
 @router.post("/{land_id}/toggle-publish", response_model=Dict[str, Any])
 async def toggle_publish_land(

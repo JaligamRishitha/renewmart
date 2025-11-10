@@ -180,6 +180,31 @@ const ReviewerDashboard = () => {
           try {
             const subtasks = await taskAPI.getSubtasks(task.task_id);
             task.subtasks = subtasks || [];
+            
+            // Update stats based on subtasks (more accurate than task-level stats)
+            if (subtasks && subtasks.length > 0) {
+              // Initialize subtask stats if not exists
+              if (!project.stats.subtasks) {
+                project.stats.subtasks = {
+                  total: 0,
+                  completed: 0,
+                  pending: 0,
+                  in_progress: 0
+                };
+              }
+              
+              subtasks.forEach(subtask => {
+                project.stats.subtasks.total++;
+                const subtaskStatus = (subtask.status || '').toLowerCase();
+                if (subtaskStatus === 'completed') {
+                  project.stats.subtasks.completed++;
+                } else if (subtaskStatus === 'in_progress' || subtaskStatus === 'in-progress') {
+                  project.stats.subtasks.in_progress++;
+                } else {
+                  project.stats.subtasks.pending++;
+                }
+              });
+            }
           } catch (err) {
             console.error(`Failed to fetch subtasks for task ${task.task_id}:`, err);
             task.subtasks = [];

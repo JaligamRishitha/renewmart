@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 // Helper function to get role-based dashboard route with hierarchical structure
@@ -29,14 +29,38 @@ const getRoleDashboard = (user) => {
 
 const RoleBasedRedirect = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isLoading } = useAuth();
+  const lastUserKey = useRef(null);
 
   useEffect(() => {
+    // Only navigate if user is loaded and we have a user
     if (!isLoading && user) {
       const dashboard = getRoleDashboard(user);
-      navigate(dashboard, { replace: true });
+      
+      // Create a stable key from user ID and roles to detect actual user changes
+      const userKey = `${user.id || user.user_id || 'unknown'}_${(user.roles || []).join(',')}`;
+      
+      // Check if we're already on the target dashboard - if so, don't navigate
+      if (location.pathname === dashboard) {
+        lastUserKey.current = userKey;
+        return;
+      }
+      
+      // Only navigate if:
+      // 1. We're on root or dashboard route (where redirect is expected)
+      // 2. User has actually changed (different user or roles) OR we haven't navigated yet
+      if ((location.pathname === '/' || location.pathname === '/dashboard')) {
+        if (lastUserKey.current !== userKey) {
+          lastUserKey.current = userKey;
+          navigate(dashboard, { replace: true });
+        }
+      }
+    } else if (!isLoading && !user) {
+      // Reset when user logs out
+      lastUserKey.current = null;
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, location.pathname]);
 
   // Show loading spinner while redirecting
   return (

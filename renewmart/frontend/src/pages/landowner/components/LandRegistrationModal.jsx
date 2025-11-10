@@ -33,7 +33,7 @@ const LandRegistrationModal = ({ onClose, onSuccess }) => {
   const energyTypes = [
     { key: 'solar', label: 'Solar Energy' },
     { key: 'wind', label: 'Wind Energy' },
-    { key: 'hydro', label: 'Hydroelectric' },
+    { key: 'hydroelectric', label: 'Hydroelectric' },
     { key: 'biomass', label: 'Biomass' },
     { key: 'geothermal', label: 'Geothermal' }
   ];

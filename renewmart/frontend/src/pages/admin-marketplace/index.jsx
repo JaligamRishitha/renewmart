@@ -3,15 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
 import Sidebar from '../../components/ui/Sidebar';
 import Button from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
 import { landsAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
+import { useMarketplaceSettings } from '../../context/MarketplaceSettingsContext';
+import MarketplaceTemplateSettings from './components/MarketplaceTemplateSettings';
 
 const AdminMarketplace = () => {
   const navigate = useNavigate();
+  const { settings } = useMarketplaceSettings();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
     energyType: '',
@@ -87,7 +94,7 @@ const AdminMarketplace = () => {
     const colors = {
       'solar': 'bg-yellow-100 text-yellow-800',
       'wind': 'bg-blue-100 text-blue-800',
-      'hydro': 'bg-cyan-100 text-cyan-800',
+      'hydroelectric': 'bg-cyan-100 text-cyan-800',
       'biomass': 'bg-green-100 text-green-800',
       'geothermal': 'bg-orange-100 text-orange-800'
     };
@@ -104,6 +111,17 @@ const AdminMarketplace = () => {
       project.landowner_name?.toLowerCase().includes(searchLower)
     );
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProjects = filteredProjects.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters or itemsPerPage change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, itemsPerPage]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -129,6 +147,14 @@ const AdminMarketplace = () => {
               </div>
               
               <div className="flex items-center space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTemplateSettings(true)}
+                  iconName="Settings"
+                  iconSize={18}
+                >
+                  Settings
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => navigate('/admin/dashboard')}
@@ -338,9 +364,28 @@ const AdminMarketplace = () => {
           {/* Projects List */}
           <div className="bg-white rounded-lg shadow-sm border border-border overflow-hidden">
             <div className="px-6 py-4 border-b border-border">
-              <h2 className="font-heading font-semibold text-lg text-foreground">
-                Published Projects ({filteredProjects.length})
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading font-semibold text-lg text-foreground">
+                  Published Projects ({filteredProjects.length})
+                </h2>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Projects per page:
+                  </label>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-3 py-1.5 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm bg-background"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {loading ? (
@@ -369,110 +414,154 @@ const AdminMarketplace = () => {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {filteredProjects.map((project) => (
-                  <div
-                    key={project.land_id}
-                    className="p-6 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="font-heading font-semibold text-lg text-foreground">
-                            {project.title}
-                          </h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEnergyTypeColor(project.energy_key)}`}>
-                            {project.energy_key?.toUpperCase() || 'N/A'}
-                          </span>
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Published
-                          </span>
+              <>
+                <div className="divide-y divide-border">
+                  {paginatedProjects.map((project) => (
+                    <div
+                      key={project.land_id}
+                      className="p-6 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <h3 className="font-heading font-semibold text-lg text-foreground">
+                              {project.title}
+                            </h3>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEnergyTypeColor(project.energy_key)}`}>
+                              {project.energy_key?.toUpperCase() || 'N/A'}
+                            </span>
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Published
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                            {settings?.showLocation !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Location</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.location_text || 'N/A'}
+                                </p>
+                              </div>
+                            )}
+                            {settings?.showCapacity !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Capacity</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.capacity_mw ? `${project.capacity_mw} MW` : 'N/A'}
+                                </p>
+                              </div>
+                            )}
+                            {settings?.showPrice !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Price</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.price_per_mwh ? `$${project.price_per_mwh}/MWh` : 'N/A'}
+                                </p>
+                              </div>
+                            )}
+                            {settings?.showTimeline !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Timeline</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.timeline_text || 'N/A'}
+                                </p>
+                              </div>
+                            )}
+                            {settings?.showDeveloperName !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Developer</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.developer_name || 'N/A'}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-muted-foreground">Landowner</p>
+                              <p className="text-sm font-medium text-foreground mt-1">
+                                {project.landowner_name || 'N/A'}
+                              </p>
+                            </div>
+                            {settings?.showInterestCount !== false && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Interest Count</p>
+                                <p className="text-sm font-medium text-foreground mt-1">
+                                  {project.interest_count || 0} {project.interest_count === 1 ? 'investor' : 'investors'}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-muted-foreground">Published</p>
+                              <p className="text-sm font-medium text-foreground mt-1">
+                                {formatDate(project.published_at)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {(settings?.showArea !== false && project.area_acres) || (settings?.showContractTerm !== false && project.contract_term_years) ? (
+                            <div className="mt-4">
+                              <p className="text-xs text-muted-foreground">
+                                {settings?.showArea !== false && project.area_acres && (
+                                  <>
+                                    Area: <span className="font-medium text-foreground">{project.area_acres} acres</span>
+                                  </>
+                                )}
+                                {settings?.showContractTerm !== false && project.contract_term_years && (
+                                  <span className={settings?.showArea !== false && project.area_acres ? "ml-4" : ""}>
+                                    Contract: <span className="font-medium text-foreground">{project.contract_term_years} years</span>
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Location</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.location_text || 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Capacity</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.capacity_mw ? `${project.capacity_mw} MW` : 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Price</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.price_per_mwh ? `$${project.price_per_mwh}/MWh` : 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Timeline</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.timeline_text || 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Developer</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.developer_name || 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Landowner</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.landowner_name || 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Interest Count</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {project.interest_count || 0} {project.interest_count === 1 ? 'investor' : 'investors'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Published</p>
-                            <p className="text-sm font-medium text-foreground mt-1">
-                              {formatDate(project.published_at)}
-                            </p>
-                          </div>
+                        <div className="flex flex-col space-y-2 ml-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/document-review/${project.land_id}`)}
+                            iconName="Eye"
+                            iconSize={16}
+                          >
+                            View Details
+                          </Button>
                         </div>
-
-                        {project.area_acres && (
-                          <div className="mt-4">
-                            <p className="text-xs text-muted-foreground">
-                              Area: <span className="font-medium text-foreground">{project.area_acres} acres</span>
-                              {project.contract_term_years && (
-                                <span className="ml-4">
-                                  Contract: <span className="font-medium text-foreground">{project.contract_term_years} years</span>
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col space-y-2 ml-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/document-review/${project.land_id}`)}
-                          iconName="Eye"
-                          iconSize={16}
-                        >
-                          View Details
-                        </Button>
                       </div>
                     </div>
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="px-6 py-4 border-t border-border flex justify-end">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={filteredProjects.length}
+                      showInfo={false}
+                      arrowOnly={true}
+                    />
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>
       </main>
+      
+      {/* Marketplace Template Settings Modal */}
+      {showTemplateSettings && (
+        <MarketplaceTemplateSettings
+          onClose={() => setShowTemplateSettings(false)}
+          onSave={(templateData) => {
+            console.log('Template settings saved:', templateData);
+            setShowTemplateSettings(false);
+          }}
+        />
+      )}
     </div>
   );
 };

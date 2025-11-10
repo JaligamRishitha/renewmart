@@ -11,7 +11,7 @@ const ProjectDetailsForm = ({
   const projectTypes = [
     { value: 'solar', label: 'Solar Energy' },
     { value: 'wind', label: 'Wind Energy' },
-    { value: 'hydro', label: 'Hydroelectric' },
+    { value: 'hydroelectric', label: 'Hydroelectric' },
     { value: 'biomass', label: 'Biomass' },
     { value: 'geothermal', label: 'Geothermal' }
   ];

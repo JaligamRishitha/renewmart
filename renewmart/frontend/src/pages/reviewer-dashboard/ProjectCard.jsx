@@ -6,9 +6,22 @@ const ProjectCard = ({
   onViewProject,
   reviewerRole
 }) => {
-  const completionPercentage = project.stats.total > 0
-    ? Math.round((project.stats.completed / project.stats.total) * 100)
-    : 0;
+  // Calculate completion percentage based on subtasks if available (more accurate)
+  // Otherwise fall back to task-level stats
+  let completionPercentage = 0;
+  
+  if (project.stats.subtasks && project.stats.subtasks.total > 0) {
+    // Use subtask-based calculation (more accurate)
+    completionPercentage = Math.round(
+      (project.stats.subtasks.completed / project.stats.subtasks.total) * 100
+    );
+  } else if (project.stats.total > 0) {
+    // Fallback to task-based calculation
+    completionPercentage = Math.round((project.stats.completed / project.stats.total) * 100);
+  }
+  
+  // Ensure percentage is between 0 and 100
+  completionPercentage = Math.max(0, Math.min(100, completionPercentage));
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-colors">

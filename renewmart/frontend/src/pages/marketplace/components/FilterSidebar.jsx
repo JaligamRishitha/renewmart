@@ -27,7 +27,7 @@ const FilterSidebar = ({ filters, onFiltersChange, onClearFilters, isCollapsed, 
   const projectTypeOptions = [
     { value: 'solar', label: 'Solar' },
     { value: 'wind', label: 'Wind' },
-    { value: 'hydro', label: 'Hydroelectric' },
+    { value: 'hydroelectric', label: 'Hydroelectric' },
     { value: 'biomass', label: 'Biomass' },
     { value: 'geothermal', label: 'Geothermal' }
   ];

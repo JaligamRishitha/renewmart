@@ -56,6 +56,7 @@ async def upload_document(
     land_id: UUID,
     document_type: str = Form(...),
     file: UploadFile = File(...),
+    doc_slot: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -96,6 +97,40 @@ async def upload_document(
         )
     
     try:
+        # Determine doc_slot automatically for multi-slot document types
+        # Ownership Documents and Government NOCs require 2 documents (D1 and D2)
+        multi_slot_types = ['ownership-documents', 'government-nocs']
+        
+        if not doc_slot and document_type in multi_slot_types:
+            # Check which slots are already occupied for this document type
+            slot_check_query = text("""
+                SELECT DISTINCT doc_slot
+                FROM documents
+                WHERE land_id = :land_id 
+                AND document_type = :document_type
+                AND subtask_id IS NULL
+                AND doc_slot IN ('D1', 'D2')
+            """)
+            slot_result = db.execute(slot_check_query, {
+                "land_id": str(land_id),
+                "document_type": document_type
+            }).fetchall()
+            
+            occupied_slots = {row.doc_slot for row in slot_result} if slot_result else set()
+            
+            # Assign D1 to first document, D2 to second document
+            if 'D1' not in occupied_slots:
+                doc_slot = 'D1'
+            elif 'D2' not in occupied_slots:
+                doc_slot = 'D2'
+            else:
+                # Both slots are occupied, default to D1
+                # (This handles edge cases like version uploads)
+                doc_slot = 'D1'
+        elif not doc_slot:
+            # Default to D1 for single-slot document types
+            doc_slot = 'D1'
+        
         # Read file bytes
         file_data, file_size = read_file_bytes(file)
         
@@ -107,10 +142,10 @@ async def upload_document(
         insert_query = text("""
             INSERT INTO documents (
                 document_id, land_id, document_type, file_name, 
-                file_data, file_size, uploaded_by, mime_type, is_draft
+                file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot
             ) VALUES (
                 :document_id, :land_id, :document_type, :file_name,
-                :file_data, :file_size, :uploaded_by, :mime_type, :is_draft
+                :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot
             )
         """)
         
@@ -123,7 +158,8 @@ async def upload_document(
             "file_size": file_size,
             "uploaded_by": current_user["user_id"],
             "mime_type": mime_type,
-            "is_draft": True
+            "is_draft": True,
+            "doc_slot": doc_slot
         })
         
         db.commit()

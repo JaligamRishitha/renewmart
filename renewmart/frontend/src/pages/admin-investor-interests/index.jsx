@@ -82,7 +82,7 @@ const AdminInvestorInterests = () => {
     const colors = {
       'solar': 'bg-yellow-100 text-yellow-800',
       'wind': 'bg-blue-100 text-blue-800',
-      'hydro': 'bg-cyan-100 text-cyan-800',
+      'hydroelectric': 'bg-cyan-100 text-cyan-800',
       'biomass': 'bg-green-100 text-green-800',
       'geothermal': 'bg-orange-100 text-orange-800'
     };

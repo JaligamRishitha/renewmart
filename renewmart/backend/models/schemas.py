@@ -40,7 +40,7 @@ class LandStatusEnum(str, Enum):
 class EnergyTypeEnum(str, Enum):
     SOLAR = "solar"
     WIND = "wind"
-    HYDRO = "hydro"
+    HYDRO = "hydroelectric"
     BIOMASS = "biomass"
     GEOTHERMAL = "geothermal"
     HYBRID = "hybrid"

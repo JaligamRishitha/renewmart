@@ -24,7 +24,7 @@ const MapView = ({ ppas, onSelectPPA, selectedPPA }) => {
     switch (type?.toLowerCase()) {
       case 'solar': return '#EAB308'; // yellow-500
       case 'wind': return '#3B82F6'; // blue-500
-      case 'hydro': return '#06B6D4'; // cyan-500
+      case 'hydroelectric': return '#06B6D4'; // cyan-500
       case 'biomass': return '#10B981'; // emerald-500
       case 'geothermal': return '#F97316'; // orange-500
       default: return '#6366F1'; // indigo-500

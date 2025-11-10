@@ -190,27 +190,7 @@ const AssignReviewerModal = ({ project, onClose, onAssign, preselectedRole = nul
             </div>
           )}
 
-          {/* Project Info */}
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Landowner:</span>
-                <p className="font-medium text-foreground">{project.landownerName}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Project Type:</span>
-                <p className="font-medium text-foreground">{project.projectType || project.energyType}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Capacity:</span>
-                <p className="font-medium text-foreground">{project.capacity}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Status:</span>
-                <p className="font-medium text-foreground">{project.status}</p>
-              </div>
-            </div>
-          </div>
+          
 
           {/* Reviewer Role Selection */}
           <Select

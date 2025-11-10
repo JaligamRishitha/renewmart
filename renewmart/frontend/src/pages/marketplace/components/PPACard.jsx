@@ -15,7 +15,7 @@ const PPACard = ({ ppa, onViewDetails, onExpressInterest, onToggleWatchlist }) =
     switch (type?.toLowerCase()) {
       case 'solar': return 'Sun';
       case 'wind': return 'Wind';
-      case 'hydro': return 'Waves';
+      case 'hydroelectric': return 'Waves';
       case 'biomass': return 'Leaf';
       case 'geothermal': return 'Zap';
       default: return 'Zap';
@@ -26,7 +26,7 @@ const PPACard = ({ ppa, onViewDetails, onExpressInterest, onToggleWatchlist }) =
     switch (type?.toLowerCase()) {
       case 'solar': return 'text-yellow-600';
       case 'wind': return 'text-blue-600';
-      case 'hydro': return 'text-cyan-600';
+      case 'hydroelectric': return 'text-cyan-600';
       case 'biomass': return 'text-green-600';
       case 'geothermal': return 'text-orange-600';
       default: return 'text-primary';

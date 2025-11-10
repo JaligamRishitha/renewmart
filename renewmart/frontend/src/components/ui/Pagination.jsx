@@ -8,7 +8,8 @@ const Pagination = ({
   onPageChange, 
   itemsPerPage = 12,
   totalItems = 0,
-  showInfo = true 
+  showInfo = true,
+  arrowOnly = false
 }) => {
   if (totalPages <= 1) return null;
 
@@ -60,6 +61,29 @@ const Pagination = ({
 
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  if (arrowOnly) {
+    return (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          iconName="ChevronLeft"
+          className="w-10 h-10"
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          iconName="ChevronRight"
+          className="w-10 h-10"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-6 border-t border-border">

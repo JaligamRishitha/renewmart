@@ -3,6 +3,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "react-hot-toast";
 import Routes from "./Routes";
 import { AuthProvider } from "./contexts/AuthContext";
+import { MarketplaceSettingsProvider } from "./context/MarketplaceSettingsContext";
 
 // Import auth debug utilities in development
 if (import.meta.env.DEV) {
@@ -39,7 +40,9 @@ function App() {
   return (
     <HelmetProvider>
       <AuthProvider>
-        <Routes />
+        <MarketplaceSettingsProvider>
+          <Routes />
+        </MarketplaceSettingsProvider>
         <Toaster 
           position="top-right"
           toastOptions={{

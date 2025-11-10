@@ -9,7 +9,7 @@ import logging
 import os
 from pydantic import ValidationError
 from database import engine, Base
-from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health, websocket, messaging_api, document_versions, document_assignments, reviewer, notifications as notifications_router
+from routers import auth, users, lands, sections, tasks, investors, documents, reviews, logs as logs_router, cache, health, websocket, messaging_api, document_versions, document_assignments, reviewer, notifications as notifications_router, marketplace_settings
 from routers.document_slots import router as document_slots_router
 import logs
 from logs import log_request_middleware, setup_request_logging
@@ -200,6 +200,7 @@ app.include_router(websocket.router, tags=["websocket"])  # WebSocket router
 app.include_router(messaging_api.router, prefix="/api/messaging", tags=["messaging"])  # Messaging API router
 
 app.include_router(notifications_router.router, prefix="/api/notifications", tags=["notifications"])  # Notifications API router
+app.include_router(marketplace_settings.router, prefix="/api", tags=["marketplace-settings"])  # Marketplace settings router
 
 @app.get("/",
     summary="API Root",

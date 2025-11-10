@@ -153,8 +153,13 @@ const ReviewPanel = ({
   const [activeTab, setActiveTab] = useState("review");
   const [showMessaging, setShowMessaging] = useState(false);
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
-  // Load messaging unread count
+  
+  // Check if user is admin - hide messaging for admin
+  const isAdmin = currentUser?.roles?.includes('administrator') || false;
+  
+  // Load messaging unread count (only for non-admin users)
   const loadMessagingUnreadCount = async () => {
+    if (isAdmin) return; // Skip for admin
     try {
       if (currentTask?.land_id) {
         const response = await api.get('/messaging/messages/stats/unread-count');
@@ -166,14 +171,14 @@ const ReviewPanel = ({
   };
 
   useEffect(() => {
-    if (!showMessaging) {
+    if (!isAdmin && !showMessaging) {
       loadMessagingUnreadCount();
       const interval = setInterval(() => {
         loadMessagingUnreadCount();
       }, 30000); // Refresh every 30 seconds
       return () => clearInterval(interval);
     }
-  }, [showMessaging, currentTask?.land_id]);
+  }, [showMessaging, currentTask?.land_id, isAdmin]);
 
   // 🔹 Reload state from localStorage when user becomes available
   useEffect(() => {
@@ -593,8 +598,7 @@ const ReviewPanel = ({
     return result;
   }, [subtasks, currentCriteria, reviewerRole, templateSections]); // Added templateSections dependency
 
-  // 🔹 Check if user is admin (view-only for subtask status)
-  const isAdmin = currentUser?.roles?.includes('administrator') || false;
+  // isAdmin is already declared above (line 158)
   const isTaskAssignedToMe = currentTask?.assigned_to === currentUser?.user_id;
   
   // Admin can only change status if they are also the assigned reviewer
@@ -860,39 +864,8 @@ const ReviewPanel = ({
 
   return (
     <div className="flex flex-col h-full bg-card border border-border rounded-lg overflow-hidden">
-      {/* Messaging Button - Role tabs removed */}
-      <div className="p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-end">
-          <button
-            onClick={() => {
-              setShowMessaging(!showMessaging);
-              if (!showMessaging) {
-                // Clear count when opening messaging
-                setMessagingUnreadCount(0);
-              } else {
-                // Refresh count when closing messaging
-                loadMessagingUnreadCount();
-              }
-            }}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors relative ${
-              showMessaging
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
-            }`}
-          >
-            <Icon name="MessageCircle" size={16} />
-            <span>Messaging</span>
-            {!showMessaging && messagingUnreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {messagingUnreadCount > 99 ? '99+' : messagingUnreadCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs - Hide when messaging is open */}
-      {!showMessaging && (
+      {/* Tabs - Always show for admin, hide when messaging is open for reviewers */}
+      {(!showMessaging || isAdmin) && (
         <div className="flex border-b flex-shrink-0">
           {tabs.map((tab) => (
             <button
@@ -911,8 +884,8 @@ const ReviewPanel = ({
         </div>
       )}
 
-      {/* Messaging Content - Takes full remaining height when open */}
-      {showMessaging && (
+      {/* Messaging Content - Only show for non-admin users */}
+      {showMessaging && !isAdmin && (
         <div className="flex-1 overflow-hidden min-h-0">
           <TeamsStyleMessaging 
             currentUser={currentUser}
@@ -929,8 +902,8 @@ const ReviewPanel = ({
         </div>
       )}
 
-      {/* Tab Content - Only show when messaging is closed */}
-      {!showMessaging && (
+      {/* Tab Content - Show when messaging is closed or for admin */}
+      {(!showMessaging || isAdmin) && (
       <div className="flex-1 overflow-hidden relative min-h-0">
         {!showMessaging && activeTab === "review" && (
           <div className="h-full overflow-y-auto">

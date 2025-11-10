@@ -182,7 +182,7 @@ const DocumentUpload = () => {
             const normalized = energyKey.toLowerCase().trim();
             // Map backend enum values to form values
             if (normalized === 'hydro' || normalized === 'hydroelectric') {
-              projectType = 'hydro';
+              projectType = 'hydroelectric';
             } else if (['solar', 'wind', 'biomass', 'geothermal'].includes(normalized)) {
               projectType = normalized;
             } else {
@@ -494,7 +494,7 @@ const DocumentUpload = () => {
         } else if (normalized === 'solar' || normalized === 'solar energy') {
           energyKey = 'solar';
         } else if (normalized === 'hydro' || normalized === 'hydroelectric' || normalized === 'hydroelectric energy') {
-          energyKey = 'hydro';
+          energyKey = 'hydroelectric';
         } else if (normalized === 'biomass' || normalized === 'biomass energy') {
           energyKey = 'biomass';
         } else if (normalized === 'geothermal' || normalized === 'geothermal energy') {

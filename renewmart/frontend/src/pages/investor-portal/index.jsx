@@ -42,7 +42,7 @@ const InvestorPortal = () => {
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(12);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const mockSavedSearches = [];
   const mockWatchlistItems = [];
   
@@ -171,10 +171,10 @@ const InvestorPortal = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedProjects = sortedProjects.slice(startIndex, endIndex);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or itemsPerPage change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters]);
+  }, [filters, itemsPerPage]);
 
   useEffect(() => {
     // Initialize with mock data
@@ -468,7 +468,29 @@ const InvestorPortal = () => {
 
           {/* Main Content Area */}
           <div className="lg:col-span-3">
-            
+            {/* Items Per Page Selector */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-foreground">
+                  Projects per page:
+                </label>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-3 py-1.5 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm bg-background"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                </select>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, sortedProjects.length)} of {sortedProjects.length} projects
+              </div>
+            </div>
 
             {/* Content Area */}
             {isLoadingProjects ? (
@@ -505,14 +527,15 @@ const InvestorPortal = () => {
                 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="mt-6">
+                  <div className="mt-6 flex justify-end">
                     <Pagination
                       currentPage={currentPage}
                       totalPages={totalPages}
                       onPageChange={setCurrentPage}
                       itemsPerPage={itemsPerPage}
                       totalItems={sortedProjects.length}
-                      showInfo={true}
+                      showInfo={false}
+                      arrowOnly={true}
                     />
                   </div>
                 )}

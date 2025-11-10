@@ -7,7 +7,7 @@ const ProjectEditModal = ({ isOpen, onClose, project, onUpdate }) => {
   const [updatedProject, setUpdatedProject] = useState({
     title: "",
     project_due_date: "",
-    priority: "",
+    project_priority: "",
     status: ""
   });
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ const ProjectEditModal = ({ isOpen, onClose, project, onUpdate }) => {
       setUpdatedProject({
         title: project.title || "",
         project_due_date: project.project_due_date ? new Date(project.project_due_date).toISOString().split("T")[0] : "",
-        priority: project.priority || "",
+        project_priority: project.project_priority || project.priority || "",
         status: project.status || ""
       });
     }
@@ -30,24 +30,43 @@ const ProjectEditModal = ({ isOpen, onClose, project, onUpdate }) => {
   };
 
   const handleSave = async () => {
-    if (!project?.land_id) return;
+    // Get land_id from project (could be land_id or id)
+    const landId = project?.land_id || project?.id || project?.landId;
+    if (!landId) {
+      setError('Project ID not found');
+      return;
+    }
+    
+    // Validate required fields
+    if (!updatedProject.title || updatedProject.title.trim() === '') {
+      setError('Project name is required');
+      return;
+    }
     
     setLoading(true);
     setError('');
     
     try {
+      // Prepare update data - include all fields, use null for empty optional fields
+      const updateData = {
+        title: updatedProject.title.trim(),
+        project_due_date: updatedProject.project_due_date || null,
+        project_priority: updatedProject.project_priority || null,
+        status: updatedProject.status || null
+      };
+      
       // Update project details via API
-      await landsAPI.updateProject(project.land_id, updatedProject);
+      await landsAPI.updateLand(landId, updateData);
       
       // Call the parent update function
       if (onUpdate) {
-        onUpdate(project.land_id, updatedProject);
+        onUpdate(landId, updateData);
       }
       
       onClose();
     } catch (err) {
       console.error('Error updating project:', err);
-      setError(err.response?.data?.detail || 'Failed to update project');
+      setError(err.response?.data?.detail || err.message || 'Failed to update project');
     } finally {
       setLoading(false);
     }
@@ -121,8 +140,8 @@ const ProjectEditModal = ({ isOpen, onClose, project, onUpdate }) => {
               Priority
             </label>
             <select
-              name="priority"
-              value={updatedProject.priority}
+              name="project_priority"
+              value={updatedProject.project_priority}
               onChange={handleChange}
               className="w-full border border-border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
               disabled={loading}
@@ -131,7 +150,7 @@ const ProjectEditModal = ({ isOpen, onClose, project, onUpdate }) => {
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
-              <option value="urgent">Urgent</option>
+              <option value="critical">Critical</option>
             </select>
           </div>
 

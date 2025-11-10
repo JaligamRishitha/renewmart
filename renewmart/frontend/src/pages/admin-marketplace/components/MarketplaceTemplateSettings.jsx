@@ -1,38 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../../../components/ui/Button';
 import Icon from '../../../components/AppIcon';
 import Input from '../../../components/ui/Input';
+import { useMarketplaceSettings } from '../../../context/MarketplaceSettingsContext';
 
 const MarketplaceTemplateSettings = ({ onClose, onSave }) => {
+  const { settings: currentSettings, saveSettings, loadSettings } = useMarketplaceSettings();
   const [activeTab, setActiveTab] = useState('features'); // 'features', 'design'
   const [saving, setSaving] = useState(false);
   
-  // Template state
-  const [template, setTemplate] = useState({
-    // Features configuration
-    showCapacity: true,
-    showPrice: true,
-    showLocation: true,
-    showEnergyType: true,
-    showTimeline: true,
-    showArea: false,
-    showContractTerm: false,
-    showDeveloperName: false,
-    showInterestCount: true,
-    
-    // Design settings
-    cardStyle: 'modern', // 'modern', 'classic', 'minimal'
-    colorScheme: {
-      primary: '#3b82f6',
-      secondary: '#64748b',
-      accent: '#10b981',
-      background: '#ffffff'
-    },
-    layout: 'grid', // 'grid', 'list', 'masonry'
-    cardsPerRow: 3,
-    showFilters: true,
-    showSorting: true
-  });
+  // Template state - initialize with current settings
+  const [template, setTemplate] = useState(currentSettings);
+  
+  // Update template when settings load
+  useEffect(() => {
+    if (currentSettings) {
+      setTemplate(currentSettings);
+    }
+  }, [currentSettings]);
 
   const handleFeatureToggle = (feature) => {
     setTemplate(prev => ({
@@ -54,13 +39,14 @@ const MarketplaceTemplateSettings = ({ onClose, onSave }) => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // TODO: Save template to backend API
-      // await marketplaceAPI.saveTemplate(template);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-      onSave(template);
+      const success = await saveSettings(template);
+      if (success) {
+        onSave(template);
+        // Reload settings to ensure all components get updated
+        await loadSettings();
+      }
     } catch (error) {
       console.error('Error saving template:', error);
-      alert('Failed to save template settings');
     } finally {
       setSaving(false);
     }

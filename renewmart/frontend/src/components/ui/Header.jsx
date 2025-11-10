@@ -56,7 +56,7 @@ const Header = ({ userRole = 'landowner', notifications = {} }) => {
       path: roleNavigation.portal || '/investor/portal',
       icon: 'Store',
       roles: ['investor'],
-      badge: notifications?.opportunities || 0
+     
     },
     {
       label: 'Dashboard',

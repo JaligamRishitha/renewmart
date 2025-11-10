@@ -1503,28 +1503,39 @@ async def get_dashboard_metrics(
     user_id = current_user.get("user_id")
     
     try:
-        # Get total interests count
-        interests_query = text("""
+        # Filter to exclude withdrawn interests (withdrawal_status = 'approved')
+        # This filter will be used in all queries
+        withdrawal_filter = """
+            AND (ii.withdrawal_requested = FALSE 
+                 OR ii.withdrawal_status IS NULL 
+                 OR ii.withdrawal_status != 'approved')
+        """
+        
+        # Get total interests count (excluding withdrawn)
+        interests_query = text(f"""
             SELECT COUNT(*) as total_interests
-            FROM investor_interests
-            WHERE investor_id::text = :user_id
+            FROM investor_interests ii
+            WHERE ii.investor_id::text = :user_id
+            {withdrawal_filter}
         """)
         interests_result = db.execute(interests_query, {"user_id": str(user_id)}).fetchone()
         total_interests = interests_result.total_interests if interests_result else 0
         
-        # Get recent interests (last 7 days)
-        recent_interests_query = text("""
+        # Get recent interests (last 7 days, excluding withdrawn)
+        recent_interests_query = text(f"""
             SELECT COUNT(*) as recent_interests
-            FROM investor_interests
-            WHERE investor_id::text = :user_id
-            AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+            FROM investor_interests ii
+            WHERE ii.investor_id::text = :user_id
+            AND ii.created_at >= CURRENT_DATE - INTERVAL '7 days'
+            {withdrawal_filter}
         """)
         recent_result = db.execute(recent_interests_query, {"user_id": str(user_id)}).fetchone()
         recent_interests = recent_result.recent_interests if recent_result else 0
         
         # Get total dollars invested (estimate based on capacity * price_per_mwh for approved interests)
         # This is an approximation - actual investment amounts would be stored separately
-        investment_query = text("""
+        # Exclude withdrawn interests
+        investment_query = text(f"""
             SELECT 
                 COALESCE(SUM(
                     CASE 
@@ -1537,12 +1548,13 @@ async def get_dashboard_metrics(
             JOIN lands l ON ii.land_id = l.land_id
             WHERE ii.investor_id::text = :user_id
             AND ii.status IN ('approved', 'contacted', 'pending')
+            {withdrawal_filter}
         """)
         investment_result = db.execute(investment_query, {"user_id": str(user_id)}).fetchone()
         total_invested = float(investment_result.total_invested) if investment_result else 0.0
         
-        # Get interests by status
-        status_query = text("""
+        # Get interests by status (excluding withdrawn)
+        status_query = text(f"""
             SELECT 
                 COUNT(CASE WHEN ii.status = 'pending' THEN 1 END) as pending,
                 COUNT(CASE WHEN ii.status = 'approved' THEN 1 END) as approved,
@@ -1550,17 +1562,19 @@ async def get_dashboard_metrics(
                 COUNT(CASE WHEN ii.status = 'rejected' THEN 1 END) as rejected
             FROM investor_interests ii
             WHERE ii.investor_id::text = :user_id
+            {withdrawal_filter}
         """)
         status_result = db.execute(status_query, {"user_id": str(user_id)}).fetchone()
         
-        # Get monthly interest trends (last 6 months)
-        trends_query = text("""
+        # Get monthly interest trends (last 6 months, excluding withdrawn)
+        trends_query = text(f"""
             SELECT 
                 TO_CHAR(ii.created_at, 'YYYY-MM') as month,
                 COUNT(*) as count
             FROM investor_interests ii
             WHERE ii.investor_id::text = :user_id
             AND ii.created_at >= CURRENT_DATE - INTERVAL '6 months'
+            {withdrawal_filter}
             GROUP BY TO_CHAR(ii.created_at, 'YYYY-MM')
             ORDER BY month ASC
         """)
@@ -1570,14 +1584,15 @@ async def get_dashboard_metrics(
             for row in trends_results
         ]
         
-        # Get interests by project type
-        project_type_query = text("""
+        # Get interests by project type (excluding withdrawn)
+        project_type_query = text(f"""
             SELECT 
                 COALESCE(l.energy_key, 'Unknown') as project_type,
                 COUNT(*) as count
             FROM investor_interests ii
             JOIN lands l ON ii.land_id = l.land_id
             WHERE ii.investor_id::text = :user_id
+            {withdrawal_filter}
             GROUP BY l.energy_key
             ORDER BY count DESC
         """)
@@ -1626,6 +1641,7 @@ async def get_dashboard_interests(
     user_id = current_user.get("user_id")
     
     try:
+        # Exclude withdrawn interests (withdrawal_status = 'approved')
         query = text("""
             SELECT 
                 ii.interest_id,
@@ -1640,6 +1656,9 @@ async def get_dashboard_interests(
             FROM investor_interests ii
             JOIN lands l ON ii.land_id = l.land_id
             WHERE ii.investor_id::text = :user_id
+            AND (ii.withdrawal_requested = FALSE 
+                 OR ii.withdrawal_status IS NULL 
+                 OR ii.withdrawal_status != 'approved')
             ORDER BY ii.created_at DESC
             LIMIT :limit
         """)
