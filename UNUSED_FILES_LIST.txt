@@ -1,0 +1,68 @@
+================================================================================
+UNUSED FILES IN landinvest_pro DIRECTORY
+================================================================================
+
+Generated: 2025-01-16
+
+================================================================================
+1. EMPTY FILE (DELETE IMMEDIATELY)
+================================================================================
+pages/document-versions/components/DocumentVersionsSidebar.jsx
+
+================================================================================
+2. FILES NEEDING MANUAL VERIFICATION
+================================================================================
+These files may be unused - verify they're imported in their parent pages:
+
+Document Review Components:
+- pages/document-review/components/CollaborationTools.jsx
+- pages/document-review/components/DocumentViewer.jsx
+- pages/document-review/components/RealTimeMessaging.jsx
+- pages/document-review/components/ReviewPanel.jsx
+- pages/document-review/components/TaskDetails.jsx
+
+Document Versions Components:
+- pages/document-versions/components/ReviewerActions.jsx
+
+Investor Portal Components:
+- pages/investor-portal/components/FilterPanel.jsx
+- pages/investor-portal/components/MapView.jsx
+- pages/investor-portal/components/ProjectCard.jsx
+- pages/investor-portal/components/SavedSearches.jsx
+- pages/investor-portal/components/WatchlistPanel.jsx
+
+Register Components:
+- pages/register/components/PasswordStrengthIndicator.jsx
+- pages/register/components/RoleSelector.jsx
+- pages/register/components/RoleSpecificFields.jsx
+- pages/register/components/TrustSignals.jsx
+
+Services:
+- services/documentVersionService.js
+- services/websocketService.js
+
+Utils:
+- utils/cn.js
+
+================================================================================
+3. DUPLICATE FILES (exist in both frontend and landinvest_pro)
+================================================================================
+54 files are duplicates between frontend/ and landinvest_pro/
+
+All major components and pages exist in both directories.
+Consider consolidating to avoid confusion and maintenance overhead.
+
+================================================================================
+SUMMARY
+================================================================================
+Total files: 61
+Entry points: 12
+Verified used: ~35 files
+Empty files: 1 (DELETE)
+Duplicates: 54 files
+Needs verification: ~15 files
+
+================================================================================
+For detailed analysis, see: UNUSED_FILES_REPORT.md
+================================================================================
+

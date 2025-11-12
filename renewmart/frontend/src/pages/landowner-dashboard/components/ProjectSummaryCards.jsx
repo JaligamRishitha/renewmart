@@ -24,7 +24,7 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'completed-submissions',
       title: 'Completed Submissions',
-      value: summaryData?.completedSubmissions,
+      value: summaryData?.completedSubmissions ?? 0,
       unit: 'submissions',
       icon: 'CheckCircle',
       color: 'bg-accent',
@@ -33,8 +33,10 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'estimated-revenue',
       title: 'Estimated Revenue',
-      value: `£${summaryData?.estimatedRevenue}`,
-      unit: '/MWh',
+      value: summaryData?.estimatedRevenue 
+        ? `£${(summaryData.estimatedRevenue).toFixed(2)}M`
+        : '£0.00M',
+      unit: 'annual',
       icon: 'PoundSterling',
       color: 'bg-warning',
       textColor: 'text-warning-foreground'
