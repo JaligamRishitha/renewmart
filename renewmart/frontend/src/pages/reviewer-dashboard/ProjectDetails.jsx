@@ -536,9 +536,11 @@ const ProjectDetails = () => {
           // Find the latest document that's under review, approved, or rejected in this slot
           sortedSlotDocs.forEach((doc, index) => {
             const versionNumber = doc.version_number || (index + 1); // Use actual version_number if available, otherwise calculate
-            const isUnderReview = doc.version_status === 'under_review' || doc.status === 'under_review';
-            const isApproved = doc.status === 'approved';
-            const isRejected = doc.status === 'rejected';
+            // Use version_status as primary source, fallback to status for backward compatibility
+            const versionStatus = doc.version_status || doc.status || 'pending';
+            const isUnderReview = versionStatus === 'under_review';
+            const isApproved = versionStatus === 'approved';
+            const isRejected = versionStatus === 'rejected';
             
             // Track only the latest version for each status
             if (isUnderReview) {
@@ -606,33 +608,16 @@ const ProjectDetails = () => {
       const sortedSlotDocs = slotDocs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       
       sortedSlotDocs.forEach((doc, index) => {
-        // Preserve approved/rejected status - these take priority
-        let finalStatus = doc.status || 'pending';
-        let finalVersionStatus = doc.version_status || 'active';
-        
-        // If document is approved or rejected, preserve that status
-        if (doc.status === 'approved' || doc.status === 'rejected') {
-          finalStatus = doc.status;
-          finalVersionStatus = doc.version_status || 'active';
-        } 
-        // If document is under review, use that status
-        else if (doc.version_status === 'under_review' || doc.status === 'under_review') {
-          finalStatus = 'under_review';
-          finalVersionStatus = 'under_review';
-        }
-        // Otherwise, use the status from the document
-        else {
-          finalStatus = doc.status || doc.version_status || 'pending';
-          finalVersionStatus = doc.version_status || doc.status || 'active';
-        }
+        // Use version_status as primary source, fallback to status for backward compatibility
+        const versionStatus = doc.version_status || doc.status || 'pending';
         
         const processedDoc = {
           ...doc,
           version: index + 1, // Independent version numbering per slot
           isLatest: index === sortedSlotDocs.length - 1, // Last document in slot is latest
-          // Preserve the actual status from backend (approved, rejected, under_review, pending, etc.)
-          status: finalStatus,
-          version_status: finalVersionStatus
+          // Use version_status as the primary status field
+          version_status: versionStatus,
+          status: versionStatus // Keep status for backward compatibility but use version_status value
         };
         
         console.log(`Processing document ${doc.file_name} in ${slot}:`, {
@@ -1365,19 +1350,30 @@ const handleRejectDocument = async (doc) => {
                                                       </span>
                                                     )}
                                                     {/* Show approved/rejected status first, then under review - only one at a time */}
-                                                    {doc.status === 'approved' ? (
-                                                      <span className="px-2 py-1 bg-green-500 text-white text-xs rounded">
-                                                        Approved
-                                                      </span>
-                                                    ) : doc.status === 'rejected' ? (
-                                                      <span className="px-2 py-1 bg-red-500 text-white text-xs rounded">
-                                                        Rejected
-                                                      </span>
-                                                    ) : isDocumentUnderReview(doc) ? (
-                                                      <span className="px-2 py-1 bg-orange-500 text-white text-xs rounded">
-                                                        Under Review
-                                                      </span>
-                                                    ) : null}
+                                                    {/* Use version_status as primary source, fallback to status for backward compatibility */}
+                                                    {(() => {
+                                                      const versionStatus = doc.version_status || doc.status || 'pending';
+                                                      if (versionStatus === 'approved') {
+                                                        return (
+                                                          <span className="px-2 py-1 bg-green-500 text-white text-xs rounded">
+                                                            Approved
+                                                          </span>
+                                                        );
+                                                      } else if (versionStatus === 'rejected') {
+                                                        return (
+                                                          <span className="px-2 py-1 bg-red-500 text-white text-xs rounded">
+                                                            Rejected
+                                                          </span>
+                                                        );
+                                                      } else if (versionStatus === 'under_review') {
+                                                        return (
+                                                          <span className="px-2 py-1 bg-orange-500 text-white text-xs rounded">
+                                                            Under Review
+                                                          </span>
+                                                        );
+                                                      }
+                                                      return null;
+                                                    })()}
                                                   </div>
                                                 </div>
                                               </div>

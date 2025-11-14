@@ -5,6 +5,7 @@ import Sidebar from '../../components/ui/Sidebar';
 import Footer from '../../components/ui/Footer';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
 import { landsAPI } from '../../services/api';
 import AdminProjectCard from './components/AdminProjectCard';
 import DraftProjectModal from './components/DraftProjectModal';
@@ -19,6 +20,8 @@ const AdminProjects = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [selectedDraftProject, setSelectedDraftProject] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
 
   useEffect(() => {
     fetchProjects();
@@ -226,6 +229,17 @@ const AdminProjects = () => {
 
   const currentProjects = activeTab === 'submitted' ? submittedProjects : draftProjects;
 
+  // Pagination logic
+  const totalPages = Math.ceil(currentProjects.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProjects = currentProjects.slice(startIndex, endIndex);
+
+  // Reset to page 1 when tab changes or itemsPerPage changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, itemsPerPage]);
+
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="admin" />
@@ -246,53 +260,70 @@ const AdminProjects = () => {
             </p>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs and Records Per Page Selector */}
           <div className="mb-6">
-            <div className="flex items-center gap-2 border-b border-border">
-              <button
-                className={`px-4 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === 'submitted'
-                    ? 'text-primary border-b-2 border-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setActiveTab('submitted')}
-              >
-                <div className="flex items-center space-x-2">
-                  <Icon name="FileCheck" size={16} />
-                  <span>Submitted Projects</span>
-                  {submittedProjects.length > 0 && (
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      activeTab === 'submitted'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {submittedProjects.length}
-                    </span>
-                  )}
-                </div>
-              </button>
-              <button
-                className={`px-4 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === 'draft'
-                    ? 'text-primary border-b-2 border-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setActiveTab('draft')}
-              >
-                <div className="flex items-center space-x-2">
-                  <Icon name="FileText" size={16} />
-                  <span>Draft Projects</span>
-                  {draftProjects.length > 0 && (
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      activeTab === 'draft'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {draftProjects.length}
-                    </span>
-                  )}
-                </div>
-              </button>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 border-b border-border">
+                <button
+                  className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                    activeTab === 'submitted'
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('submitted')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Icon name="FileCheck" size={16} />
+                    <span>Submitted Projects</span>
+                    {submittedProjects.length > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === 'submitted'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {submittedProjects.length}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                    activeTab === 'draft'
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('draft')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Icon name="FileText" size={16} />
+                    <span>Draft Projects</span>
+                    {draftProjects.length > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === 'draft'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {draftProjects.length}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
+              
+              {/* Records Per Page Selector */}
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-muted-foreground">Records per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="px-3 py-1.5 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -320,19 +351,35 @@ const AdminProjects = () => {
           {!loading && !error && (
             <>
               {currentProjects.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {currentProjects.map((project) => (
-                    <AdminProjectCard
-                      key={project.id || project.land_id}
-                      project={project}
-                      isDraft={activeTab === 'draft'}
-                      onView={handleViewProject}
-                      onViewDetails={handleViewDetails}
-                      onPublish={handlePublishProject}
-                      onUnpublish={handleUnpublishProject}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {paginatedProjects.map((project) => (
+                      <AdminProjectCard
+                        key={project.id || project.land_id}
+                        project={project}
+                        isDraft={activeTab === 'draft'}
+                        onView={handleViewProject}
+                        onViewDetails={handleViewDetails}
+                        onPublish={handlePublishProject}
+                        onUnpublish={handleUnpublishProject}
+                      />
+                    ))}
+                  </div>
+                  
+                  {/* Pagination - Bottom */}
+                  {totalPages > 1 && (
+                    <div className="mt-6">
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        totalItems={currentProjects.length}
+                        showInfo={true}
+                      />
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="bg-card border border-border rounded-lg p-12 text-center">
                   <Icon

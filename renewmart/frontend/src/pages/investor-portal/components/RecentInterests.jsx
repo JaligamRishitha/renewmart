@@ -71,11 +71,23 @@ const RecentInterests = ({ interests = [], isLoading = false }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          {interests.map((interest) => (
+          {interests.map((interest) => {
+            // Determine route based on interest status
+            const handleClick = () => {
+              const status = (interest.status || '').toLowerCase();
+              if (status === 'approved') {
+                navigate(`/investor/project-details/${interest.land_id}`);
+              } else {
+                // For pending or other statuses, use land-details
+                navigate(`/investor/land-details/${interest.land_id}`);
+              }
+            };
+
+            return (
             <div
               key={interest.interest_id}
               className="flex items-start justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-smooth cursor-pointer"
-              onClick={() => navigate(`/investor/project-details/${interest.land_id}`)}
+              onClick={handleClick}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between mb-2">
@@ -120,7 +132,8 @@ const RecentInterests = ({ interests = [], isLoading = false }) => {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

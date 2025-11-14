@@ -49,27 +49,21 @@ async def get_document_versions(
             detail="Not enough permissions to view document versions"
         )
     
-    # Get all versions of the document (exclude subtask documents)
-    query = text("""
-        SELECT d.*, u.first_name, u.last_name, u.email as uploader_email,
-               approver.first_name as approver_first_name, approver.last_name as approver_last_name
-        FROM documents d
-        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
-        LEFT JOIN "user" approver ON d.approved_by = approver.user_id
-        WHERE d.land_id = :land_id AND d.document_type = :document_type
-        AND d.subtask_id IS NULL
-        ORDER BY d.doc_slot, d.version_number DESC, d.created_at DESC
-    """)
-    
-    result = db.execute(query, {
-        "land_id": str(land_id),
-        "document_type": document_type
-    }).fetchall()
+    # Get all versions of the document using stored procedure
+    result = db.execute(
+        text("SELECT * FROM get_document_versions_by_type(CAST(:land_id AS uuid), :document_type)"),
+        {
+            "land_id": str(land_id),
+            "document_type": document_type
+        }
+    ).fetchall()
     
     documents = []
     for row in result:
         doc_dict = dict(row._mapping)
-        # Convert to Document schema format
+        # Convert to Document schema format - use only version_status, remove status field
+        # Ensure version_status defaults to 'pending' if null
+        version_status = doc_dict.get("version_status") or 'pending'
         documents.append({
             "document_id": doc_dict["document_id"],
             "land_id": doc_dict["land_id"],
@@ -78,13 +72,12 @@ async def get_document_versions(
             "file_size": doc_dict["file_size"],
             "mime_type": doc_dict["mime_type"],
             "is_draft": doc_dict["is_draft"],
-            "status": doc_dict["status"],
             "approved_by": doc_dict.get("approved_by"),
             "approved_at": doc_dict.get("approved_at"),
             "rejection_reason": doc_dict.get("rejection_reason"),
             "version_number": doc_dict["version_number"],
             "is_latest_version": doc_dict["is_latest_version"],
-            "version_status": doc_dict["version_status"],
+            "version_status": version_status,
             "version_notes": doc_dict["version_notes"],
             "version_change_reason": doc_dict["version_change_reason"],
             "review_locked_at": doc_dict["review_locked_at"],
@@ -106,15 +99,11 @@ async def lock_document_for_review(
 ):
     """Lock a document version for review (admin only)"""
     
-    # Get document info
-    doc_query = text("""
-        SELECT d.*, l.land_id, l.title as land_title
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    doc_result = db.execute(doc_query, {"document_id": str(document_id)}).fetchone()
+    # Get document info using stored procedure
+    doc_result = db.execute(
+        text("SELECT * FROM get_document_info_for_lock(CAST(:document_id AS uuid))"),
+        {"document_id": str(document_id)}
+    ).fetchone()
     
     if not doc_result:
         raise HTTPException(
@@ -129,22 +118,23 @@ async def lock_document_for_review(
             detail="Document is already locked for review"
         )
     
-    # Lock the document
-    lock_query = text("""
-        UPDATE documents 
-        SET version_status = 'under_review',
-            review_locked_at = :locked_at,
-            review_locked_by = :locked_by,
-            version_change_reason = :reason
-        WHERE document_id = :document_id
-    """)
-    
-    db.execute(lock_query, {
-        "document_id": str(document_id),
-        "locked_at": datetime.utcnow(),
-        "locked_by": current_user["user_id"],
-        "reason": reason
-    })
+    # Lock the document using stored procedure
+    db.execute(
+        text("""
+            SELECT lock_document_version_for_review(
+                CAST(:document_id AS uuid),
+                :locked_at,
+                CAST(:locked_by AS uuid),
+                :reason
+            )
+        """),
+        {
+            "document_id": str(document_id),
+            "locked_at": datetime.utcnow(),
+            "locked_by": str(current_user["user_id"]),
+            "reason": reason
+        }
+    )
     
     db.commit()
     
@@ -169,15 +159,11 @@ async def unlock_document(
 ):
     """Unlock a document version from review (admin only)"""
     
-    # Get document info
-    doc_query = text("""
-        SELECT d.*, l.land_id, l.title as land_title
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    doc_result = db.execute(doc_query, {"document_id": str(document_id)}).fetchone()
+    # Get document info using stored procedure
+    doc_result = db.execute(
+        text("SELECT * FROM get_document_info_for_lock(CAST(:document_id AS uuid))"),
+        {"document_id": str(document_id)}
+    ).fetchone()
     
     if not doc_result:
         raise HTTPException(
@@ -192,20 +178,19 @@ async def unlock_document(
             detail="Document is not locked for review"
         )
     
-    # Unlock the document
-    unlock_query = text("""
-        UPDATE documents 
-        SET version_status = 'active',
-            review_locked_at = NULL,
-            review_locked_by = NULL,
-            version_change_reason = :reason
-        WHERE document_id = :document_id
-    """)
-    
-    db.execute(unlock_query, {
-        "document_id": str(document_id),
-        "reason": reason
-    })
+    # Unlock the document using stored procedure
+    db.execute(
+        text("""
+            SELECT unlock_document_version(
+                CAST(:document_id AS uuid),
+                :reason
+            )
+        """),
+        {
+            "document_id": str(document_id),
+            "reason": reason
+        }
+    )
     
     db.commit()
     
@@ -216,7 +201,7 @@ async def unlock_document(
         doc_result.document_type,
         doc_result.version_number,
         str(current_user["user_id"]),
-        'active',
+        'pending',
         reason
     )
     
@@ -247,10 +232,10 @@ async def archive_document_version(
             detail="Document not found"
         )
     
-    # Archive the document
+    # Archive the document - use rejected status instead of archived
     archive_query = text("""
         UPDATE documents 
-        SET version_status = 'archived',
+        SET version_status = 'rejected',
             version_change_reason = :reason
         WHERE document_id = :document_id
     """)
@@ -269,7 +254,7 @@ async def archive_document_version(
         doc_result.document_type,
         doc_result.version_number,
         str(current_user["user_id"]),
-        'archived',
+        'rejected',
         reason
     )
     
@@ -346,11 +331,10 @@ async def approve_document_version(
             detail="Not enough permissions. Only assigned reviewers can approve documents."
         )
     
-    # Approve the document
+    # Approve the document - use version_status only
     approve_query = text("""
         UPDATE documents 
-        SET status = 'approved',
-            version_status = 'active',
+        SET version_status = 'approved',
             approved_by = CAST(:approved_by AS uuid),
             approved_at = :approved_at,
             version_change_reason = :reason,
@@ -477,11 +461,10 @@ async def reject_document_version(
             detail="Rejection reason is required"
         )
     
-    # Reject the document
+    # Reject the document - use version_status only
     reject_query = text("""
         UPDATE documents 
-        SET status = 'rejected',
-            version_status = 'active',
+        SET version_status = 'rejected',
             approved_by = CAST(:approved_by AS uuid),
             approved_at = :approved_at,
             rejection_reason = :rejection_reason,
@@ -566,15 +549,16 @@ async def get_document_status_summary(
             detail="Not enough permissions to view document status"
         )
     
-    # Get status summary (exclude subtask documents)
+    # Get status summary (exclude subtask documents) - using version_status only
     summary_query = text("""
         SELECT 
             document_type,
             COUNT(*) as total_versions,
             COUNT(CASE WHEN is_latest_version = TRUE THEN 1 END) as latest_versions,
-            COUNT(CASE WHEN version_status = 'active' THEN 1 END) as active_versions,
+            COUNT(CASE WHEN version_status = 'pending' THEN 1 END) as pending_versions,
             COUNT(CASE WHEN version_status = 'under_review' THEN 1 END) as under_review_versions,
-            COUNT(CASE WHEN version_status = 'archived' THEN 1 END) as archived_versions,
+            COUNT(CASE WHEN version_status = 'approved' THEN 1 END) as approved_versions,
+            COUNT(CASE WHEN version_status = 'rejected' THEN 1 END) as rejected_versions,
             MAX(version_number) as max_version,
             MAX(created_at) as last_updated
         FROM documents 
@@ -592,9 +576,10 @@ async def get_document_status_summary(
             "document_type": row.document_type,
             "total_versions": row.total_versions,
             "latest_versions": row.latest_versions,
-            "active_versions": row.active_versions,
+            "pending_versions": row.pending_versions,
             "under_review_versions": row.under_review_versions,
-            "archived_versions": row.archived_versions,
+            "approved_versions": row.approved_versions,
+            "rejected_versions": row.rejected_versions,
             "max_version": row.max_version,
             "last_updated": row.last_updated
         })

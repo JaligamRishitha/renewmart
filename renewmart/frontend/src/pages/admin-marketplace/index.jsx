@@ -46,7 +46,7 @@ const AdminMarketplace = () => {
       if (filters.maxPrice) params.max_price = parseFloat(filters.maxPrice);
       if (filters.location) params.location = filters.location;
       
-      const data = await landsAPI.getMarketplaceProjects(params);
+      const data = await landsAPI.getAdminMarketplaceProjects(params);
       console.log('[Admin Marketplace] Fetched projects:', data);
       setProjects(data || []);
     } catch (err) {
@@ -433,6 +433,11 @@ const AdminMarketplace = () => {
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                               Published
                             </span>
+                            {project.is_interest_locked && (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                Interest Locked
+                              </span>
+                            )}
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">

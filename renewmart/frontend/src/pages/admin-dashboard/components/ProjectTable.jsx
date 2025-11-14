@@ -1,14 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "../../../components/AppIcon";
 import Button from "../../../components/ui/Button";
 import StatusBadge from "./StatusBadge";
+import Pagination from "../../../components/ui/Pagination";
 import { landsAPI } from "../../../services/api";
 
 const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
   const [sortField, setSortField] = useState("submittedDate");
   const [sortDirection, setSortDirection] = useState("desc");
   const [publishing, setPublishing] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const navigate = useNavigate();
 
   const handleSort = (field) => {
@@ -20,27 +23,40 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
     }
   };
 
-  const sortedProjects = [...projects]?.sort((a, b) => {
-    let aValue = a?.[sortField];
-    let bValue = b?.[sortField];
+  const sortedProjects = useMemo(() => {
+    return [...projects]?.sort((a, b) => {
+      let aValue = a?.[sortField];
+      let bValue = b?.[sortField];
 
-    // Handle date fields
-    if (sortField === "submittedDate" || sortField === "created_at" || sortField === "project_due_date") {
-      // Fallback to created_at if submittedDate is not available
-      if (sortField === "submittedDate") {
-        aValue = a?.submittedDate || a?.created_at;
-        bValue = b?.submittedDate || b?.created_at;
+      // Handle date fields
+      if (sortField === "submittedDate" || sortField === "created_at" || sortField === "project_due_date") {
+        // Fallback to created_at if submittedDate is not available
+        if (sortField === "submittedDate") {
+          aValue = a?.submittedDate || a?.created_at;
+          bValue = b?.submittedDate || b?.created_at;
+        }
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
       }
-      aValue = new Date(aValue);
-      bValue = new Date(bValue);
-    }
 
-    if (sortDirection === "asc") {
-      return aValue > bValue ? 1 : -1;
-    } else {
-      return aValue < bValue ? 1 : -1;
-    }
-  });
+      if (sortDirection === "asc") {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  }, [projects, sortField, sortDirection]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(sortedProjects.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProjects = sortedProjects.slice(startIndex, endIndex);
+
+  // Reset to page 1 when itemsPerPage changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "Not set";
@@ -110,6 +126,26 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
 
   return (
     <div className="bg-card border border-border rounded-lg shadow-elevation-1 overflow-hidden">
+      {/* Records Per Page Selector - Top Right */}
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
+        <div className="text-sm text-muted-foreground">
+          Total Projects: {sortedProjects.length}
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-muted-foreground">Records per page:</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+            className="px-3 py-1.5 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={30}>30</option>
+          </select>
+        </div>
+      </div>
+
       {/* Desktop Table */}
       <div className="hidden lg:block overflow-x-auto">
         <table className="w-full">
@@ -169,7 +205,7 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sortedProjects?.map((project) => (
+            {paginatedProjects?.map((project) => (
               <tr
                 key={project?.id}
                 className="hover:bg-muted/30 transition-smooth cursor-pointer"
@@ -288,7 +324,7 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
 
       {/* Mobile Cards */}
       <div className="lg:hidden divide-y divide-border">
-        {sortedProjects?.map((project) => (
+        {paginatedProjects?.map((project) => (
           <div
             key={project?.id}
             className="p-4 hover:bg-muted/30 transition-smooth cursor-pointer"
@@ -398,6 +434,20 @@ const ProjectTable = ({ projects, onProjectSelect, onPublishProject }) => {
           </div>
         ))}
       </div>
+
+      {/* Pagination - Bottom */}
+      {totalPages > 1 && (
+        <div className="px-6 py-4 border-t border-border">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            itemsPerPage={itemsPerPage}
+            totalItems={sortedProjects.length}
+            showInfo={true}
+          />
+        </div>
+      )}
     </div>
   );
 };

@@ -85,15 +85,15 @@ const LandownerDashboard = () => {
     // Apply search filter
     if (filters?.search) {
       filtered = filtered?.filter(project =>
-        project?.name?.toLowerCase()?.includes(filters?.search?.toLowerCase()) ||
-        project?.location?.toLowerCase()?.includes(filters?.search?.toLowerCase()) ||
-        project?.id?.toLowerCase()?.includes(filters?.search?.toLowerCase())
+        project?.title?.toLowerCase()?.includes(filters?.search?.toLowerCase()) ||
+        project?.location_text?.toLowerCase()?.includes(filters?.search?.toLowerCase()) ||
+        project?.land_id?.toLowerCase()?.includes(filters?.search?.toLowerCase())
       );
     }
 
     // Apply project type filter
     if (filters?.projectType !== 'all') {
-      filtered = filtered?.filter(project => project?.type === filters?.projectType);
+      filtered = filtered?.filter(project => project?.energy_key === filters?.projectType);
     }
 
     // Apply status filter
@@ -103,21 +103,21 @@ const LandownerDashboard = () => {
 
     // Apply timeline filter
     if (filters?.timeline !== 'all') {
-      filtered = filtered?.filter(project => project?.timeline === filters?.timeline);
+      filtered = filtered?.filter(project => project?.timeline_text === filters?.timeline);
     }
 
     // Apply sorting
     filtered?.sort((a, b) => {
       switch (filters?.sortBy) {
         case 'name':
-          return a?.name?.localeCompare(b?.name);
+          return a?.title?.localeCompare(b?.title);
         case 'location':
-          return a?.location?.localeCompare(b?.location);
+          return a?.location_text?.localeCompare(b?.location_text);
         case 'capacity':
-          return b?.capacity - a?.capacity;
+          return (b?.capacity_mw || 0) - (a?.capacity_mw || 0);
         case 'updated':
         default:
-          return new Date(b.lastUpdated) - new Date(a.lastUpdated);
+          return new Date(b?.updated_at || 0) - new Date(a?.updated_at || 0);
       }
     });
 
@@ -151,10 +151,10 @@ const LandownerDashboard = () => {
   const handleEditProject = async (project) => {
     try {
       // Fetch full project details to ensure all fields are available
-      const fullProject = await landsAPI.getLandById(project?.id);
+      const fullProject = await landsAPI.getLandById(project?.land_id);
       navigate('/document-upload', { 
         state: { 
-          projectId: project?.id, 
+          projectId: project?.land_id, 
           mode: 'edit',
           projectData: fullProject // Pass full project data for auto-population
         } 
@@ -162,7 +162,7 @@ const LandownerDashboard = () => {
     } catch (err) {
       console.error('Error fetching project details:', err);
       // Fallback to basic navigation
-      navigate('/document-upload', { state: { projectId: project?.id, mode: 'edit' } });
+      navigate('/document-upload', { state: { projectId: project?.land_id, mode: 'edit' } });
     }
   };
 
@@ -181,13 +181,13 @@ const LandownerDashboard = () => {
   };
 
   const handleContinueDraft = (project) => {
-    navigate('/document-upload', { state: { projectId: project?.id, mode: 'continue' } });
+    navigate('/document-upload', { state: { projectId: project?.land_id, mode: 'continue' } });
   };
 
   const handleSubmitForReview = async (project) => {
     try {
       // Call API to submit for admin review
-      await landsAPI.submitForReview(project.id);
+      await landsAPI.submitForReview(project.land_id);
       
       setNotifications(prev => [
         ...prev,
@@ -195,7 +195,7 @@ const LandownerDashboard = () => {
           id: Date.now(),
           type: 'success',
           title: 'Submitted for Review',
-          message: `${project?.name} has been submitted for admin review. You'll be notified once reviewed.`,
+          message: `${project?.title} has been submitted for admin review. You'll be notified once reviewed.`,
           timestamp: new Date(),
         }
       ]);
@@ -212,8 +212,8 @@ const LandownerDashboard = () => {
         console.error('Error refreshing projects after submission:', refreshErr);
         // Fallback: Update project status locally
         setProjects(prev => prev.map(p => 
-          p.id === project.id 
-            ? { ...p, status: 'under_review', lastUpdated: new Date().toISOString(), description: 'Admin reviewing - sections assigned to reviewers' }
+          p.land_id === project.land_id 
+            ? { ...p, status: 'under_review', updated_at: new Date().toISOString(), description: 'Admin reviewing - sections assigned to reviewers' }
             : p
         ));
       }
@@ -243,7 +243,7 @@ const LandownerDashboard = () => {
 
     try {
       // Call API to delete land
-      await landsAPI.deleteLand(projectToDelete.id);
+      await landsAPI.deleteLand(projectToDelete.land_id);
       
       setNotifications(prev => [
         ...prev,
@@ -251,13 +251,13 @@ const LandownerDashboard = () => {
           id: Date.now(),
           type: 'success',
           title: 'Draft Deleted',
-          message: `${projectToDelete?.name} has been deleted from server successfully.`,
+          message: `${projectToDelete?.title} has been deleted from server successfully.`,
           timestamp: new Date(),
         }
       ]);
       
       // Remove project from local state
-      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      setProjects(prev => prev.filter(p => p.land_id !== projectToDelete.land_id));
       
       // Close confirmation dialog
       setShowDeleteConfirm(false);
@@ -267,7 +267,7 @@ const LandownerDashboard = () => {
       console.error('Error deleting project from server:', err);
       
       // Remove from local state anyway (local deletion)
-      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      setProjects(prev => prev.filter(p => p.land_id !== projectToDelete.land_id));
       
       setNotifications(prev => [
         ...prev,
@@ -275,7 +275,7 @@ const LandownerDashboard = () => {
           id: Date.now(),
           type: 'warning',
           title: 'Deleted Locally',
-          message: `${projectToDelete?.name} was removed from your view. Server deletion failed: ${err.response?.data?.detail || 'Connection error'}. The draft may still exist on the server.`,
+          message: `${projectToDelete?.title} was removed from your view. Server deletion failed: ${err.response?.data?.detail || 'Connection error'}. The draft may still exist on the server.`,
           timestamp: new Date(),
         }
       ]);
@@ -476,7 +476,7 @@ const LandownerDashboard = () => {
               
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-red-800 mb-2">
-                  Are you sure you want to delete <strong>"{projectToDelete?.name}"</strong>?
+                  Are you sure you want to delete <strong>"{projectToDelete?.title}"</strong>?
                 </p>
                 <p className="text-xs text-red-700">
                   This will attempt to remove the project from the server. If the server deletion fails, 

@@ -31,9 +31,11 @@ async def save_review_status(
             detail=f"Invalid reviewer role. Must be one of: {', '.join(valid_roles)}"
         )
     
-    # Check if land exists
-    land_check = text("SELECT land_id FROM lands WHERE land_id = :land_id")
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    # Check if land exists using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM check_land_exists_for_review(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -119,9 +121,11 @@ async def save_review_status(
         # Auto-publish land to marketplace if this review is published
         if params.get("published") == True:
             try:
-                # Check if land is already published
-                land_status_query = text("SELECT status FROM lands WHERE land_id = :land_id")
-                land_status = db.execute(land_status_query, {"land_id": str(land_id)}).fetchone()
+                # Check if land is already published using stored procedure
+                land_status = db.execute(
+                    text("SELECT * FROM get_land_status(CAST(:land_id AS uuid))"),
+                    {"land_id": str(land_id)}
+                ).fetchone()
                 
                 if land_status and land_status.status != 'published':
                     # Check if land has required fields for publishing
@@ -232,9 +236,11 @@ async def get_all_review_statuses(
 ):
     """Get all review statuses for a land (all roles)."""
     
-    # Check if land exists
-    land_check = text("SELECT land_id FROM lands WHERE land_id = :land_id")
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    # Check if land exists using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM check_land_exists_for_review(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(

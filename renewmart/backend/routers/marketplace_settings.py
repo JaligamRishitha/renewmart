@@ -50,23 +50,52 @@ async def get_marketplace_settings(
 ):
     """Get current marketplace template settings"""
     try:
-        # Check if settings exist in database
-        query = text("""
-            SELECT settings_value
-            FROM system_settings
-            WHERE settings_key = 'marketplace_template'
-            LIMIT 1
-        """)
-        result = db.execute(query).fetchone()
+        # Ensure table exists first
+        db.execute(text("SELECT create_marketplace_settings_table()"))
+        db.commit()
         
-        if result and result.settings_value:
-            # Parse JSON settings
-            settings = json.loads(result.settings_value)
-            return MarketplaceTemplateSettings(**settings)
+        # Query the table directly for the specific setting key
+        result = db.execute(
+            text("""
+                SELECT setting_value 
+                FROM marketplace_settings 
+                WHERE setting_key = 'marketplace_template'
+                LIMIT 1
+            """)
+        ).fetchone()
+        
+        if result and result.setting_value:
+            # Parse JSON settings - result.setting_value is JSONB, which SQLAlchemy returns as dict
+            settings_dict = {}
+            if isinstance(result.setting_value, dict):
+                settings_dict = result.setting_value
+            else:
+                # If it's not a dict, try to parse it
+                try:
+                    if isinstance(result.setting_value, str):
+                        settings_dict = json.loads(result.setting_value)
+                    else:
+                        # Try to convert to dict
+                        settings_dict = dict(result.setting_value)
+                except (json.JSONDecodeError, TypeError, ValueError) as e:
+                    print(f"Error parsing settings value: {e}")
+                    # If parsing fails, return defaults
+                    return MarketplaceTemplateSettings()
+            
+            # Create settings object directly from saved data
+            # Pydantic will use defaults only for fields that are missing
+            try:
+                return MarketplaceTemplateSettings(**settings_dict)
+            except Exception as e:
+                print(f"Error creating settings object: {e}")
+                # If creation fails, return defaults
+                return MarketplaceTemplateSettings()
         else:
-            # Return default settings
+            # Return default settings if nothing found
             return MarketplaceTemplateSettings()
     except Exception as e:
+        # Log error for debugging
+        print(f"Error loading marketplace settings: {str(e)}")
         # If table doesn't exist or error, return defaults
         return MarketplaceTemplateSettings()
 
@@ -80,36 +109,25 @@ async def save_marketplace_settings(
     """Save marketplace template settings (admin only)"""
     
     try:
-        # Ensure system_settings table exists
-        create_table_query = text("""
-            CREATE TABLE IF NOT EXISTS system_settings (
-                settings_key VARCHAR(255) PRIMARY KEY,
-                settings_value TEXT NOT NULL,
-                updated_by UUID,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        db.execute(create_table_query)
+        # Ensure system_settings table exists using stored procedure
+        db.execute(text("SELECT create_marketplace_settings_table()"))
         
-        # Save settings as JSON
-        settings_json = json.dumps(settings.dict())
+        # Save settings as JSONB - convert settings dict to JSON string first
+        # JSONB expects a JSON string, not a Python dict
+        settings_dict = settings.dict()
+        settings_json = json.dumps(settings_dict)
         
-        # Insert or update settings
-        upsert_query = text("""
-            INSERT INTO system_settings (settings_key, settings_value, updated_by, updated_at)
-            VALUES ('marketplace_template', :settings_value, :updated_by, CURRENT_TIMESTAMP)
-            ON CONFLICT (settings_key) 
-            DO UPDATE SET 
-                settings_value = :settings_value,
-                updated_by = :updated_by,
-                updated_at = CURRENT_TIMESTAMP
-        """)
-        
-        db.execute(upsert_query, {
-            "settings_value": settings_json,
-            "updated_by": str(current_user.get('user_id'))
-        })
+        db.execute(
+            text("""
+                SELECT upsert_marketplace_setting(
+                    'marketplace_template',
+                    CAST(:settings_value AS jsonb)
+                )
+            """),
+            {
+                "settings_value": settings_json
+            }
+        )
         
         db.commit()
         

@@ -346,6 +346,15 @@ async def mark_conversation_as_read(
 ):
     """Mark all unread messages from a specific sender as read"""
     try:
+        # Check if messages table exists using stored procedure
+        table_exists = db.execute(
+            text("SELECT check_messages_table_exists()")
+        ).fetchone()
+        
+        if not table_exists or not table_exists[0]:
+            return {"marked_count": 0}
+        
+        # Update messages - keeping direct query for now as no stored procedure exists
         query = text("""
             UPDATE messages 
             SET is_read = TRUE, read_at = NOW()

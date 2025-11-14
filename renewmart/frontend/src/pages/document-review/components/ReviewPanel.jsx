@@ -40,7 +40,10 @@ const ReviewPanel = ({
   initialTaskType = null,
   onRefreshSubtasks = async () => {},
   roleStatuses = {},
-  onStatusChange = () => {}  // 👈 ADD THIS NEW PROP
+  onStatusChange = () => {},  // 👈 ADD THIS NEW PROP
+  currentLand = null,
+  projectId = null,
+  navigate = null
 }) => {
   // 🔹 Determine document category from prop or derive from role
   const roleDocumentCategoryMap = {
@@ -921,15 +924,39 @@ const ReviewPanel = ({
               <>
                 {/* HEADER */}
                 <div className="p-4 border-b border-border">
-                  {/* Role Badge - Always shows current role from parent prop */}
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">Reviewing as:</span>
-                    <span className="px-3 py-1 text-xs font-semibold bg-primary text-primary-foreground rounded-full shadow-sm">
-                      {reviewerRole === 're_sales_advisor' ? 'RE Sales Advisor' :
-                       reviewerRole === 're_analyst' ? 'RE Analyst' :
-                       reviewerRole === 're_governance_lead' ? 'RE Governance Lead' :
-                       reviewerRole}
-                    </span>
+                  {/* Role Badge and Version Control Button */}
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">Reviewing as:</span>
+                      <span className="px-3 py-1 text-xs font-semibold bg-primary text-primary-foreground rounded-full shadow-sm">
+                        {reviewerRole === 're_sales_advisor' ? 'RE Sales Advisor' :
+                         reviewerRole === 're_analyst' ? 'RE Analyst' :
+                         reviewerRole === 're_governance_lead' ? 'RE Governance Lead' :
+                         reviewerRole}
+                      </span>
+                    </div>
+                    {/* Open Version Control Button */}
+                    {navigate && (currentLand?.land_id || projectId) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const baseRoute = currentUser?.role === 'admin' ? '/admin' : 
+                                          currentUser?.role === 'reviewer' ? '/reviewer' : 
+                                          currentUser?.role === 'landowner' ? '/landowner' : '/admin';
+                          navigate(`${baseRoute}/document-versions/${currentLand?.land_id || projectId}`, {
+                            state: {
+                              reviewerRole: reviewerRole,
+                              landId: currentLand?.land_id || projectId
+                            }
+                          });
+                        }}
+                        iconName="FileText"
+                        iconPosition="left"
+                      >
+                        Open Version Control
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between mb-2">

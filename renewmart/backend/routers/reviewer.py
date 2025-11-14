@@ -71,15 +71,11 @@ async def claim_document_for_review(
     
     user_id = current_user["user_id"]
     
-    # Get document info
-    doc_query = text("""
-        SELECT d.*, l.title as land_title
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    doc_result = db.execute(doc_query, {"document_id": str(document_id)}).fetchone()
+    # Get document info using stored procedure
+    doc_result = db.execute(
+        text("SELECT * FROM get_document_info_for_lock(CAST(:document_id AS uuid))"),
+        {"document_id": str(document_id)}
+    ).fetchone()
     
     if not doc_result:
         raise HTTPException(
@@ -87,7 +83,7 @@ async def claim_document_for_review(
             detail="Document not found"
         )
     
-    print(f"Document found: {doc_result.file_name}, land_id: {doc_result.land_id}, document_type: {doc_result.document_type}")
+    print(f"Document found: document_id={document_id}, land_id={doc_result.land_id}, document_type={doc_result.document_type}")
     
     # Check if document is already under review
     if hasattr(doc_result, 'version_status') and doc_result.version_status == 'under_review':
@@ -96,16 +92,19 @@ async def claim_document_for_review(
             detail="Document is already under review"
         )
     
-    # Check if another document of the same type is already under review
-    # First check if version_status column exists
-    column_check_query = text("""
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'documents' 
-        AND column_name = 'version_status'
-    """)
+    # Get doc_slot from database since it's not in the function result
+    doc_slot_result = db.execute(
+        text("SELECT doc_slot FROM documents WHERE document_id = :document_id"),
+        {"document_id": str(document_id)}
+    ).fetchone()
     
-    column_exists = db.execute(column_check_query).fetchone()
+    doc_slot = doc_slot_result[0] if doc_slot_result and doc_slot_result[0] else 'D1'
+    
+    # Check if another document of the same type is already under review
+    # Check if version_status column exists using stored procedure
+    column_exists = db.execute(
+        text("SELECT check_column_exists('documents', 'version_status')")
+    ).fetchone()
     
     if column_exists:
         # Use version_status column if it exists
@@ -122,7 +121,7 @@ async def claim_document_for_review(
         existing_review = db.execute(existing_review_query, {
             "land_id": str(doc_result.land_id),
             "document_type": doc_result.document_type,
-            "doc_slot": doc_result.doc_slot or 'D1',  # Default to D1 if no slot specified
+            "doc_slot": doc_slot,
             "document_id": str(document_id)
         }).fetchone()
     else:
@@ -130,44 +129,43 @@ async def claim_document_for_review(
         existing_review = None
     
     if existing_review and column_exists:
-        # Release the existing document from review and claim the new one
-        release_query = text("""
-            UPDATE documents 
-            SET version_status = 'active',
-                review_locked_at = NULL,
-                review_locked_by = NULL,
-                version_change_reason = :release_reason
-            WHERE document_id = :existing_document_id
-        """)
-        
-        db.execute(release_query, {
-            "existing_document_id": str(existing_review.document_id),
-            "release_reason": f"Released to allow review of version {doc_result.version_number}"
-        })
+        # Release the existing document from review using stored procedure
+        db.execute(
+            text("""
+                SELECT release_document_lock(
+                    CAST(:existing_document_id AS uuid),
+                    :release_reason
+                )
+            """),
+            {
+                "existing_document_id": str(existing_review.document_id),
+                "release_reason": f"Released to allow review of version {doc_result.version_number}"
+            }
+        )
     
-    # Claim the document (mark as under_review)
+    # Claim the document using stored procedure
     if column_exists:
-        # Use version_status columns if they exist
-        claim_query = text("""
-            UPDATE documents 
-            SET version_status = 'under_review',
-                review_locked_at = :locked_at,
-                review_locked_by = :locked_by,
-                version_change_reason = :reason
-            WHERE document_id = :document_id
-        """)
-        
-        db.execute(claim_query, {
-            "document_id": str(document_id),
-            "locked_at": datetime.utcnow(),
-            "locked_by": user_id,
-            "reason": "Claimed for review"
-        })
+        db.execute(
+            text("""
+                SELECT lock_document_version_for_review(
+                    CAST(:document_id AS uuid),
+                    :locked_at,
+                    CAST(:locked_by AS uuid),
+                    :reason
+                )
+            """),
+            {
+                "document_id": str(document_id),
+                "locked_at": datetime.utcnow(),
+                "locked_by": str(user_id),
+                "reason": "Claimed for review"
+            }
+        )
     else:
-        # Fallback: just update status if version_status columns don't exist
+        # Fallback: just update version_status if version_status columns don't exist
         claim_query = text("""
             UPDATE documents 
-            SET status = 'under_review'
+            SET version_status = 'under_review'
             WHERE document_id = :document_id
         """)
         
@@ -230,15 +228,11 @@ async def complete_document_review(
             detail=f"Invalid review result. Must be one of: {valid_results}"
         )
     
-    # Get document info
-    doc_query = text("""
-        SELECT d.*, l.title as land_title
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    doc_result = db.execute(doc_query, {"document_id": str(document_id)}).fetchone()
+    # Get document info using stored procedure
+    doc_result = db.execute(
+        text("SELECT * FROM get_document_info_for_lock(CAST(:document_id AS uuid))"),
+        {"document_id": str(document_id)}
+    ).fetchone()
     
     if not doc_result:
         raise HTTPException(
@@ -246,27 +240,37 @@ async def complete_document_review(
             detail="Document not found"
         )
     
+    # Get review_locked_by from database since it's not in the function result
+    review_locked_by_result = db.execute(
+        text("SELECT review_locked_by FROM documents WHERE document_id = :document_id"),
+        {"document_id": str(document_id)}
+    ).fetchone()
+    
+    review_locked_by = review_locked_by_result[0] if review_locked_by_result else None
+    
     # Check if document is under review by this user
-    if doc_result.version_status != 'under_review' or str(doc_result.review_locked_by) != str(user_id):
+    if doc_result.version_status != 'under_review' or not review_locked_by or str(review_locked_by) != str(user_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Document is not under review by you"
         )
     
-    # Update document based on review result
+    # Update document based on review result - use version_status only
     if review_result == 'approve':
-        new_status = 'active'
+        new_version_status = 'approved'
         version_change_reason = f"Approved by reviewer: {comments or 'No comments'}"
     elif review_result == 'reject':
-        new_status = 'archived'
+        new_version_status = 'rejected'
         version_change_reason = f"Rejected by reviewer: {comments or 'No comments'}"
     else:  # request_changes
-        new_status = 'active'
+        new_version_status = 'pending'
         version_change_reason = f"Changes requested by reviewer: {comments or 'No comments'}"
     
     complete_query = text("""
         UPDATE documents 
-        SET version_status = :new_status,
+        SET version_status = :new_version_status,
+            approved_by = CAST(:user_id AS uuid),
+            approved_at = :approved_at,
             review_locked_at = NULL,
             review_locked_by = NULL,
             version_change_reason = :reason,
@@ -276,7 +280,9 @@ async def complete_document_review(
     
     db.execute(complete_query, {
         "document_id": str(document_id),
-        "new_status": new_status,
+        "new_version_status": new_version_status,
+        "user_id": str(user_id),
+        "approved_at": datetime.utcnow(),
         "reason": version_change_reason,
         "comments": comments
     })
@@ -290,13 +296,13 @@ async def complete_document_review(
         doc_result.document_type,
         doc_result.version_number,
         str(user_id),
-        new_status,
+        new_version_status,
         version_change_reason
     )
     
     return {
         "message": f"Document review completed: {review_result}",
-        "new_status": new_status,
+        "version_status": new_version_status,
         "comments": comments
     }
 

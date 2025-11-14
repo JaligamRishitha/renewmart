@@ -441,19 +441,7 @@ const ProjectDetailsPage = () => {
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-foreground">Overall Progress</span>
-                  <span className="text-sm text-muted-foreground">{completionPercentage}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${completionPercentage}%` }}
-                  ></div>
-                </div>
-              </div>
+             
 
               {/* Task Status Summary */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
@@ -606,14 +594,7 @@ const ProjectDetailsPage = () => {
                     </div>
                   )}
                   
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Account Status
-                    </label>
-                    <p className="text-sm text-foreground mt-1">
-                      {landownerData.is_active ? 'Active' : 'Inactive'}
-                    </p>
-                  </div>
+                 
                   
                   <div>
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/ui/Header';
 import Sidebar from '../../components/ui/Sidebar';
 import Button from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
 import { landsAPI } from '../../services/api';
 import Icon from '../../components/AppIcon';
 import InvestorDetailsModal from './components/InvestorDetailsModal';
@@ -17,6 +18,8 @@ const AdminInvestorInterests = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     fetchInvestorInterests();
@@ -89,16 +92,29 @@ const AdminInvestorInterests = () => {
     return colors[type?.toLowerCase()] || 'bg-gray-100 text-gray-800';
   };
 
-  const filteredInterests = interests.filter(interest => {
-    const matchesSearch = !searchQuery || 
-      interest.investorName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      interest.investorEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      interest.projectTitle?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = !statusFilter || interest.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredInterests = useMemo(() => {
+    return interests.filter(interest => {
+      const matchesSearch = !searchQuery || 
+        interest.investorName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        interest.investorEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        interest.projectTitle?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = !statusFilter || interest.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [interests, searchQuery, statusFilter]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredInterests.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedInterests = filteredInterests.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters or itemsPerPage changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, itemsPerPage]);
 
   const handleViewInvestorDetails = (interest) => {
     setSelectedInvestor(interest);
@@ -237,10 +253,23 @@ const AdminInvestorInterests = () => {
 
           {/* Interests Table */}
           <div className="bg-white rounded-lg shadow-sm border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <h2 className="font-heading font-semibold text-lg text-foreground">
                 Investor Interest List ({filteredInterests.length})
               </h2>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-muted-foreground">Records per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="px-3 py-1.5 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                </select>
+              </div>
             </div>
 
             {loading ? (
@@ -294,7 +323,7 @@ const AdminInvestorInterests = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredInterests.map((interest) => (
+                    {paginatedInterests.map((interest) => (
                       <tr key={interest.interestId} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div>
@@ -388,6 +417,20 @@ const AdminInvestorInterests = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination - Bottom */}
+            {totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-border">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  itemsPerPage={itemsPerPage}
+                  totalItems={filteredInterests.length}
+                  showInfo={true}
+                />
               </div>
             )}
           </div>

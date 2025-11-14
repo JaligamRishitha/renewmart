@@ -49,3 +49,7 @@ pytest-cov
 
 # WebSocket support
 websockets
+
+# Report generation
+openpyxl
+reportlab

@@ -1031,77 +1031,14 @@ const DocumentReview = () => {
         {/* HEADER */}
         <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-2xl font-bold text-foreground mb-2 mt-5">Document Review</h1>
+            <h1 className="text-2xl lg:text-2xl font-bold text-foreground mb-2 mt-5">Tasks and Documents Review</h1>
             <p className="text-muted-foreground">Review and evaluate project documentation</p>
           </div>
         </div>
 
-        {/* GRID */}
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          <div className="xl:col-span-2">
-            {/* Document Version Control Button */}
-            <div className="bg-card border border-border rounded-lg p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Document Version Control</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Manage document versions, assignments, and audit trail
-                  </p>
-                </div>
-                <Button
-                  onClick={() => {
-                    const baseRoute = user?.role === 'admin' ? '/admin' : 
-                                    user?.role === 'reviewer' ? '/reviewer' : 
-                                    user?.role === 'landowner' ? '/landowner' : '/admin';
-                    navigate(`${baseRoute}/document-versions/${currentLand?.land_id || projectId}`, {
-                      state: {
-                        reviewerRole: reviewerRole,
-                        landId: currentLand?.land_id || projectId
-                      }
-                    });
-                  }}
-                  className="flex items-center space-x-2"
-                >
-                  <Icon name="FileText" size={16} />
-                  <span>Open Version Control</span>
-                </Button>
-              </div>
-              
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="text-center p-3 bg-muted/20 rounded-lg">
-                  <p className="text-2xl font-semibold text-foreground">
-                    {documents.filter(doc => {
-                      // Filter out subtask documents
-                      if (doc.subtask_id) return false;
-                      
-                      // Ensure document type is allowed for reviewer role using project_mappings
-                      if (hasProjectMappingsInAPI && projectDocumentMappings && reviewerRole) {
-                        const allowedTypesForRole = projectDocumentMappings[reviewerRole] || [];
-                        if (!allowedTypesForRole.includes(doc.document_type)) {
-                          return false;
-                        }
-                      }
-                      
-                      // Check if document is under review
-                      return doc.status === 'under_review' || 
-                             doc.version_status === 'under_review' ||
-                             doc.review_locked_by !== null;
-                    }).length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Under Review</p>
-                </div>
-                <div className="text-center p-3 bg-muted/20 rounded-lg">
-                  <p className="text-2xl font-semibold text-foreground">{documentTypesCount}</p>
-                  <p className="text-xs text-muted-foreground">Document Types</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Project Review Status by Role card removed as requested */}
-          </div>
-
-          <div className="xl:col-span-3">
+        {/* GRID - Centered Review Panel */}
+        <div className="flex justify-center">
+          <div className="w-full max-w-5xl">
             <ReviewPanel
               reviewerRole={reviewerRole}
               documentCategory={documentCategory}
@@ -1145,6 +1082,9 @@ const DocumentReview = () => {
                   setSubtasks(refreshed);
                 }
               }}
+              currentLand={currentLand}
+              projectId={projectId}
+              navigate={navigate}
             />
           </div>
         </div>

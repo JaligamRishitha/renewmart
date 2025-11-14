@@ -61,12 +61,11 @@ async def upload_document(
     db: Session = Depends(get_db)
 ):
     """Upload a document for a land (owner or admin only)."""
-    # Check if land exists and user has permission
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    # Check if land exists and user has permission using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM check_land_for_document_upload(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -97,24 +96,23 @@ async def upload_document(
         )
     
     try:
+        # Check if land status is draft
+        land_status = land_result.status
+        is_draft_land = land_status == 'draft'
+        
         # Determine doc_slot automatically for multi-slot document types
         # Ownership Documents and Government NOCs require 2 documents (D1 and D2)
         multi_slot_types = ['ownership-documents', 'government-nocs']
         
         if not doc_slot and document_type in multi_slot_types:
-            # Check which slots are already occupied for this document type
-            slot_check_query = text("""
-                SELECT DISTINCT doc_slot
-                FROM documents
-                WHERE land_id = :land_id 
-                AND document_type = :document_type
-                AND subtask_id IS NULL
-                AND doc_slot IN ('D1', 'D2')
-            """)
-            slot_result = db.execute(slot_check_query, {
-                "land_id": str(land_id),
-                "document_type": document_type
-            }).fetchall()
+            # Check which slots are already occupied using stored procedure
+            slot_result = db.execute(
+                text("SELECT * FROM get_occupied_document_slots(CAST(:land_id AS uuid), :document_type)"),
+                {
+                    "land_id": str(land_id),
+                    "document_type": document_type
+                }
+            ).fetchall()
             
             occupied_slots = {row.doc_slot for row in slot_result} if slot_result else set()
             
@@ -137,56 +135,171 @@ async def upload_document(
         # Determine MIME type
         mime_type = file.content_type or 'application/octet-stream'
         
-        # Create document record with binary data
-        document_id = str(uuid.uuid4())
-        insert_query = text("""
-            INSERT INTO documents (
-                document_id, land_id, document_type, file_name, 
-                file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot
-            ) VALUES (
-                :document_id, :land_id, :document_type, :file_name,
-                :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot
-            )
-        """)
-        
-        db.execute(insert_query, {
-            "document_id": document_id,
-            "land_id": str(land_id),
-            "document_type": document_type,
-            "file_name": file.filename,
-            "file_data": file_data,
-            "file_size": file_size,
-            "uploaded_by": current_user["user_id"],
-            "mime_type": mime_type,
-            "is_draft": True,
-            "doc_slot": doc_slot
-        })
-        
-        db.commit()
+        # For draft lands, check if document already exists and update instead of insert
+        if is_draft_land:
+            # Check if a document already exists for this land_id + document_type + doc_slot
+            existing_doc_query = text("""
+                SELECT document_id 
+                FROM documents 
+                WHERE land_id = :land_id 
+                AND document_type = :document_type 
+                AND doc_slot = :doc_slot
+                AND subtask_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            """)
+            
+            existing_doc = db.execute(existing_doc_query, {
+                "land_id": str(land_id),
+                "document_type": document_type,
+                "doc_slot": doc_slot
+            }).fetchone()
+            
+            if existing_doc:
+                # Update existing document (PUT behavior) - no version tracking for drafts
+                document_id = str(existing_doc.document_id)
+                update_query = text("""
+                    UPDATE documents 
+                    SET file_name = :file_name,
+                        file_data = :file_data,
+                        file_size = :file_size,
+                        uploaded_by = :uploaded_by,
+                        mime_type = :mime_type,
+                        version_number = 1,
+                        is_latest_version = TRUE,
+                        parent_document_id = NULL,
+                        version_status = 'active'
+                    WHERE document_id = :document_id
+                """)
+                
+                db.execute(update_query, {
+                    "document_id": document_id,
+                    "file_name": file.filename,
+                    "file_data": file_data,
+                    "file_size": file_size,
+                    "uploaded_by": current_user["user_id"],
+                    "mime_type": mime_type
+                })
+                
+                db.commit()
+            else:
+                # Create new document (POST behavior for first time) - no version tracking for drafts
+                document_id = str(uuid.uuid4())
+                insert_query = text("""
+                    INSERT INTO documents (
+                        document_id, land_id, document_type, file_name, 
+                        file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot,
+                        version_number, is_latest_version, parent_document_id, version_status
+                    ) VALUES (
+                        :document_id, :land_id, :document_type, :file_name,
+                        :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot,
+                        1, TRUE, NULL, 'active'
+                    )
+                """)
+                
+                db.execute(insert_query, {
+                    "document_id": document_id,
+                    "land_id": str(land_id),
+                    "document_type": document_type,
+                    "file_name": file.filename,
+                    "file_data": file_data,
+                    "file_size": file_size,
+                    "uploaded_by": current_user["user_id"],
+                    "mime_type": mime_type,
+                    "is_draft": True,
+                    "doc_slot": doc_slot
+                })
+                
+                db.commit()
+        else:
+            # For non-draft lands, create new version with proper version tracking
+            # Find the latest version for this land_id + document_type + doc_slot
+            latest_version_query = text("""
+                SELECT document_id, version_number
+                FROM documents 
+                WHERE land_id = :land_id 
+                AND document_type = :document_type 
+                AND doc_slot = :doc_slot
+                AND subtask_id IS NULL
+                ORDER BY version_number DESC
+                LIMIT 1
+            """)
+            
+            latest_doc = db.execute(latest_version_query, {
+                "land_id": str(land_id),
+                "document_type": document_type,
+                "doc_slot": doc_slot
+            }).fetchone()
+            
+            # Calculate next version number
+            if latest_doc:
+                next_version = (latest_doc.version_number or 0) + 1
+                parent_document_id = str(latest_doc.document_id)
+                
+                # Mark previous versions as not latest
+                update_previous_query = text("""
+                    UPDATE documents 
+                    SET is_latest_version = FALSE
+                    WHERE land_id = :land_id 
+                    AND document_type = :document_type 
+                    AND doc_slot = :doc_slot
+                    AND subtask_id IS NULL
+                    AND is_latest_version = TRUE
+                """)
+                db.execute(update_previous_query, {
+                    "land_id": str(land_id),
+                    "document_type": document_type,
+                    "doc_slot": doc_slot
+                })
+            else:
+                next_version = 1
+                parent_document_id = None
+            
+            # Create new document version
+            document_id = str(uuid.uuid4())
+            insert_query = text("""
+                INSERT INTO documents (
+                    document_id, land_id, document_type, file_name, 
+                    file_data, file_size, uploaded_by, mime_type, is_draft, doc_slot,
+                    version_number, is_latest_version, parent_document_id, version_status
+                ) VALUES (
+                    :document_id, :land_id, :document_type, :file_name,
+                    :file_data, :file_size, :uploaded_by, :mime_type, :is_draft, :doc_slot,
+                    :version_number, TRUE, :parent_document_id, 'active'
+                )
+            """)
+            
+            db.execute(insert_query, {
+                "document_id": document_id,
+                "land_id": str(land_id),
+                "document_type": document_type,
+                "file_name": file.filename,
+                "file_data": file_data,
+                "file_size": file_size,
+                "uploaded_by": current_user["user_id"],
+                "mime_type": mime_type,
+                "is_draft": False,  # Non-draft lands have non-draft documents
+                "doc_slot": doc_slot,
+                "version_number": next_version,
+                "parent_document_id": parent_document_id
+            })
+            
+            db.commit()
         
         # Create notifications for document upload
         try:
             from utils.notifications import notify_document_uploaded
             
-            # Get reviewer IDs (assigned reviewers for this land)
-            reviewer_query = text("""
-                SELECT DISTINCT u.user_id
-                FROM "user" u
-                JOIN user_roles ur ON u.user_id = ur.user_id
-                WHERE ur.role_key IN ('re_analyst', 're_sales_advisor', 're_governance_lead')
-                AND u.is_active = true
-            """)
-            reviewers = db.execute(reviewer_query).fetchall()
+            # Get reviewer IDs using stored procedure
+            reviewers = db.execute(
+                text("SELECT * FROM get_reviewer_user_ids()")
+            ).fetchall()
             reviewer_ids = [str(row.user_id) for row in reviewers]
             
-            # Get admin user IDs
-            admin_query = text("""
-                SELECT DISTINCT u.user_id
-                FROM "user" u
-                JOIN user_roles ur ON u.user_id = ur.user_id
-                WHERE ur.role_key = 'administrator' AND u.is_active = true
-            """)
-            admins = db.execute(admin_query).fetchall()
+            # Get admin user IDs using stored procedure
+            admins = db.execute(
+                text("SELECT * FROM get_admin_user_ids()")
+            ).fetchall()
             admin_user_ids = [str(row.user_id) for row in admins]
             
             notify_document_uploaded(
@@ -209,6 +322,130 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload document: {str(e)}"
+        )
+
+@router.put("/upload/{land_id}/{document_id}", response_model=Document)
+async def update_draft_document(
+    land_id: UUID,
+    document_id: UUID,
+    document_type: str = Form(...),
+    file: UploadFile = File(...),
+    doc_slot: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update an existing document for a draft land (owner or admin only)."""
+    # Check if land exists and user has permission
+    land_result = db.execute(
+        text("SELECT * FROM check_land_for_document_upload(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchone()
+    
+    if not land_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Land not found"
+        )
+    
+    # Check if land status is draft
+    land_status = land_result.status
+    if land_status != 'draft':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Can only update documents for draft lands. Use POST to create new versions for non-draft lands."
+        )
+    
+    # Check permissions
+    user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
+    landowner_id_str = str(land_result.landowner_id)
+    
+    is_admin = "administrator" in user_roles
+    is_owner = user_id_str == landowner_id_str
+    
+    if not (is_admin or is_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to update documents for this land"
+        )
+    
+    # Check if document exists and belongs to this land
+    doc_check = text("""
+        SELECT document_id, document_type, doc_slot
+        FROM documents 
+        WHERE document_id = :document_id 
+        AND land_id = :land_id
+        AND subtask_id IS NULL
+    """)
+    
+    existing_doc = db.execute(doc_check, {
+        "document_id": str(document_id),
+        "land_id": str(land_id)
+    }).fetchone()
+    
+    if not existing_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found or does not belong to this land"
+        )
+    
+    # Use doc_slot from existing document if not provided
+    if not doc_slot:
+        doc_slot = existing_doc.doc_slot or 'D1'
+    
+    # Validate file
+    is_valid, error_msg = validate_file(file)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg
+        )
+    
+    try:
+        # Read file bytes
+        file_data, file_size = read_file_bytes(file)
+        
+        # Determine MIME type
+        mime_type = file.content_type or 'application/octet-stream'
+        
+        # Update existing document - no version tracking for drafts
+        update_query = text("""
+            UPDATE documents 
+            SET file_name = :file_name,
+                file_data = :file_data,
+                file_size = :file_size,
+                uploaded_by = :uploaded_by,
+                mime_type = :mime_type,
+                document_type = :document_type,
+                doc_slot = :doc_slot,
+                version_number = 1,
+                is_latest_version = TRUE,
+                parent_document_id = NULL,
+                version_status = 'active'
+            WHERE document_id = :document_id
+        """)
+        
+        db.execute(update_query, {
+            "document_id": str(document_id),
+            "file_name": file.filename,
+            "file_data": file_data,
+            "file_size": file_size,
+            "uploaded_by": current_user["user_id"],
+            "mime_type": mime_type,
+            "document_type": document_type,
+            "doc_slot": doc_slot
+        })
+        
+        db.commit()
+        
+        # Fetch the updated document
+        return await get_document(document_id, current_user, db)
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update document: {str(e)}"
         )
 
 @router.get("/land/{land_id}")
@@ -1051,17 +1288,17 @@ async def approve_document(
     db: Session = Depends(get_db)
 ):
     """Approve a document (admin only)."""
-    # Update document status
+    # Update document version_status only
     update_query = text("""
         UPDATE documents
-        SET status = 'approved',
+        SET version_status = 'approved',
             approved_by = :approved_by,
             approved_at = :approved_at,
             admin_comments = :admin_comments
         WHERE document_id = :document_id
         RETURNING document_id, land_id, task_id, document_type, file_name, 
                   file_path, file_size, uploaded_by, created_at, mime_type, 
-                  is_draft, status, approved_by, approved_at, admin_comments
+                  is_draft, version_status, approved_by, approved_at, admin_comments
     """)
     
     result = db.execute(update_query, {
@@ -1093,7 +1330,7 @@ async def approve_document(
         created_at=row.created_at,
         mime_type=row.mime_type,
         is_draft=row.is_draft,
-        status=row.status,
+        version_status=row.version_status,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
         admin_comments=row.admin_comments
@@ -1109,10 +1346,10 @@ async def reject_document(
     db: Session = Depends(get_db)
 ):
     """Reject a document (admin only)."""
-    # Update document status
+    # Update document version_status only
     update_query = text("""
         UPDATE documents
-        SET status = 'rejected',
+        SET version_status = 'rejected',
             approved_by = :approved_by,
             approved_at = :approved_at,
             rejection_reason = :rejection_reason,
@@ -1120,7 +1357,7 @@ async def reject_document(
         WHERE document_id = :document_id
         RETURNING document_id, land_id, task_id, document_type, file_name, 
                   file_path, file_size, uploaded_by, created_at, mime_type, 
-                  is_draft, status, approved_by, approved_at, rejection_reason, admin_comments
+                  is_draft, version_status, approved_by, approved_at, rejection_reason, admin_comments
     """)
     
     result = db.execute(update_query, {
@@ -1153,7 +1390,7 @@ async def reject_document(
         created_at=row.created_at,
         mime_type=row.mime_type,
         is_draft=row.is_draft,
-        status=row.status,
+        version_status=row.version_status,
         approved_by=row.approved_by,
         approved_at=row.approved_at,
         rejection_reason=row.rejection_reason,

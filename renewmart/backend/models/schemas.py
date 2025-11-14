@@ -150,8 +150,10 @@ class UserBase(BaseSchema):
 
     @validator('first_name', 'last_name')
     def validate_names(cls, v):
-        if not v.replace(' ', '').replace('-', '').replace("'", '').isalpha():
-            raise ValueError('Name must contain only letters, spaces, hyphens, and apostrophes')
+        # Allow letters, numbers, spaces, hyphens, and apostrophes
+        cleaned = v.replace(' ', '').replace('-', '').replace("'", '')
+        if not cleaned.isalnum():
+            raise ValueError('Name must contain only letters, numbers, spaces, hyphens, and apostrophes')
         return v.title()
 
 class UserCreate(UserBase):
@@ -541,7 +543,6 @@ class DocumentBase(BaseSchema):
     file_size: Optional[int] = Field(None, ge=0, le=104857600, description="File size in bytes (max 100MB)")
     mime_type: Optional[str] = Field(None, max_length=100, description="MIME type")
     is_draft: bool = Field(True, description="Whether document is in draft mode")
-    status: Optional[str] = Field("pending", max_length=50, description="Document approval status")
     approved_by: Optional[UUID] = Field(None, description="Admin who approved/rejected the document")
     approved_at: Optional[datetime] = Field(None, description="When the document was approved/rejected")
     rejection_reason: Optional[str] = Field(None, description="Reason for rejection")
@@ -550,7 +551,7 @@ class DocumentBase(BaseSchema):
     is_latest_version: Optional[bool] = Field(True, description="Whether this is the latest version")
     parent_document_id: Optional[UUID] = Field(None, description="Reference to parent document for version tracking")
     version_notes: Optional[str] = Field(None, description="Notes about this version")
-    version_status: Optional[str] = Field("active", max_length=50, description="Version-specific status: active, archived, under_review, locked")
+    version_status: Optional[str] = Field("pending", max_length=50, description="Version-specific status: pending, under_review, approved, rejected")
     review_locked_at: Optional[datetime] = Field(None, description="When this version was locked for review")
     review_locked_by: Optional[UUID] = Field(None, description="User who locked this version for review")
     version_change_reason: Optional[str] = Field(None, description="Reason for version change")
@@ -851,6 +852,7 @@ class TaskResponse(Task):
 
 class TaskHistoryResponse(TaskHistory):
     changed_by_user: Optional['User'] = None
+    changed_by_name: Optional[str] = None
 
 class InterestResponse(InvestorInterest):
     investor: Optional['User'] = None

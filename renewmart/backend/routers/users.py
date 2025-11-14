@@ -24,9 +24,11 @@ logger = logging.getLogger(__name__)
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
-    # Check if user already exists
-    check_query = text("SELECT user_id FROM \"user\" WHERE email = :email")
-    existing_user = db.execute(check_query, {"email": user_data.email}).fetchone()
+    # Check if user already exists using stored procedure
+    existing_user = db.execute(
+        text("SELECT * FROM check_user_by_email(:email)"),
+        {"email": user_data.email}
+    ).fetchone()
     
     if existing_user:
         raise HTTPException(
@@ -37,22 +39,27 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     # Hash password
     hashed_password = get_password_hash(user_data.password)
     
-    # Create user
-    insert_query = text("""
-        INSERT INTO \"user\" (email, password_hash, first_name, last_name, phone, address)
-        VALUES (:email, :password_hash, :first_name, :last_name, :phone, :address)
-        RETURNING user_id, email, first_name, last_name, phone,address, created_at, updated_at
-    """)
-    
-    result = db.execute(insert_query, {
-        "email": user_data.email,
-        "password_hash": hashed_password,
-        "first_name": user_data.first_name,
-        "last_name": user_data.last_name,
-        "phone": user_data.phone,
-        "address": user_data.address
-        
-    }).fetchone()
+    # Create user using stored procedure
+    result = db.execute(
+        text("""
+            SELECT * FROM create_user(
+                :email,
+                :password_hash,
+                :first_name,
+                :last_name,
+                :phone,
+                :address
+            )
+        """),
+        {
+            "email": user_data.email,
+            "password_hash": hashed_password,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+            "phone": user_data.phone,
+            "address": user_data.address
+        }
+    ).fetchone()
     
     db.commit()
     
@@ -142,18 +149,15 @@ async def list_users(
         if where_clauses:
             where_sql = " WHERE " + " AND ".join(where_clauses)
         
-        # Complete query
-        query = f"""
-            SELECT DISTINCT u.user_id, u.email, u.first_name, u.last_name, 
-                   u.phone, u.address, u.created_at, u.updated_at
-            FROM "user" u
-            {joins}
-            {where_sql}
-            ORDER BY u.created_at DESC 
-            OFFSET :skip LIMIT :limit
-        """
-        
-        results = db.execute(text(query), params).fetchall()
+        # Get users using stored procedure
+        results = db.execute(
+            text("SELECT * FROM list_users_with_role_filter(:role, :skip, :limit)"),
+            {
+                "role": role,
+                "skip": skip,
+                "limit": limit
+            }
+        ).fetchall()
         
         return [
             User(
@@ -187,9 +191,19 @@ async def update_current_user_profile(
     params = {"user_id": str(current_user["user_id"])}
     
     if user_update.email is not None:
-        # Check if email is already taken by another user
-        check_query = text("SELECT user_id FROM \"user\" WHERE email = :email AND user_id != :user_id")
-        existing = db.execute(check_query, {"email": user_update.email, "user_id": str(current_user["user_id"])}).fetchone()
+        # Check if email is already taken by another user using stored procedure
+        existing = db.execute(
+            text("""
+                SELECT * FROM check_email_taken_by_another(
+                    :email,
+                    CAST(:user_id AS uuid)
+                )
+            """),
+            {
+                "email": user_update.email,
+                "user_id": str(current_user["user_id"])
+            }
+        ).fetchone()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,14 +234,27 @@ async def update_current_user_profile(
             detail="No fields to update"
         )
     
-    update_query = text(f"""
-        UPDATE \"user\" 
-        SET {', '.join(update_fields)}, updated_at = now()
-        WHERE user_id = :user_id
-        RETURNING user_id, email, first_name, last_name, phone, address, created_at, updated_at
-    """)
-    
-    result = db.execute(update_query, params).fetchone()
+    # Update user using stored procedure
+    result = db.execute(
+        text("""
+            SELECT * FROM update_user_profile(
+                CAST(:user_id AS uuid),
+                :email,
+                :first_name,
+                :last_name,
+                :phone,
+                :address
+            )
+        """),
+        {
+            "user_id": str(current_user["user_id"]),
+            "email": user_update.email,
+            "first_name": user_update.first_name,
+            "last_name": user_update.last_name,
+            "phone": user_update.phone,
+            "address": user_update.address
+        }
+    ).fetchone()
     db.commit()
     
     return User(
@@ -248,28 +275,73 @@ async def get_user(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user by ID. Admins can view anyone, users can view themselves, and reviewers can view users on same projects."""
+    """Get user by ID. Admins can view anyone, users can view themselves, reviewers can view users on same projects, and investors/landowners can view each other if they have shared interests."""
     user_roles = current_user.get("roles", [])
     is_admin = "administrator" in user_roles
     is_self = str(current_user["user_id"]) == str(user_id)
     
     # Admins and viewing own profile is always allowed
     if not (is_admin or is_self):
-        # Check if the requesting user and target user share any projects
-        shared_project_query = text("""
-            SELECT COUNT(*) as count
-            FROM tasks t1
-            JOIN tasks t2 ON t1.land_id = t2.land_id
-            WHERE t1.assigned_to = CAST(:current_user_id AS uuid)
-              AND t2.assigned_to = CAST(:target_user_id AS uuid)
-        """)
+        # Check if the requesting user and target user share any projects using stored procedure
+        shared_result = db.execute(
+            text("""
+                SELECT * FROM check_shared_projects(
+                    CAST(:current_user_id AS uuid),
+                    CAST(:target_user_id AS uuid)
+                )
+            """),
+            {
+                "current_user_id": str(current_user["user_id"]),
+                "target_user_id": str(user_id)
+            }
+        ).fetchone()
         
-        shared_result = db.execute(shared_project_query, {
-            "current_user_id": str(current_user["user_id"]),
-            "target_user_id": str(user_id)
-        }).fetchone()
+        has_shared_projects = shared_result and shared_result.count > 0
         
-        if not shared_result or shared_result.count == 0:
+        # Check if investor-landowner relationship exists
+        has_investor_relationship = False
+        if not has_shared_projects:
+            # Check if current user is an investor and target user is a landowner of lands they're interested in
+            investor_check = db.execute(
+                text("""
+                    SELECT COUNT(*) as count
+                    FROM investor_interests ii
+                    JOIN lands l ON ii.land_id = l.land_id
+                    WHERE ii.investor_id = CAST(:current_user_id AS uuid)
+                    AND l.landowner_id = CAST(:target_user_id AS uuid)
+                    AND ii.status IN ('pending', 'approved')
+                    AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+                """),
+                {
+                    "current_user_id": str(current_user["user_id"]),
+                    "target_user_id": str(user_id)
+                }
+            ).fetchone()
+            
+            if investor_check and investor_check.count > 0:
+                has_investor_relationship = True
+            else:
+                # Check if current user is a landowner and target user is an investor interested in their lands
+                landowner_check = db.execute(
+                    text("""
+                        SELECT COUNT(*) as count
+                        FROM investor_interests ii
+                        JOIN lands l ON ii.land_id = l.land_id
+                        WHERE l.landowner_id = CAST(:current_user_id AS uuid)
+                        AND ii.investor_id = CAST(:target_user_id AS uuid)
+                        AND ii.status IN ('pending', 'approved')
+                        AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+                    """),
+                    {
+                        "current_user_id": str(current_user["user_id"]),
+                        "target_user_id": str(user_id)
+                    }
+                ).fetchone()
+                
+                if landowner_check and landowner_check.count > 0:
+                    has_investor_relationship = True
+        
+        if not (has_shared_projects or has_investor_relationship):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view this user's information"

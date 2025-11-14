@@ -24,7 +24,7 @@ const MarketplaceV2 = () => {
   const [draftProjects, setDraftProjects] = useState([]);
   const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(12);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
   const [filters, setFilters] = useState({
     search: '',
     energyType: '',
@@ -45,7 +45,7 @@ const MarketplaceV2 = () => {
       setError(null);
       
       // Fetch published projects (for Published Projects tab)
-      const publishedData = await landsAPI.getMarketplaceProjects({});
+      const publishedData = await landsAPI.getAdminMarketplaceProjects({});
       setPublishedProjects(publishedData || []);
       
       // Fetch all projects to filter for draft/under review (for Draft Projects tab)
@@ -112,10 +112,10 @@ const MarketplaceV2 = () => {
   const endIndex = startIndex + itemsPerPage;
   const list = filteredList.slice(startIndex, endIndex);
 
-  // Reset to page 1 when tab changes
+  // Reset to page 1 when tab changes or itemsPerPage changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab]);
+  }, [activeTab, itemsPerPage]);
 
   const Card = ({ project, isDraft = false }) => {
     const titleText = project.title || project.name || 'Untitled Project';
@@ -154,6 +154,11 @@ const MarketplaceV2 = () => {
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground`}>
                 {(project.energy_key || project.energyType || project.project_type || project.type || 'N/A').toUpperCase()}
               </span>
+              {!isDraft && project.is_interest_locked && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  Interest Locked
+                </span>
+              )}
               {isDraft && (
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   status === 'under_review' ? 'bg-yellow-100 text-yellow-800' :
@@ -292,10 +297,23 @@ const MarketplaceV2 = () => {
 
               {/* Projects heading */}
               <div className="bg-white rounded-lg shadow-sm border border-border overflow-hidden">
-                <div className="px-6 py-4 border-b border-border">
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between">
                   <h2 className="font-heading font-semibold text-lg text-foreground">
-                    {activeTab === 'published' ? 'Published' : 'Draft'} Projects ({list.length})
+                    {activeTab === 'published' ? 'Published' : 'Draft'} Projects ({filteredList.length})
                   </h2>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-muted-foreground">Records per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="px-3 py-1.5 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={30}>30</option>
+                    </select>
+                  </div>
                 </div>
 
                 {loading ? (

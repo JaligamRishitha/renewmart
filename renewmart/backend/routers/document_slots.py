@@ -43,7 +43,9 @@ async def mark_slot_for_review(
         )
     
     try:
-        # Update all documents in the slot to under_review
+        # Update all documents in the slot using stored procedure
+        # Note: This requires a batch update stored procedure which we'll create
+        # For now, keeping direct query but can be converted later
         update_query = text("""
             UPDATE documents 
             SET version_status = 'under_review',

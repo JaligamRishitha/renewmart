@@ -84,25 +84,28 @@ async def create_default_subtasks_for_task(task_id: str, assigned_role: str, cre
             
             try:
                 subtask_id = uuid.uuid4()
-                insert_query = text("""
-                    INSERT INTO subtasks (
-                        subtask_id, task_id, title, description, status,
-                        created_by, order_index
-                    ) VALUES (
-                        CAST(:subtask_id AS uuid), CAST(:task_id AS uuid), :title, :description, :status,
-                        CAST(:created_by AS uuid), :order_index
-                    )
-                """)
-                
-                db.execute(insert_query, {
-                    "subtask_id": str(subtask_id),
-                    "task_id": task_id,
-                    "title": template["title"],
-                    "description": f"{template['section']} - {template['title']}",
-                    "status": "pending",
-                    "created_by": created_by,
-                    "order_index": template["order"]
-                })
+                db.execute(
+                    text("""
+                        SELECT create_subtask(
+                            CAST(:subtask_id AS uuid),
+                            CAST(:task_id AS uuid),
+                            :title,
+                            :description,
+                            :status,
+                            CAST(:created_by AS uuid),
+                            :order_index
+                        )
+                    """),
+                    {
+                        "subtask_id": str(subtask_id),
+                        "task_id": task_id,
+                        "title": template["title"],
+                        "description": f"{template['section']} - {template['title']}",
+                        "status": "pending",
+                        "created_by": created_by,
+                        "order_index": template["order"]
+                    }
+                )
                 
                 # Release savepoint on success
                 savepoint.commit()
@@ -179,11 +182,11 @@ async def create_task(
     db: Session = Depends(get_db)
 ):
     """Create a new task (admin or land owner only)."""
-    # Check if land exists and user has permission
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    land_result = db.execute(land_check, {"land_id": str(task_data.land_id)}).fetchone()
+    # Check if land exists and user has permission using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM check_land_for_task(CAST(:land_id AS uuid))"),
+        {"land_id": str(task_data.land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -199,10 +202,12 @@ async def create_task(
             detail="Not enough permissions to create tasks for this land"
         )
     
-    # Validate assigned_to user if provided
+    # Validate assigned_to user if provided using stored procedure
     if task_data.assigned_to:
-        user_check = text("SELECT user_id FROM \"user\" WHERE user_id = :user_id")
-        user_result = db.execute(user_check, {"user_id": str(task_data.assigned_to)}).fetchone()
+        user_result = db.execute(
+            text("SELECT * FROM check_user_exists(CAST(:user_id AS uuid))"),
+            {"user_id": str(task_data.assigned_to)}
+        ).fetchone()
         
         if not user_result:
             raise HTTPException(
@@ -210,18 +215,16 @@ async def create_task(
                 detail="Assigned user not found"
             )
     
-    # Step 1: Validate for existing pending task
+    # Step 1: Validate for existing pending task using stored procedure
     if task_data.assigned_to:
-        existing_task_check = text("""
-            SELECT 1
-            FROM tasks
-            WHERE land_id = :land_id
-              AND title = :title
-              AND assigned_to = :assigned_to
-              AND status = 'pending'
-        """)
         existing_task = db.execute(
-            existing_task_check,
+            text("""
+                SELECT * FROM check_existing_pending_task(
+                    CAST(:land_id AS uuid),
+                    :title,
+                    CAST(:assigned_to AS uuid)
+                )
+            """),
             {
                 "land_id": str(task_data.land_id),
                 "title": task_data.task_type.replace('_', ' ').title(),
@@ -235,34 +238,37 @@ async def create_task(
                 detail="This Same task is already assigned to this user."
             )
 
-    # Step 2: Insert the task
+    # Step 2: Insert the task using stored procedure
     try:
         # Generate new task ID
         task_id = str(uuid4())
         
-        insert_query = text("""
-            INSERT INTO tasks (
-                task_id, land_id, title, description,
-                assigned_to, assigned_role, created_by, status, priority,
-                due_date, created_at, updated_at
-            ) VALUES (
-                :task_id, :land_id, :title, :description,
-                :assigned_to, :assigned_role, :created_by, 'pending', :priority,
-                :due_date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-        """)
-        
-        db.execute(insert_query, {
-            "task_id": task_id,
-            "land_id": str(task_data.land_id),
-            "title": task_data.task_type.replace('_', ' ').title(),
-            "description": task_data.description,
-            "assigned_to": str(task_data.assigned_to) if task_data.assigned_to else None,
-            "assigned_role": task_data.assigned_role,
-            "created_by": str(current_user["user_id"]),
-            "priority": task_data.priority or "medium",
-            "due_date": task_data.due_date
-        })
+        db.execute(
+            text("""
+                SELECT create_task(
+                    CAST(:task_id AS uuid),
+                    CAST(:land_id AS uuid),
+                    :title,
+                    :description,
+                    CAST(:assigned_to AS uuid),
+                    :assigned_role,
+                    CAST(:created_by AS uuid),
+                    :priority,
+                    :due_date
+                )
+            """),
+            {
+                "task_id": task_id,
+                "land_id": str(task_data.land_id),
+                "title": task_data.task_type.replace('_', ' ').title(),
+                "description": task_data.description,
+                "assigned_to": str(task_data.assigned_to) if task_data.assigned_to else None,
+                "assigned_role": task_data.assigned_role,
+                "created_by": str(current_user["user_id"]),
+                "priority": task_data.priority or "medium",
+                "due_date": task_data.due_date
+            }
+        )
         
         db.commit()
         logger.info(f"Task {task_id} created and committed successfully")
@@ -399,6 +405,7 @@ async def create_task(
 async def get_tasks(
     land_id: Optional[UUID] = None,
     assigned_to: Optional[UUID] = None,
+    assigned_role: Optional[str] = None,
     status: Optional[str] = None,
     task_type: Optional[str] = None,
     include_subtasks: Optional[bool] = None,
@@ -447,6 +454,19 @@ async def get_tasks(
         base_query += " AND t.assigned_to = :assigned_to"
         params["assigned_to"] = str(assigned_to)
     
+    if assigned_role:
+        # Filter by assigned_role (either from task or from user_roles)
+        base_query += """
+            AND (t.assigned_role = :assigned_role 
+                 OR (t.assigned_role IS NULL 
+                     AND EXISTS (
+                         SELECT 1 FROM user_roles ur 
+                         WHERE ur.user_id = t.assigned_to 
+                         AND ur.role_key = :assigned_role
+                     )))
+        """
+        params["assigned_role"] = assigned_role
+    
     if status:
         base_query += " AND t.status = :status"
         params["status"] = status
@@ -458,12 +478,19 @@ async def get_tasks(
     # Add permission filter for non-admin users
     if "administrator" not in user_roles:
         if "investor" in user_roles:
-            # Investors can see tasks for published lands
+            # Investors can see tasks for published lands OR lands they have expressed interest in
             base_query += """
                 AND (t.assigned_to = :user_id 
                      OR t.created_by = :user_id 
                      OR l.landowner_id = :user_id
-                     OR l.status = 'published')
+                     OR l.status = 'published'
+                     OR EXISTS (
+                         SELECT 1 FROM investor_interests ii
+                         WHERE ii.land_id = l.land_id
+                         AND ii.investor_id = :user_id
+                         AND ii.status IN ('pending', 'approved')
+                         AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+                     ))
             """
         else:
             # Other users (reviewers, landowners) see their assigned/created tasks
@@ -485,33 +512,41 @@ async def get_tasks(
             # Get subtasks for this task
             subtasks_query = text("""
                 SELECT subtask_id, task_id, title, description, status, 
-                       assigned_to, created_at, updated_at
+                       assigned_to, created_by, created_at, updated_at,
+                       completed_at, order_index
                 FROM subtasks 
                 WHERE task_id = :task_id
-                ORDER BY created_at ASC
+                ORDER BY order_index, created_at ASC
             """)
             subtasks_result = db.execute(subtasks_query, {"task_id": str(row.task_id)}).fetchall()
             
             # Convert subtasks to SubtaskResponse format
             from models.schemas import SubtaskResponse
-            subtasks = [
-                SubtaskResponse(
-                    subtask_id=subtask.subtask_id,
-                    task_id=subtask.task_id,
-                    title=subtask.title,
-                    description=subtask.description,
-                    status=subtask.status,
-                    assigned_to=str(subtask.assigned_to) if subtask.assigned_to else None,
-                    created_at=subtask.created_at,
-                    updated_at=subtask.updated_at,
-                    created_by=None,
-                    completed_at=None,
-                    order_index=None,
-                    assigned_user=None,
-                    creator=None
+            subtasks = []
+            for subtask in subtasks_result:
+                # created_by is required, use task's created_by as fallback if somehow missing
+                created_by_value = subtask.created_by if subtask.created_by else row.assigned_by
+                if not created_by_value:
+                    # Skip subtasks without created_by (shouldn't happen, but safety check)
+                    continue
+                
+                subtasks.append(
+                    SubtaskResponse(
+                        subtask_id=subtask.subtask_id,
+                        task_id=subtask.task_id,
+                        title=subtask.title,
+                        description=subtask.description,
+                        status=subtask.status,
+                        assigned_to=str(subtask.assigned_to) if subtask.assigned_to else None,
+                        created_by=str(created_by_value),
+                        created_at=subtask.created_at,
+                        updated_at=subtask.updated_at,
+                        completed_at=subtask.completed_at,
+                        order_index=int(subtask.order_index) if subtask.order_index is not None else 0,
+                        assigned_user=None,
+                        creator=None
+                    )
                 )
-                for subtask in subtasks_result
-            ]
             
             # Create TaskResponse object with subtasks
             task_response = TaskResponse(
@@ -715,6 +750,7 @@ async def get_task(
     
     # Check permissions
     user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
     task_data = {
         "assigned_by": result.assigned_by,
         "assigned_to": result.assigned_to,
@@ -723,7 +759,28 @@ async def get_task(
     
     # Pass land_status to can_access_task for investor permission check
     land_status = result.land_status if result.land_status else None
-    if not can_access_task(user_roles, str(current_user["user_id"]), task_data, land_status):
+    has_access = can_access_task(user_roles, user_id_str, task_data, land_status)
+    
+    # If investor doesn't have access via can_access_task, check if they have interest in the land
+    if not has_access and "investor" in user_roles:
+        interest_check = db.execute(
+            text("""
+                SELECT interest_id FROM investor_interests 
+                WHERE land_id = :land_id AND investor_id = :user_id
+                AND status IN ('pending', 'approved')
+                AND (withdrawal_requested = FALSE OR withdrawal_status IS NULL OR withdrawal_status != 'approved')
+                LIMIT 1
+            """),
+            {
+                "land_id": str(result.land_id),
+                "user_id": user_id_str
+            }
+        ).fetchone()
+        
+        if interest_check:
+            has_access = True
+    
+    if not has_access:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this task"
@@ -819,7 +876,7 @@ async def update_task(
             history_insert = text("""
                 INSERT INTO task_history (
                     history_id, task_id, from_status, to_status,
-                    changed_by, note, changed_at
+                    changed_by, note, start_ts
                 ) VALUES (
                     :history_id, :task_id, :from_status, :to_status,
                     :changed_by, :note, CURRENT_TIMESTAMP
@@ -941,7 +998,7 @@ async def get_task_history(
     """Get task history."""
     # Check if task exists and user has permission
     task_check = text("""
-        SELECT t.assigned_to, t.created_by as assigned_by, l.landowner_id, l.status as land_status
+        SELECT t.assigned_to, t.created_by as assigned_by, t.land_id, l.landowner_id, l.status as land_status
         FROM tasks t
         JOIN lands l ON t.land_id = l.land_id
         WHERE t.task_id = :task_id
@@ -956,13 +1013,35 @@ async def get_task_history(
         )
     
     user_roles = current_user.get("roles", [])
+    user_id_str = str(current_user["user_id"])
     task_data = {
         "assigned_by": task_result.assigned_by,
         "assigned_to": task_result.assigned_to,
         "landowner_id": task_result.landowner_id
     }
     
-    if not can_access_task(user_roles, current_user["user_id"], task_data, task_result.land_status):
+    has_access = can_access_task(user_roles, user_id_str, task_data, task_result.land_status)
+    
+    # If investor doesn't have access via can_access_task, check if they have interest in the land
+    if not has_access and "investor" in user_roles:
+        interest_check = db.execute(
+            text("""
+                SELECT interest_id FROM investor_interests 
+                WHERE land_id = :land_id AND investor_id = :user_id
+                AND status IN ('pending', 'approved')
+                AND (withdrawal_requested = FALSE OR withdrawal_status IS NULL OR withdrawal_status != 'approved')
+                LIMIT 1
+            """),
+            {
+                "land_id": str(task_result.land_id),
+                "user_id": user_id_str
+            }
+        ).fetchone()
+        
+        if interest_check:
+            has_access = True
+    
+    if not has_access:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view task history"
@@ -970,13 +1049,13 @@ async def get_task_history(
     
     # Get task history
     history_query = text("""
-        SELECT th.history_id, th.task_id, th.changed_by, th.old_status,
-               th.new_status, th.notes, th.changed_at,
+        SELECT th.history_id, th.task_id, th.changed_by, th.from_status,
+               th.to_status, th.note, th.start_ts,
                u.first_name || ' ' || u.last_name as changed_by_name
         FROM task_history th
         JOIN "user" u ON th.changed_by = u.user_id
         WHERE th.task_id = :task_id
-        ORDER BY th.changed_at DESC
+        ORDER BY th.start_ts DESC
     """)
     
     results = db.execute(history_query, {"task_id": str(task_id)}).fetchall()
@@ -986,10 +1065,10 @@ async def get_task_history(
             history_id=row.history_id,
             task_id=row.task_id,
             changed_by=row.changed_by,
-            old_status=row.old_status,
-            new_status=row.new_status,
-            notes=row.notes,
-            changed_at=row.changed_at,
+            from_status=row.from_status,
+            to_status=row.to_status,
+            note=row.note,
+            start_ts=row.start_ts,
             changed_by_name=row.changed_by_name
         )
         for row in results
@@ -1381,7 +1460,7 @@ async def get_subtasks(
     try:
         # Verify task exists and user has access
         task_query = """
-            SELECT t.task_id, t.assigned_to, t.created_by, l.landowner_id, l.status as land_status
+            SELECT t.task_id, t.land_id, t.assigned_to, t.created_by, l.landowner_id, l.status as land_status
             FROM tasks t
             JOIN lands l ON t.land_id = l.land_id
             WHERE t.task_id = CAST(:task_id AS uuid)
@@ -1396,6 +1475,7 @@ async def get_subtasks(
         
         # Check permissions
         user_roles = current_user.get("roles", [])
+        user_id_str = str(current_user["user_id"])
         task_dict = {
             "task_id": task.task_id,
             "assigned_to": task.assigned_to,
@@ -1404,7 +1484,28 @@ async def get_subtasks(
             "landowner_id": task.landowner_id
         }
         
-        if not can_access_task(user_roles, str(current_user["user_id"]), task_dict, task.land_status):
+        has_access = can_access_task(user_roles, user_id_str, task_dict, task.land_status)
+        
+        # If investor doesn't have access via can_access_task, check if they have interest in the land
+        if not has_access and "investor" in user_roles:
+            interest_check = db.execute(
+                text("""
+                    SELECT interest_id FROM investor_interests 
+                    WHERE land_id = :land_id AND investor_id = :user_id
+                    AND status IN ('pending', 'approved')
+                    AND (withdrawal_requested = FALSE OR withdrawal_status IS NULL OR withdrawal_status != 'approved')
+                    LIMIT 1
+                """),
+                {
+                    "land_id": str(task.land_id),
+                    "user_id": user_id_str
+                }
+            ).fetchone()
+            
+            if interest_check:
+                has_access = True
+        
+        if not has_access:
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view subtasks for this task"

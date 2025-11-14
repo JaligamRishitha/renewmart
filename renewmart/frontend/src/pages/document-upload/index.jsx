@@ -28,6 +28,7 @@ const DocumentUpload = () => {
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [showDocumentVersions, setShowDocumentVersions] = useState(false);
   const [selectedDocumentType, setSelectedDocumentType] = useState(null);
+  const [projectStatus, setProjectStatus] = useState('draft'); // Default to draft for new projects
 
   const documentSections = [
     {
@@ -162,6 +163,9 @@ const DocumentUpload = () => {
             project = await landsAPI.getLandById(projectId);
           }
           console.log('[Document Upload] Loaded project:', project);
+          
+          // Store project status to determine if it's a draft
+          setProjectStatus(project.status || project.status_text || 'draft');
           
           // Populate ALL project details form fields
           // Using exact backend field names from schemas.py
@@ -436,6 +440,40 @@ const DocumentUpload = () => {
         [sectionId]: sectionFiles.filter((_, index) => index !== fileIndex)
       };
     });
+  };
+
+  // Handle delete existing document (for draft projects) - only removes from frontend state
+  const handleDeleteDocument = (documentId, sectionId) => {
+    if (!documentId) {
+      console.error('[Document Upload] Cannot delete: no document ID');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to remove this document? You can upload a new one to replace it.')) {
+      return;
+    }
+
+    // Remove from uploadedFiles state only (no backend API call)
+    // The backend will update/replace the document when a new one is uploaded
+    setUploadedFiles(prev => {
+      const sectionFiles = prev?.[sectionId] || [];
+      return {
+        ...prev,
+        [sectionId]: sectionFiles.filter(file => 
+          (file.id || file.documentId) !== documentId
+        )
+      };
+    });
+
+    addNotification({
+      id: Date.now(),
+      type: 'success',
+      title: 'Document removed',
+      message: 'The document has been removed from the list. Upload a new one to replace it.',
+      timestamp: new Date()
+    });
+
+    showSuccessToast('Document removed! Upload a new document to replace it.');
   };
 
   // Handle section toggle
@@ -1066,11 +1104,13 @@ const DocumentUpload = () => {
                 uploadedFiles={uploadedFiles}
                 onFileUpload={handleFileUpload}
                 onFileRemove={handleFileRemove}
+                onDeleteDocument={handleDeleteDocument}
                 expandedSections={expandedSections}
                 onSectionToggle={handleSectionToggle}
                 onViewVersions={handleViewDocumentVersions}
                 isEditMode={isEditMode}
                 getRolesText={getRolesText}
+                projectStatus={projectStatus}
               />
             </div>
 
@@ -1144,18 +1184,7 @@ const DocumentUpload = () => {
         autoHide={true}
         hideDelay={5000}
       />
-      {/* Quick Actions */}
-      <QuickActions
-        userRole="landowner"
-        currentContext="document-upload"
-        onActionComplete={(action) => {
-          if (action === 'save-draft') {
-            handleSaveDraft();
-          }
-        }}
-        position="bottom-right"
-      />
-
+      
       {/* Toast Notification */}
       {showToast && (
         <div className="fixed top-4 right-4 z-50 animate-slide-in-right">

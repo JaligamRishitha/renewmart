@@ -63,7 +63,7 @@ async def create_notification(
         db.commit()
         print(f"DEBUG: Notification {notification_id} committed successfully")
         
-        # Return the created notification
+        # Return the created notification - using direct query since we need specific fields
         fetch_query = text("""
             SELECT 
                 notification_id,
@@ -124,15 +124,11 @@ async def get_notifications(
     try:
         user_id = str(current_user["user_id"])
         
-        # Check if notifications table exists
+        # Check if notifications table exists using stored procedure
         try:
-            table_check = text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'notifications'
-                )
-            """)
-            table_exists = db.execute(table_check).fetchone()
+            table_exists = db.execute(
+                text("SELECT check_notifications_table_exists()")
+            ).fetchone()
             if not table_exists or not table_exists[0]:
                 print("WARNING: notifications table does not exist. Run database setup script.")
                 return []
@@ -237,15 +233,11 @@ async def get_unread_count(
     try:
         user_id = str(current_user["user_id"])
         
-        # Check if notifications table exists
+        # Check if notifications table exists using stored procedure
         try:
-            table_check = text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'notifications'
-                )
-            """)
-            table_exists = db.execute(table_check).fetchone()
+            table_exists = db.execute(
+                text("SELECT check_notifications_table_exists()")
+            ).fetchone()
             if not table_exists or not table_exists[0]:
                 print("WARNING: notifications table does not exist. Return 0 count.")
                 return {"count": 0, "table_exists": False}
@@ -253,23 +245,13 @@ async def get_unread_count(
             print(f"Error checking notifications table: {str(table_check_error)}")
             return {"count": 0, "table_exists": False}
         
-        query = text("""
-            SELECT COUNT(*) as count
-            FROM notifications
-            WHERE user_id = CAST(:user_id AS uuid) AND read = false
-        """)
-        
-        result = db.execute(query, {"user_id": user_id}).fetchone()
-        count = result.count if result else 0
-        
-        # Debug: Also check total notifications for this user
-        total_query = text("""
-            SELECT COUNT(*) as total
-            FROM notifications
-            WHERE user_id = CAST(:user_id AS uuid)
-        """)
-        total_result = db.execute(total_query, {"user_id": user_id}).fetchone()
-        total = total_result.total if total_result else 0
+        # Get notification count using stored procedure
+        result = db.execute(
+            text("SELECT * FROM get_notification_count(CAST(:user_id AS uuid))"),
+            {"user_id": user_id}
+        ).fetchone()
+        count = result.unread_count if result else 0
+        total = result.total_count if result else 0
         
         print(f"Notification count - User: {user_id}, Unread: {count}, Total: {total}")
         
@@ -314,14 +296,19 @@ async def mark_notification_as_read(
                 detail="Not authorized to update this notification"
             )
         
-        # Update notification
-        update_query = text("""
-            UPDATE notifications
-            SET read = true, read_at = now()
-            WHERE notification_id = CAST(:notification_id AS uuid)
-        """)
-        
-        db.execute(update_query, {"notification_id": str(notification_id)})
+        # Update notification using stored procedure
+        db.execute(
+            text("""
+                SELECT mark_notification_as_read(
+                    CAST(:notification_id AS uuid),
+                    CAST(:user_id AS uuid)
+                )
+            """),
+            {
+                "notification_id": str(notification_id),
+                "user_id": user_id
+            }
+        )
         db.commit()
         
         return {"message": "Notification marked as read"}
@@ -346,13 +333,11 @@ async def mark_all_notifications_as_read(
     try:
         user_id = str(current_user["user_id"])
         
-        update_query = text("""
-            UPDATE notifications
-            SET read = true, read_at = now()
-            WHERE user_id = CAST(:user_id AS uuid) AND read = false
-        """)
-        
-        db.execute(update_query, {"user_id": user_id})
+        # Mark all notifications as read using stored procedure
+        db.execute(
+            text("SELECT mark_all_notifications_as_read(CAST(:user_id AS uuid))"),
+            {"user_id": user_id}
+        )
         db.commit()
         
         return {"message": "All notifications marked as read"}

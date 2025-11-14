@@ -9,11 +9,13 @@ const DocumentAccordion = ({
   uploadedFiles, 
   onFileUpload, 
   onFileRemove,
+  onDeleteDocument,
   expandedSections,
   onSectionToggle,
   onViewVersions,
   isEditMode = false,
-  getRolesText
+  getRolesText,
+  projectStatus
 }) => {
   const [draggedOver, setDraggedOver] = useState(null);
   const [downloading, setDownloading] = useState(null);
@@ -396,9 +398,24 @@ const DocumentAccordion = ({
                               </Button>
                             )}
                             {file?.isExisting && (
-                              <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-                                Existing
-                              </span>
+                              <>
+                                {projectStatus === 'draft' && onDeleteDocument && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onDeleteDocument(file.id || file.documentId, section.id)}
+                                    className="text-error hover:text-error hover:bg-error/10"
+                                    title="Delete Document"
+                                  >
+                                    <Icon name="Trash2" size={16} />
+                                  </Button>
+                                )}
+                                {projectStatus !== 'draft' && (
+                                  <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                                    Existing
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>

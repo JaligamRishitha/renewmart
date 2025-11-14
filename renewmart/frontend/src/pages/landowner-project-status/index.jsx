@@ -37,18 +37,18 @@ const LandownerProjectStatus = () => {
 
   const handleViewProject = (project) => {
     // Navigate to project review page showing all reviewer roles
-    navigate(`/landowner/project-review/${project.id}`, { 
+    navigate(`/landowner/project-review/${project.land_id}`, { 
       state: { project } 
     });
   };
 
   const handleContinueDraft = (project) => {
-    navigate('/document-upload', { state: { projectId: project?.id, mode: 'continue' } });
+    navigate('/document-upload', { state: { projectId: project?.land_id, mode: 'continue' } });
   };
 
   const handleSubmitForReview = async (project) => {
     try {
-      await landsAPI.submitForReview(project.id);
+      await landsAPI.submitForReview(project.land_id);
       // Refresh data
       await fetchProjects();
     } catch (err) {
@@ -59,7 +59,7 @@ const LandownerProjectStatus = () => {
 
   const handleDeleteProject = async (project) => {
     try {
-      await landsAPI.deleteLand(project.id);
+      await landsAPI.deleteLand(project.land_id);
       // Refresh data
       await fetchProjects();
     } catch (err) {
@@ -137,25 +137,25 @@ const LandownerProjectStatus = () => {
           {projects.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {projects.map((project) => (
-                <div key={project.id} className="bg-card border border-border rounded-lg shadow-elevation-1 overflow-hidden">
+                <div key={project.land_id} className="bg-card border border-border rounded-lg shadow-elevation-1 overflow-hidden">
                   {/* Project Header */}
                   <div className="p-6 border-b border-border">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-foreground mb-1">
-                          {project.name}
+                          {project.title}
                         </h3>
                         <p className="text-sm text-muted-foreground mb-2">
-                          {project.location}
+                          {project.location_text}
                         </p>
                         <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                           <span className="flex items-center">
                             <Icon name="MapPin" size={14} className="mr-1" />
-                            {project.type}
+                            {project.energy_key || 'N/A'}
                           </span>
                           <span className="flex items-center">
                             <Icon name="Zap" size={14} className="mr-1" />
-                            {project.capacity} MW
+                            {project.capacity_mw || 0} MW
                           </span>
                         </div>
                       </div>
@@ -177,8 +177,8 @@ const LandownerProjectStatus = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Created</span>
                         <span className="text-foreground">
-                          {project.createdAt 
-                            ? new Date(project.createdAt).toLocaleDateString('en-US', {
+                          {project.created_at 
+                            ? new Date(project.created_at).toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'long',
                                 day: 'numeric'
@@ -190,16 +190,19 @@ const LandownerProjectStatus = () => {
 
                     {/* Action Buttons */}
                     <div className="flex flex-col space-y-2">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleViewProject(project)}
-                        iconName="Eye"
-                        iconPosition="left"
-                        className="w-full"
-                      >
-                        View Review Status
-                      </Button>
+                      {/* Show View Review Status button only for submitted projects (not drafts) */}
+                      {project.status !== 'draft' && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleViewProject(project)}
+                          iconName="Eye"
+                          iconPosition="left"
+                          className="w-full"
+                        >
+                          View Review Status
+                        </Button>
+                      )}
                       
                       <div className="flex space-x-2">
                         {project.status === 'draft' && (

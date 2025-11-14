@@ -45,7 +45,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
         onDelete(project);
         break;
       case 'upload': 
-        navigate('/document-version-upload', { state: { projectId: project?.id } });
+        navigate('/document-version-upload', { state: { projectId: project?.land_id } });
         break;
       default:
         break;
@@ -84,7 +84,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
           </thead>
           <tbody className="divide-y divide-border">
             {projects?.map((project) => (
-              <tr key={project?.id} className="hover:bg-muted/30 transition-smooth">
+              <tr key={project?.land_id} className="hover:bg-muted/30 transition-smooth">
                 <td className="px-6 py-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -92,7 +92,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                     </div>
                     <div>
                       <div className="font-body font-medium text-foreground">
-                        {project?.name}
+                        {project?.title}
                       </div>
                     
                     </div>
@@ -101,18 +101,18 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 <td className="px-6 py-4">
                   <div className="flex items-center space-x-2">
                     <Icon name="MapPin" size={16} className="text-muted-foreground" />
-                    <span className="font-body text-foreground">{project?.location}</span>
+                    <span className="font-body text-foreground">{project?.location_text}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <span className="font-body text-foreground capitalize">
-                    {project?.type || project?.energy_key || project?.energyType || 'N/A'}
+                    {project?.energy_key || 'N/A'}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   <span className="font-body font-medium text-foreground">
-                    {project?.areaAcres || project?.area_acres 
-                      ? `${parseFloat(project?.areaAcres || project?.area_acres).toFixed(2)}`
+                    {project?.area_acres 
+                      ? `${parseFloat(project?.area_acres).toFixed(2)}`
                       : 'N/A'}
                   </span>
                 </td>
@@ -121,7 +121,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 </td>
                 <td className="px-6 py-4">
                   <span className="font-body text-muted-foreground">
-                    {formatDate(project?.lastUpdated)}
+                    {formatDate(project?.updated_at)}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -192,7 +192,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
       {/* Mobile Card View */}
       <div className="lg:hidden divide-y divide-border">
         {projects?.map((project) => (
-          <div key={project?.id} className="p-4">
+          <div key={project?.land_id} className="p-4">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -200,7 +200,7 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
                 </div>
                 <div>
                   <div className="font-body font-medium text-foreground">
-                    {project?.name}
+                    {project?.title}
                   </div>
                 </div>
               </div>
@@ -210,25 +210,25 @@ const ProjectTable = ({ projects, onEdit, onView, onContinueDraft, onSubmitForRe
             <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Location:</span>
-                <div className="font-body text-foreground">{project?.location}</div>
+                <div className="font-body text-foreground">{project?.location_text}</div>
               </div>
               <div>
                 <span className="text-muted-foreground">Type:</span>
                 <div className="font-body text-foreground capitalize">
-                  {project?.type || project?.energy_key || project?.energyType || 'N/A'}
+                  {project?.energy_key || 'N/A'}
                 </div>
               </div>
               <div>
                 <span className="text-muted-foreground">Land:</span>
                 <div className="font-body font-medium text-foreground">
-                  {project?.areaAcres || project?.area_acres 
-                    ? `${parseFloat(project?.areaAcres || project?.area_acres).toFixed(2)} acres`
+                  {project?.area_acres 
+                    ? `${parseFloat(project?.area_acres).toFixed(2)} acres`
                     : 'N/A'}
                 </div>
               </div>
               <div>
                 <span className="text-muted-foreground">Updated:</span>
-                <div className="font-body text-foreground">{formatDate(project?.lastUpdated)}</div>
+                <div className="font-body text-foreground">{formatDate(project?.updated_at)}</div>
               </div>
             </div>
             

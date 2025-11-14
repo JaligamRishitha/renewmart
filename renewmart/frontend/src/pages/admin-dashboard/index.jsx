@@ -16,6 +16,7 @@ import DeadlineAlerts from "./components/DeadlineAlerts";
 import BulkActions from "./components/BulkActions";
 import AssignReviewerModal from "./components/AssignReviewerModal";
 import CreateUserModal from "./components/CreateUserModal";
+import ReportGenerationModal from "./components/ReportGenerationModal";
 import { landsAPI, taskAPI, usersAPI } from "../../services/api";
 import Icon from "../../components/AppIcon";
 
@@ -35,6 +36,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -236,103 +238,22 @@ const AdminDashboard = () => {
       ]
     : [];
 
-  // Generate deadline alerts from projects data
-  const alertsData = React.useMemo(() => {
-    const now = new Date();
-    const alerts = [];
-
-    filteredProjects.forEach((project) => {
-      if (!project.project_due_date) return;
-
-      const dueDate = new Date(project.project_due_date);
-      const diffInHours = (dueDate - now) / (1000 * 60 * 60);
-      const diffInDays = diffInHours / 24;
-
-      // Only show alerts for projects that are not completed/published
-      const activeStatuses = ["submitted", "under_review", "approved"];
-      if (!activeStatuses.includes(project.status)) return;
-
-      const energyType = project?.energy_key || project?.energyType || "Project";
-      
-      // Overdue projects (critical)
-      if (diffInHours < 0) {
-        alerts.push({
-          id: `overdue-${project.id}`,
-          projectId: project.id,
-          landId: project.id,
-          taskId: null,
-          taskTitle: project.title,
-          projectTitle: project.title,
-          deadline: project.project_due_date,
-          description: `${project.title} - ${energyType} project is overdue`,
-          urgency: "critical",
-          projectName: project.title,
-          assignedTo: project.landownerName || "Unassigned",
-        });
+  // Fetch deadline alerts from backend
+  const [alertsData, setAlertsData] = useState([]);
+  
+  useEffect(() => {
+    const fetchDeadlineAlerts = async () => {
+      try {
+        const alerts = await landsAPI.getDeadlineAlerts();
+        setAlertsData(alerts || []);
+      } catch (err) {
+        console.error('[Admin Dashboard] Error fetching deadline alerts:', err);
+        setAlertsData([]);
       }
-      // Due within 24 hours (critical)
-      else if (diffInHours > 0 && diffInHours <= 24) {
-        alerts.push({
-          id: `urgent-${project.id}`,
-          projectId: project.id,
-          landId: project.id,
-          taskId: null,
-          taskTitle: project.title,
-          projectTitle: project.title,
-          deadline: project.project_due_date,
-          description: `${project.title} - Due in less than 24 hours`,
-          urgency: "critical",
-          projectName: project.title,
-          assignedTo: project.landownerName || "Unassigned",
-        });
-      }
-      // Due within 3 days (warning)
-      else if (diffInDays > 1 && diffInDays <= 3) {
-        alerts.push({
-          id: `warning-${project.id}`,
-          projectId: project.id,
-          landId: project.id,
-          taskId: null,
-          taskTitle: project.title,
-          projectTitle: project.title,
-          deadline: project.project_due_date,
-          description: `${project.title} - Due in ${Math.ceil(
-            diffInDays
-          )} days`,
-          urgency: "warning",
-          projectName: project.title,
-          assignedTo: project.landownerName || "Unassigned",
-        });
-      }
-      // Due within 7 days (info)
-      else if (diffInDays > 3 && diffInDays <= 7) {
-        alerts.push({
-          id: `info-${project.id}`,
-          projectId: project.id,
-          landId: project.id,
-          taskId: null,
-          taskTitle: project.title,
-          projectTitle: project.title,
-          deadline: project.project_due_date,
-          description: `${project.title} - Due in ${Math.ceil(
-            diffInDays
-          )} days`,
-          urgency: "info",
-          projectName: project.title,
-          assignedTo: project.landownerName || "Unassigned",
-        });
-      }
-    });
-
-    // Sort by urgency and deadline
-    return alerts.sort((a, b) => {
-      const urgencyOrder = { critical: 0, warning: 1, info: 2 };
-      if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
-        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
-      }
-      return new Date(a.deadline) - new Date(b.deadline);
-    });
-  }, [filteredProjects]);
+    };
+    
+    fetchDeadlineAlerts();
+  }, []);
 
   // Generate recent activity from projects data
   const activitiesData = React.useMemo(() => {
@@ -433,10 +354,14 @@ const AdminDashboard = () => {
   };
 
   const handleQuickAction = (actionId) => {
-    // TODO: Implement quick action API calls
-    console.log("Quick action:", actionId);
+    if (actionId === "generate-report") {
+      setShowReportModal(true);
+    } else {
+      console.log("Quick action:", actionId);
+    }
   };
 
+  
   return (
     <div className="min-h-screen bg-background">
       <Header userRole="admin" notifications={{ dashboard: 3, projects: 7 }} />
@@ -642,12 +567,7 @@ const AdminDashboard = () => {
         autoHide={true}
         hideDelay={5000}
       />
-      {/* Quick Actions */}
-      <QuickActions
-        userRole="admin"
-        onActionComplete={handleQuickAction}
-        position="bottom-right"
-      />
+    
 
       {/* Create User Modal */}
       {showCreateUserModal && (
@@ -666,6 +586,13 @@ const AdminDashboard = () => {
               ...prev.slice(0, 4),
             ]);
           }}
+        />
+      )}
+
+      {/* Report Generation Modal */}
+      {showReportModal && (
+        <ReportGenerationModal
+          onClose={() => setShowReportModal(false)}
         />
       )}
       

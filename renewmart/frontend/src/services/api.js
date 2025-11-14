@@ -410,6 +410,11 @@ export const landsAPI = {
     return response.data;
   },
 
+  getDeadlineAlerts: async () => {
+    const response = await api.get('/lands/admin/deadline-alerts');
+    return response.data;
+  },
+
   publishLand: async (landId) => {
     const response = await api.post(`/lands/${landId}/publish`);
     return response.data;
@@ -427,6 +432,11 @@ export const landsAPI = {
 
   getMarketplaceProjects: async (params = {}) => {
     const response = await api.get('/lands/marketplace/published', { params });
+    return response.data;
+  },
+
+  getAdminMarketplaceProjects: async (params = {}) => {
+    const response = await api.get('/lands/admin/marketplace/published', { params });
     return response.data;
   },
 
@@ -457,6 +467,26 @@ export const landsAPI = {
 
   getProjectDetailsWithTasks: async (projectId) => {
     const response = await api.get(`/lands/admin/projects/${projectId}/details-with-tasks`);
+    return response.data;
+  },
+
+  // Report generation
+  getAllLandsForReport: async () => {
+    const response = await api.get('/lands/admin/reports/all-lands');
+    return response.data;
+  },
+
+  downloadExcelReport: async () => {
+    const response = await api.get('/lands/admin/reports/excel', {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadPdfReport: async () => {
+    const response = await api.get('/lands/admin/reports/pdf', {
+      responseType: 'blob',
+    });
     return response.data;
   }
 };
@@ -512,6 +542,15 @@ export const documentsAPI = {
     // Don't set Content-Type header - let axios set it automatically with boundary
     // Setting it manually can cause issues with multipart/form-data
     const response = await api.post(`/documents/upload/${landId}`, formData, {
+      timeout: 120000, // 2 minutes for document uploads
+      // axios will automatically set Content-Type: multipart/form-data with boundary
+    });
+    return response.data;
+  },
+  
+  updateDraftDocument: async (landId, documentId, formData) => {
+    // PUT endpoint for updating existing draft documents
+    const response = await api.put(`/documents/upload/${landId}/${documentId}`, formData, {
       timeout: 120000, // 2 minutes for document uploads
       // axios will automatically set Content-Type: multipart/form-data with boundary
     });
@@ -1042,6 +1081,18 @@ export const taskAPI = {
         summary_only: true
       } 
     });
+    return response.data;
+  },
+
+  // Get all tasks (admin only)
+  getAllTasks: async (params = {}) => {
+    const response = await api.get('/tasks/admin/all', { params });
+    return response.data;
+  },
+
+  // Get deadline alerts (admin only)
+  getDeadlineAlerts: async () => {
+    const response = await api.get('/tasks/admin/deadline-alerts');
     return response.data;
   }
 };

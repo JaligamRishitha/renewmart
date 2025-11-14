@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import { taskAPI, documentsAPI, landsAPI, usersAPI } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
+import websocketService from '../../../services/websocketService';
+import api from '../../../services/api';
 
 const LandownerProjectReview = () => {
   const { projectId } = useParams();
@@ -21,16 +23,105 @@ const LandownerProjectReview = () => {
   const [expandedRoles, setExpandedRoles] = useState({});
   const [expandedTasks, setExpandedTasks] = useState({});
   const [expandedSubtasks, setExpandedSubtasks] = useState({});
+  
+  // Chat state
+  const [chatParticipants, setChatParticipants] = useState([]);
+  const [selectedChatParticipant, setSelectedChatParticipant] = useState(null);
+  const [chatConversations, setChatConversations] = useState({});
+  const [newChatMessage, setNewChatMessage] = useState('');
+  const [isChatConnected, setIsChatConnected] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [loadingChatParticipants, setLoadingChatParticipants] = useState(false);
+  const [loadingChatConversations, setLoadingChatConversations] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const messagesEndRef = useRef(null);
+  const participantsListRef = useRef(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
 
   const tabs = [
     { id: 'overview', label: 'Review Progress', icon: 'LayoutGrid' },
     { id: 'reviewers', label: 'Reviewers & Tasks', icon: 'Users' },
-    { id: 'documents', label: 'Project Documents', icon: 'FileText' }
+    { id: 'documents', label: 'Documents Uploaded', icon: 'FileText' },
+    { id: 'chat', label: 'Chat', icon: 'MessageCircle' }
   ];
 
   useEffect(() => {
     fetchProjectDetails();
   }, [landId]);
+
+  // Initialize chat when component mounts or landId changes
+  useEffect(() => {
+    if (landId && user?.user_id) {
+      loadChatParticipants();
+      connectChatWebSocket();
+    }
+    
+    return () => {
+      if (isChatConnected) {
+        websocketService.disconnect();
+      }
+    };
+  }, [landId, user?.user_id]);
+
+  // WebSocket event listeners for chat
+  useEffect(() => {
+    if (isChatConnected) {
+      const handleNewMessage = (message) => {
+        console.log('Received new chat message:', message);
+        
+        // Update unread count for the sender
+        if (message.sender_id !== user?.user_id) {
+          setChatParticipants(prev => prev.map(p => {
+            if (p.user_id === message.sender_id) {
+              return {
+                ...p,
+                unreadCount: (p.unreadCount || 0) + 1,
+                lastMessageTime: message.created_at,
+                lastMessage: message.content
+              };
+            }
+            return p;
+          }));
+          setChatUnreadCount(prev => prev + 1);
+        }
+        
+        // Add message to conversation if it's for the selected participant
+        if (selectedChatParticipant && message.sender_id === selectedChatParticipant.user_id) {
+          setChatConversations(prev => ({
+            ...prev,
+            [selectedChatParticipant.user_id]: [
+              ...(prev[selectedChatParticipant.user_id] || []),
+              {
+                message_id: message.message_id,
+                sender_id: message.sender_id,
+                sender_name: message.sender_name,
+                content: message.content,
+                created_at: message.created_at,
+                is_read: true,
+                is_urgent: message.is_urgent
+              }
+            ]
+          }));
+          scrollToBottom();
+        }
+      };
+
+      websocketService.on('new_message', handleNewMessage);
+      
+      return () => {
+        websocketService.off('new_message', handleNewMessage);
+      };
+    }
+  }, [isChatConnected, selectedChatParticipant, user]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatConversations, selectedChatParticipant]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const fetchProjectDetails = async () => {
     try {
@@ -264,6 +355,275 @@ const LandownerProjectReview = () => {
     const mb = kb / 1024;
     if (mb >= 1) return `${mb.toFixed(2)} MB`;
     return `${kb.toFixed(2)} KB`;
+  };
+
+  // Chat functions
+  const loadChatParticipants = async () => {
+    try {
+      setLoadingChatParticipants(true);
+      const response = await api.get(`/messaging/project/${landId}/participants`);
+      const participantsList = response.data || [];
+      
+      // Load unread counts and last messages for each participant
+      const participantsWithUnread = await Promise.all(
+        participantsList.map(async (participant) => {
+          try {
+            // Get conversation summary with unread count
+            const convResponse = await api.get(`/messaging/conversations/${participant.user_id}`);
+            const messages = convResponse.data || [];
+            
+            // Calculate unread count
+            const unreadCount = messages.filter(msg => 
+              !msg.is_read && msg.sender_id !== user?.user_id
+            ).length;
+            
+            // Get last message
+            const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+            
+            return {
+              ...participant,
+              unreadCount: unreadCount || 0,
+              lastMessageTime: lastMessage?.created_at || null,
+              lastMessage: lastMessage?.content || null
+            };
+          } catch (error) {
+            console.error(`Error loading conversation for ${participant.user_id}:`, error);
+            return {
+              ...participant,
+              unreadCount: 0,
+              lastMessageTime: null,
+              lastMessage: null
+            };
+          }
+        })
+      );
+      
+      // Sort by last message time (most recent first), then by unread count
+      participantsWithUnread.sort((a, b) => {
+        // Chats with unread messages first
+        if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+        if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+        
+        // Then by last message time (most recent first)
+        if (a.lastMessageTime && b.lastMessageTime) {
+          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+        }
+        if (a.lastMessageTime) return -1;
+        if (b.lastMessageTime) return 1;
+        
+        // Finally by name
+        return a.name.localeCompare(b.name);
+      });
+      
+      setChatParticipants(participantsWithUnread);
+      
+      // Update total unread count
+      const totalUnread = participantsWithUnread.reduce((sum, p) => sum + (p.unreadCount || 0), 0);
+      setChatUnreadCount(totalUnread);
+    } catch (error) {
+      console.error('Error loading chat participants:', error);
+    } finally {
+      setLoadingChatParticipants(false);
+    }
+  };
+
+  const loadChatConversation = async (participantId) => {
+    try {
+      setLoadingChatConversations(true);
+      const response = await api.get(`/messaging/conversations/${participantId}`);
+      const formattedMessages = response.data.map(msg => ({
+        message_id: msg.message_id,
+        sender_id: msg.sender_id,
+        sender_name: msg.sender_name || 'Unknown',
+        content: msg.content,
+        created_at: msg.created_at,
+        is_read: msg.is_read,
+        is_urgent: msg.is_urgent
+      }));
+      
+      setChatConversations(prev => ({
+        ...prev,
+        [participantId]: formattedMessages
+      }));
+      
+      // Mark messages as read
+      const unreadMessageIds = formattedMessages
+        .filter(msg => !msg.is_read && msg.sender_id !== user?.user_id)
+        .map(msg => msg.message_id);
+      
+      if (unreadMessageIds.length > 0) {
+        try {
+          await api.post('/messaging/messages/mark-read', {
+            message_ids: unreadMessageIds
+          });
+          
+          // Update unread count in participants list
+          setChatParticipants(prev => prev.map(p => {
+            if (p.user_id === participantId) {
+              const newCount = Math.max(0, (p.unreadCount || 0) - unreadMessageIds.length);
+              return { ...p, unreadCount: newCount };
+            }
+            return p;
+          }));
+          
+          // Update total unread count
+          setChatUnreadCount(prev => Math.max(0, prev - unreadMessageIds.length));
+        } catch (error) {
+          console.error('Error marking messages as read:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat conversation:', error);
+      setChatConversations(prev => ({
+        ...prev,
+        [participantId]: []
+      }));
+    } finally {
+      setLoadingChatConversations(false);
+    }
+  };
+
+  const connectChatWebSocket = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        await websocketService.connect(token);
+        setIsChatConnected(true);
+      }
+    } catch (error) {
+      console.error('Failed to connect to WebSocket:', error);
+      setIsChatConnected(false);
+    }
+  };
+
+  const handleChatParticipantSelect = (participant) => {
+    setSelectedChatParticipant(participant);
+    
+    // Load conversation if not already loaded
+    if (!chatConversations[participant.user_id]) {
+      loadChatConversation(participant.user_id);
+    } else {
+      // Still mark messages as read even if conversation is already loaded
+      const conversation = chatConversations[participant.user_id] || [];
+      const unreadMessageIds = conversation
+        .filter(msg => !msg.is_read && msg.sender_id !== user?.user_id)
+        .map(msg => msg.message_id);
+      
+      if (unreadMessageIds.length > 0) {
+        api.post('/messaging/messages/mark-read', {
+          message_ids: unreadMessageIds
+        }).then(() => {
+          setChatParticipants(prev => prev.map(p => {
+            if (p.user_id === participant.user_id) {
+              return { ...p, unreadCount: 0 };
+            }
+            return p;
+          }));
+          setChatUnreadCount(prev => Math.max(0, prev - unreadMessageIds.length));
+        }).catch(err => console.error('Error marking messages as read:', err));
+      } else {
+        // Clear unread count for this participant
+        setChatParticipants(prev => prev.map(p => 
+          p.user_id === participant.user_id ? { ...p, unreadCount: 0 } : p
+        ));
+      }
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!newChatMessage.trim() || !selectedChatParticipant || !isChatConnected) return;
+
+    const messageContent = newChatMessage.trim();
+    const recipientId = selectedChatParticipant.user_id;
+
+    try {
+      setIsSendingMessage(true);
+      
+      // Send message via REST API for persistence
+      const response = await api.post('/messaging/messages/send-simple', {
+        task_id: landId,
+        content: messageContent,
+        recipient_id: recipientId,
+        is_urgent: false,
+        message_type: 'text'
+      });
+
+      if (response.data) {
+        const message = {
+          message_id: response.data.message_id,
+          sender_id: user?.user_id,
+          sender_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'You',
+          content: messageContent,
+          created_at: new Date().toISOString(),
+          is_read: true,
+          is_urgent: false
+        };
+
+        // Add message to conversation
+        setChatConversations(prev => ({
+          ...prev,
+          [selectedChatParticipant.user_id]: [
+            ...(prev[selectedChatParticipant.user_id] || []),
+            message
+          ]
+        }));
+
+        // Also send via WebSocket for real-time updates
+        if (isChatConnected) {
+          websocketService.sendMessage(
+            landId,
+            messageContent,
+            recipientId,
+            false
+          );
+        }
+
+        setNewChatMessage('');
+        
+        // Update participant's last message info
+        setChatParticipants(prev => prev.map(p => {
+          if (p.user_id === selectedChatParticipant.user_id) {
+            return {
+              ...p,
+              lastMessageTime: message.created_at,
+              lastMessage: message.content
+            };
+          }
+          return p;
+        }));
+        
+        scrollToBottom();
+      }
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  const handleChatKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendChatMessage();
+    }
+  };
+
+  const formatChatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  const formatRoleName = (role) => {
+    if (!role) return '';
+    return role
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase());
   };
 
   if (loading) {
@@ -1193,6 +1553,245 @@ const LandownerProjectReview = () => {
             </div>
           );
         })()}
+
+        {/* Chat Tab */}
+        {activeTab === 'chat' && (
+          <div className="flex h-[calc(100vh-300px)] bg-card border border-border rounded-lg overflow-hidden">
+            {/* Participants Sidebar */}
+            <div className="w-1/3 border-r border-border bg-background relative flex flex-col">
+              <div className="p-4 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <Icon name="Users" size={20} className="text-primary" />
+                    Project Members
+                    {chatUnreadCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                        {chatUnreadCount}
+                      </span>
+                    )}
+                  </h3>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Select a team member to start chatting
+                </p>
+              </div>
+              
+              <div 
+                ref={participantsListRef}
+                className="flex-1 overflow-y-auto relative"
+                onScroll={(e) => {
+                  const element = e.target;
+                  // Show scroll to top button if scrolled down more than 100px
+                  setShowScrollToTop(element.scrollTop > 100);
+                }}
+              >
+                {loadingChatParticipants ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <span className="ml-2 text-muted-foreground">Loading participants...</span>
+                  </div>
+                ) : chatParticipants.length === 0 ? (
+                  <div className="flex items-center justify-center p-8 text-muted-foreground">
+                    <div className="text-center">
+                      <Icon name="Users" size={48} className="mx-auto mb-2 opacity-50" />
+                      <p>No team members found</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {chatParticipants.map((participant) => {
+                    const isSelected = selectedChatParticipant?.user_id === participant.user_id;
+                    const lastMessage = participant.lastMessage;
+                    
+                    return (
+                      <button
+                        key={participant.user_id}
+                        onClick={() => handleChatParticipantSelect(participant)}
+                        className={`w-full p-4 text-left border-b border-border hover:bg-muted transition-colors ${
+                          isSelected ? 'bg-primary/10 border-primary/20' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-medium text-primary">
+                              {participant.avatar || participant.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
+                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${
+                              participant.status === 'online' ? 'bg-green-500' : 
+                              participant.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
+                            }`} />
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h4 className={`font-medium truncate ${participant.unreadCount > 0 ? 'font-semibold' : ''}`}>
+                                {participant.name}
+                              </h4>
+                              {participant.unreadCount > 0 && (
+                                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                  {participant.unreadCount}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                              {formatRoleName(participant.role)}
+                            </p>
+                            {lastMessage && (
+                              <p className="text-xs text-muted-foreground truncate mt-1">
+                                {lastMessage.length > 40 ? `${lastMessage.substring(0, 40)}...` : lastMessage}
+                              </p>
+                            )}
+                            {participant.lastMessageTime && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatChatTimestamp(participant.lastMessageTime)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  </>
+                )}
+              </div>
+              
+              {/* Scroll to Top Button - Fixed at bottom of sidebar */}
+              {showScrollToTop && (
+                <button
+                  onClick={() => {
+                    if (participantsListRef.current) {
+                      participantsListRef.current.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                      });
+                    }
+                  }}
+                  className="absolute bottom-4 right-4 w-10 h-10 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center z-10"
+                  title="Scroll to top"
+                >
+                  <Icon name="ChevronUp" size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col bg-background">
+              {!selectedChatParticipant ? (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Icon name="MessageCircle" size={64} className="mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium">Select a team member to start chatting</p>
+                    <p className="text-sm mt-2">Choose someone from the list to view your conversation</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Chat Header */}
+                  <div className="p-4 border-b border-border bg-card">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-medium text-primary">
+                          {selectedChatParticipant.avatar || selectedChatParticipant.name?.charAt(0)?.toUpperCase() || 'U'}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground">{selectedChatParticipant.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {formatRoleName(selectedChatParticipant.role)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {loadingChatConversations ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : (
+                      (chatConversations[selectedChatParticipant.user_id] || []).map((message) => {
+                        const isOwnMessage = message.sender_id === user?.user_id;
+                        
+                        return (
+                          <div
+                            key={message.message_id}
+                            className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div className={`max-w-[70%] ${isOwnMessage ? 'order-2' : 'order-1'}`}>
+                              {!isOwnMessage && (
+                                <p className="text-xs text-muted-foreground mb-1 px-2">
+                                  {message.sender_name}
+                                </p>
+                              )}
+                              <div
+                                className={`rounded-lg px-4 py-2 ${
+                                  isOwnMessage
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-foreground'
+                                }`}
+                              >
+                                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                                <div className="flex items-center justify-end gap-2 mt-1">
+                                  {message.is_urgent && (
+                                    <Icon name="AlertTriangle" size={12} className="text-warning" />
+                                  )}
+                                  <span className={`text-xs ${
+                                    isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                                  }`}>
+                                    {formatChatTimestamp(message.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="p-4 border-t border-border bg-card">
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        value={newChatMessage}
+                        onChange={(e) => setNewChatMessage(e.target.value)}
+                        onKeyPress={handleChatKeyPress}
+                        placeholder="Type a message..."
+                        className="flex-1 min-h-[60px] max-h-[120px] px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                        rows={2}
+                      />
+                      <button
+                        onClick={handleSendChatMessage}
+                        disabled={!newChatMessage.trim() || isSendingMessage || !isChatConnected}
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                      >
+                        {isSendingMessage ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
+                            <span>Sending...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="Send" size={18} />
+                            <span>Send</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {!isChatConnected && (
+                      <p className="text-xs text-warning mt-2 flex items-center gap-1">
+                        <Icon name="AlertCircle" size={12} />
+                        Not connected. Messages may not be delivered in real-time.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

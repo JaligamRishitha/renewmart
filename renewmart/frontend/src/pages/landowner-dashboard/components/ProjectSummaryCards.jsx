@@ -2,11 +2,29 @@ import React from 'react';
 import Icon from '../../../components/AppIcon';
 
 const ProjectSummaryCards = ({ summaryData }) => {
+  // Format total land area with proper decimal places
+  const formatLandArea = (area) => {
+    if (!area || area === 0) return '0';
+    return typeof area === 'number' ? area.toFixed(2) : parseFloat(area || 0).toFixed(2);
+  };
+
+  // Format completed submissions count
+  const formatCompletedSubmissions = (count) => {
+    return count ?? 0;
+  };
+
+  // Format estimated revenue in millions
+  const formatEstimatedRevenue = (revenue) => {
+    if (!revenue || revenue === 0) return '£0.00M';
+    const revenueValue = typeof revenue === 'number' ? revenue : parseFloat(revenue || 0);
+    return `£${revenueValue.toFixed(2)}M`;
+  };
+
   const cards = [
     {
       id: 'total-land',
       title: 'Total Land Area',
-      value: summaryData?.totalLandArea,
+      value: formatLandArea(summaryData?.totalLandArea),
       unit: 'acres',
       icon: 'MapPin',
       color: 'bg-primary',
@@ -15,7 +33,7 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'draft-projects',
       title: 'Draft Projects',
-      value: summaryData?.draftProjects,
+      value: summaryData?.draftProjects ?? 0,
       unit: 'projects',
       icon: 'FileText',
       color: 'bg-success',
@@ -24,7 +42,7 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'completed-submissions',
       title: 'Completed Submissions',
-      value: summaryData?.completedSubmissions ?? 0,
+      value: formatCompletedSubmissions(summaryData?.completedSubmissions),
       unit: 'submissions',
       icon: 'CheckCircle',
       color: 'bg-accent',
@@ -33,9 +51,7 @@ const ProjectSummaryCards = ({ summaryData }) => {
     {
       id: 'estimated-revenue',
       title: 'Estimated Revenue',
-      value: summaryData?.estimatedRevenue 
-        ? `£${(summaryData.estimatedRevenue).toFixed(2)}M`
-        : '£0.00M',
+      value: formatEstimatedRevenue(summaryData?.estimatedRevenue),
       unit: 'annual',
       icon: 'PoundSterling',
       color: 'bg-warning',

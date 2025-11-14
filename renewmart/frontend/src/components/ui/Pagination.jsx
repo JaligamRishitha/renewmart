@@ -102,7 +102,7 @@ const Pagination = ({
           iconName="ChevronLeft"
           iconPosition="left"
         >
-          Previous
+          
         </Button>
 
         <div className="flex items-center gap-1">
@@ -139,7 +139,7 @@ const Pagination = ({
           iconName="ChevronRight"
           iconPosition="right"
         >
-          Next
+          
         </Button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -8,6 +8,14 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
 import json
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 from database import get_db
 from auth import get_current_user, require_admin, security
@@ -216,57 +224,8 @@ async def get_admin_summary(
 ):
     """Get admin dashboard summary statistics (admin only)."""
     
-    summary_query = text("""
-        SELECT 
-            COUNT(*) as total_projects,
-            COUNT(CASE WHEN status = 'submitted' THEN 1 END) as pending_reviews,
-            COUNT(CASE WHEN status = 'under_review' THEN 1 END) as under_review,
-            COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
-            COUNT(CASE WHEN status = 'published' THEN 1 END) as published,
-            COUNT(CASE WHEN status = 'rtb' THEN 1 END) as ready_to_buy,
-            COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
-            COALESCE(SUM(area_acres), 0) as total_land_area,
-            COALESCE(SUM(capacity_mw), 0) as total_capacity,
-            COALESCE(SUM(
-                CASE 
-                    WHEN capacity_mw IS NOT NULL AND price_per_mwh IS NOT NULL 
-                    THEN capacity_mw * price_per_mwh * 8760  -- 8760 hours per year for annual revenue
-                    ELSE 0 
-                END
-            ), 0) as estimated_revenue,
-            COUNT(CASE 
-                WHEN l.status NOT IN ('published', 'approved', 'rejected', 'rtb', 'interest_locked', 'draft', 'submitted')
-                AND NOT EXISTS (
-                    SELECT 1 FROM tasks t 
-                    WHERE t.land_id = l.land_id 
-                    AND t.assigned_to IS NOT NULL
-                )
-                THEN 1 
-            END) as pending_without_reviewers
-        FROM lands l
-        WHERE l.status != 'draft'
-    """)
-    
-    result = db.execute(summary_query).fetchone()
-    
-    # Get landowner count
-    landowner_query = text("""
-        SELECT COUNT(DISTINCT l.landowner_id) as landowner_count
-        FROM lands l
-        WHERE l.status != 'draft'
-    """)
-    landowner_result = db.execute(landowner_query).fetchone()
-    
-    # Get investor interest count
-    interest_query = text("""
-        SELECT 
-            COUNT(DISTINCT ii.interest_id) as total_interests,
-            COUNT(DISTINCT ii.investor_id) as total_investors
-        FROM investor_interests ii
-        INNER JOIN lands l ON ii.land_id = l.land_id
-        WHERE l.status != 'draft'
-    """)
-    interest_result = db.execute(interest_query).fetchone()
+    # Call stored procedure
+    result = db.execute(text("SELECT * FROM get_admin_summary()")).fetchone()
     
     # Calculate pending reviews: include projects without reviewers
     pending_without_reviewers = result.pending_without_reviewers if hasattr(result, 'pending_without_reviewers') else 0
@@ -285,10 +244,170 @@ async def get_admin_summary(
         "totalLandArea": float(result.total_land_area),
         "totalCapacity": float(result.total_capacity),
         "estimatedRevenue": float(result.estimated_revenue) if hasattr(result, 'estimated_revenue') else 0.0,
-        "totalLandowners": landowner_result.landowner_count,
-        "totalInvestorInterests": int(interest_result.total_interests) if interest_result.total_interests else 0,
-        "totalInvestors": int(interest_result.total_investors) if interest_result.total_investors else 0
+        "totalLandowners": result.landowner_count,
+        "totalInvestorInterests": int(result.total_interests) if result.total_interests else 0,
+        "totalInvestors": int(result.total_investors) if result.total_investors else 0
     }
+
+@router.get("/admin/deadline-alerts", response_model=List[Dict[str, Any]])
+async def get_deadline_alerts(
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get deadline alerts for projects and tasks (admin only).
+    Returns alerts for projects and tasks with upcoming or overdue deadlines."""
+    
+    from datetime import datetime, timedelta, date as date_type
+    
+    now = datetime.now()
+    alerts = []
+    
+    # Get project deadline alerts
+    project_query = text("""
+        SELECT 
+            l.land_id,
+            l.title,
+            l.project_due_date,
+            l.status,
+            l.energy_key,
+            u.first_name || ' ' || u.last_name as landowner_name,
+            u.email as landowner_email
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        WHERE l.project_due_date IS NOT NULL
+        AND l.status IN ('submitted', 'under_review', 'approved')
+        AND l.project_due_date <= (CURRENT_DATE + INTERVAL '7 days')
+        ORDER BY l.project_due_date ASC
+    """)
+    
+    project_results = db.execute(project_query).fetchall()
+    
+    for row in project_results:
+        due_date = row.project_due_date
+        # Convert date to datetime for comparison
+        if isinstance(due_date, str):
+            due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+        elif isinstance(due_date, date_type):
+            # It's a date object, convert to datetime at midnight
+            due_date = datetime.combine(due_date, datetime.min.time())
+        elif not isinstance(due_date, datetime):
+            # Fallback: try to convert if it has date() method
+            due_date = datetime.combine(due_date, datetime.min.time())
+        
+        diff = (due_date - now).total_seconds() / 3600  # hours
+        diff_days = diff / 24
+        
+        energy_type = row.energy_key or "Project"
+        landowner_name = row.landowner_name or row.landowner_email or "Unassigned"
+        
+        # Determine urgency
+        if diff < 0:
+            urgency = "critical"
+            description = f"{row.title} - {energy_type} project is overdue"
+        elif diff <= 24:
+            urgency = "critical"
+            description = f"{row.title} - Due in less than 24 hours"
+        elif diff_days <= 3:
+            urgency = "warning"
+            description = f"{row.title} - Due in {int(diff_days)} days"
+        else:
+            urgency = "info"
+            description = f"{row.title} - Due in {int(diff_days)} days"
+        
+        alerts.append({
+            "id": f"project-{row.land_id}",
+            "projectId": str(row.land_id),
+            "landId": str(row.land_id),
+            "taskId": None,
+            "taskTitle": row.title,
+            "projectTitle": row.title,
+            "deadline": due_date.isoformat() if isinstance(due_date, datetime) else str(due_date),
+            "description": description,
+            "urgency": urgency,
+            "projectName": row.title,
+            "assignedTo": landowner_name,
+            "type": "project"
+        })
+    
+    # Get task deadline alerts
+    task_query = text("""
+        SELECT 
+            t.task_id,
+            t.land_id,
+            t.title as task_title,
+            t.description,
+            t.due_date,
+            t.status,
+            t.assigned_to,
+            l.title as project_title,
+            l.energy_key,
+            u1.first_name || ' ' || u1.last_name as assigned_to_name,
+            u1.email as assigned_to_email
+        FROM tasks t
+        JOIN lands l ON t.land_id = l.land_id
+        LEFT JOIN "user" u1 ON t.assigned_to = u1.user_id
+        WHERE t.due_date IS NOT NULL
+        AND t.status NOT IN ('completed', 'cancelled')
+        AND t.due_date <= (CURRENT_DATE + INTERVAL '7 days')
+        ORDER BY t.due_date ASC
+    """)
+    
+    task_results = db.execute(task_query).fetchall()
+    
+    for row in task_results:
+        due_date = row.due_date
+        # Convert date to datetime for comparison
+        if isinstance(due_date, str):
+            due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+        elif isinstance(due_date, date_type):
+            # It's a date object, convert to datetime at midnight
+            due_date = datetime.combine(due_date, datetime.min.time())
+        elif not isinstance(due_date, datetime):
+            # Fallback: try to convert if it has date() method
+            due_date = datetime.combine(due_date, datetime.min.time())
+        
+        diff = (due_date - now).total_seconds() / 3600  # hours
+        diff_days = diff / 24
+        
+        assigned_to_name = row.assigned_to_name or row.assigned_to_email or "Unassigned"
+        
+        # Determine urgency
+        if diff < 0:
+            urgency = "critical"
+            description = row.description or f"{row.task_title} - Task is overdue"
+        elif diff <= 24:
+            urgency = "critical"
+            description = row.description or f"{row.task_title} - Due in less than 24 hours"
+        elif diff_days <= 3:
+            urgency = "warning"
+            description = row.description or f"{row.task_title} - Due in {int(diff_days)} days"
+        else:
+            urgency = "info"
+            description = row.description or f"{row.task_title} - Due in {int(diff_days)} days"
+        
+        alerts.append({
+            "id": f"task-{row.task_id}",
+            "projectId": str(row.land_id),
+            "landId": str(row.land_id),
+            "taskId": str(row.task_id),
+            "taskTitle": row.task_title,
+            "projectTitle": row.project_title,
+            "deadline": due_date.isoformat() if isinstance(due_date, datetime) else str(due_date),
+            "description": description,
+            "urgency": urgency,
+            "projectName": row.project_title,
+            "assignedTo": assigned_to_name,
+            "type": "task"
+        })
+    
+    # Sort by urgency and deadline
+    urgency_order = {"critical": 0, "warning": 1, "info": 2}
+    alerts.sort(key=lambda x: (
+        urgency_order.get(x["urgency"], 3),
+        datetime.fromisoformat(x["deadline"].replace('Z', '+00:00')) if isinstance(x["deadline"], str) else x["deadline"]
+    ))
+    
+    return alerts
 
 @router.get("/admin/projects/{project_id}/details-with-tasks", response_model=Dict[str, Any])
 async def get_project_details_with_tasks(
@@ -298,63 +417,20 @@ async def get_project_details_with_tasks(
 ):
     """Get project details with existing tasks for reviewer assignment (admin only)."""
    
-    # Get project details
-    project_query = text("""
-        SELECT
-            l.land_id,
-            l.title,
-            l.location_text,
-            l.land_type,
-            l.energy_key,
-            l.capacity_mw,
-            l.price_per_mwh,
-            l.area_acres,
-            l.status,
-            l.timeline_text,
-            l.contract_term_years,
-            l.developer_name,
-            l.admin_notes,
-            l.project_priority,
-            l.project_due_date,
-            l.created_at,
-            l.updated_at,
-            l.published_at,
-            u.email as landowner_email,
-            u.first_name,
-            u.last_name,
-            u.phone
-        FROM lands l
-        LEFT JOIN "user" u ON l.landowner_id = u.user_id
-        WHERE l.land_id = :project_id
-    """)
-   
-    project_result = db.execute(project_query, {"project_id": str(project_id)}).fetchone()
+    # Get project details using stored procedure
+    project_result = db.execute(
+        text("SELECT * FROM get_project_details_with_tasks(CAST(:project_id AS uuid))"),
+        {"project_id": str(project_id)}
+    ).fetchone()
    
     if not project_result:
         raise HTTPException(status_code=404, detail="Project not found")
    
-    # Get existing tasks for this project
-    tasks_query = text("""
-        SELECT
-            t.task_id,
-            t.land_id,
-            t.title as task_type,
-            t.description,
-            t.assigned_to,
-            t.assigned_role,
-            t.status,
-            t.priority,
-            t.due_date,
-            t.created_at,
-            t.updated_at,
-            u.first_name || ' ' || u.last_name as assigned_to_name
-        FROM tasks t
-        LEFT JOIN "user" u ON t.assigned_to = u.user_id
-        WHERE t.land_id = :project_id
-        ORDER BY t.created_at DESC
-    """)
-   
-    tasks_result = db.execute(tasks_query, {"project_id": str(project_id)}).fetchall()
+    # Get existing tasks for this project using stored procedure
+    tasks_result = db.execute(
+        text("SELECT * FROM get_project_tasks(CAST(:project_id AS uuid))"),
+        {"project_id": str(project_id)}
+    ).fetchall()
    
     # Format project data
     landowner_name = f"{project_result.first_name or ''} {project_result.last_name or ''}".strip() or project_result.landowner_email
@@ -411,36 +487,8 @@ async def get_admin_investor_interests(
 ):
     """Get all investor interests with detailed information (admin only)."""
     
-    query = text("""
-        SELECT 
-            ii.interest_id,
-            ii.land_id,
-            ii.investor_id,
-            ii.status,
-            ii.comments,
-            ii.investment_amount,
-            ii.created_at,
-            ii.updated_at,
-            l.title as project_title,
-            l.location_text as project_location,
-            l.energy_key as project_type,
-            l.capacity_mw,
-            l.price_per_mwh,
-            l.status as project_status,
-            investor.first_name as investor_first_name,
-            investor.last_name as investor_last_name,
-            investor.email as investor_email,
-            investor.phone as investor_phone,
-            landowner.first_name || ' ' || landowner.last_name as landowner_name
-        FROM investor_interests ii
-        INNER JOIN lands l ON ii.land_id = l.land_id
-        INNER JOIN "user" investor ON ii.investor_id = investor.user_id
-        LEFT JOIN "user" landowner ON l.landowner_id = landowner.user_id
-        WHERE l.status != 'draft'
-        ORDER BY ii.created_at DESC
-    """)
-    
-    results = db.execute(query).fetchall()
+    # Call stored procedure
+    results = db.execute(text("SELECT * FROM get_admin_investor_interests()")).fetchall()
     
     interests = []
     for row in results:
@@ -478,61 +526,18 @@ async def get_landowner_dashboard_summary(
     """Get landowner dashboard summary with statistics."""
     user_id = current_user["user_id"]
     
-    # Get summary statistics
-    # For drafts, count only unique project IDs (one per land_id) - get the latest draft per project
-    summary_query = text("""
-        WITH ranked_drafts AS (
-            SELECT 
-                land_id,
-                ROW_NUMBER() OVER (
-                    PARTITION BY land_id 
-                    ORDER BY updated_at DESC
-                ) as rn
-            FROM lands
-            WHERE landowner_id = :user_id
-            AND status = 'draft'
-        ),
-        unique_drafts AS (
-            SELECT land_id
-            FROM ranked_drafts
-            WHERE rn = 1
-        ),
-        all_lands AS (
-            SELECT 
-                land_id,
-                status,
-                area_acres
-            FROM lands
-            WHERE landowner_id = :user_id
-        )
-        SELECT 
-            COUNT(*) as total_projects,
-            COALESCE(SUM(area_acres), 0) as total_land_area,
-            (SELECT COUNT(*) FROM unique_drafts) as draft_projects,
-            COUNT(CASE WHEN status IN ('published', 'rtb') THEN 1 END) as completed_submissions
-        FROM all_lands
-    """)
-    
-    summary_result = db.execute(summary_query, {"user_id": user_id}).fetchone()
-    
-    # Calculate estimated revenue (simplified calculation based on capacity)
-    revenue_query = text("""
-        SELECT COALESCE(SUM(capacity_mw * price_per_mwh * 8760 / 1000000), 0) as estimated_revenue
-        FROM lands
-        WHERE landowner_id = :user_id 
-        AND status IN ('published', 'rtb', 'interest_locked')
-        AND capacity_mw IS NOT NULL
-        AND price_per_mwh IS NOT NULL
-    """)
-    
-    revenue_result = db.execute(revenue_query, {"user_id": user_id}).fetchone()
+    # Call stored procedure
+    result = db.execute(
+        text("SELECT * FROM get_landowner_dashboard_summary(CAST(:user_id AS uuid))"),
+        {"user_id": str(user_id)}
+    ).fetchone()
     
     return {
-        "totalLandArea": float(summary_result.total_land_area) if summary_result.total_land_area else 0,
-        "draftProjects": int(summary_result.draft_projects),
-        "completedSubmissions": int(summary_result.completed_submissions),
-        "estimatedRevenue": float(revenue_result.estimated_revenue) if revenue_result.estimated_revenue else 0,
-        "totalProjects": int(summary_result.total_projects)
+        "totalLandArea": float(result.total_land_area) if result.total_land_area else 0,
+        "draftProjects": int(result.draft_projects),
+        "completedSubmissions": int(result.completed_submissions),
+        "estimatedRevenue": float(result.estimated_revenue) if result.estimated_revenue else 0,
+        "totalProjects": int(result.total_projects)
     }
 
 
@@ -548,110 +553,51 @@ async def get_landowner_dashboard_projects(
     """Get landowner's projects for dashboard display."""
     user_id = current_user["user_id"]
     
-    # Build query - get only the latest updated project per land_id
-    # This ensures we show only the most recent version of each project
-    # If a project was submitted (status = under_review), we show that, not old draft versions
-    query = """
-        WITH ranked_lands AS (
-            SELECT 
-                l.land_id,
-                l.title as name,
-                l.location_text as location,
-                l.energy_key as type,
-                l.capacity_mw as capacity,
-                l.status,
-                l.updated_at as last_updated,
-                l.timeline_text as timeline,
-                l.price_per_mwh,
-                l.area_acres,
-                l.created_at,
-                CASE 
-                    WHEN l.status = 'draft' THEN 'Draft - Not yet submitted (visible to admin)'
-                    WHEN l.status = 'submitted' THEN 'Submitted - Awaiting admin review'
-                    WHEN l.status = 'under_review' THEN 'Admin reviewing - sections assigned to reviewers'
-                    WHEN l.status = 'approved' THEN 'Approved - Ready for publishing'
-                    WHEN l.status = 'published' THEN 'Published to investors'
-                    WHEN l.status = 'rtb' THEN 'Ready to Buy - All approvals completed'
-                    WHEN l.status = 'interest_locked' THEN 'Investor interest received - Hidden from others'
-                    WHEN l.status = 'rejected' THEN 'Rejected - Needs revision'
-                    ELSE 'Unknown status'
-                END as description,
-                ROW_NUMBER() OVER (
-                    PARTITION BY l.land_id
-                    ORDER BY l.updated_at DESC
-                ) as rn
-            FROM lands l
-            WHERE l.landowner_id = :user_id
-        )
-        SELECT 
-            land_id,
-            name,
-            location,
-            type,
-            capacity,
-            status,
-            last_updated,
-            timeline,
-            price_per_mwh,
-            area_acres,
-            created_at,
-            description
-        FROM ranked_lands
-        WHERE rn = 1
-    """
+    # Call stored procedure with parameters
+    # SQLAlchemy doesn't support ::type syntax, so we use CAST
+    # For NULL values, we pass them directly without casting
+    results = db.execute(
+        text("""
+            SELECT * FROM get_landowner_dashboard_projects(
+                CAST(:user_id AS uuid),
+                :status_filter,
+                :search,
+                CAST(:skip AS integer),
+                CAST(:limit AS integer)
+            )
+        """),
+        {
+            "user_id": str(user_id),
+            "status_filter": status_filter,
+            "search": search,
+            "skip": skip,
+            "limit": limit
+        }
+    ).fetchall()
     
-    params = {"user_id": user_id}
-    
-    # Apply filters - add WHERE conditions to the CTE
-    filter_conditions = []
-    if status_filter:
-        filter_conditions.append("l.status = :status_filter")
-        params["status_filter"] = status_filter
-    
-    if search:
-        filter_conditions.append("(LOWER(l.title) LIKE :search OR LOWER(l.location_text) LIKE :search)")
-        params["search"] = f"%{search.lower()}%"
-    
-    if filter_conditions:
-        query = query.replace("WHERE l.landowner_id = :user_id", 
-                            f"WHERE l.landowner_id = :user_id AND {' AND '.join(filter_conditions)}")
-    
-    # Add ordering and pagination to the final SELECT
-    query += " ORDER BY last_updated DESC OFFSET :skip LIMIT :limit"
-    params["skip"] = skip
-    params["limit"] = limit
-    
-    results = db.execute(text(query), params).fetchall()
-    
-    # Format projects for frontend
+    # Format projects using exact database column names (no duplicates)
     projects = []
     for row in results:
         # Calculate estimated revenue if price data exists
         estimated_revenue = 0
-        if row.capacity and row.price_per_mwh:
+        if row.capacity_mw and row.price_per_mwh:
             # Annual revenue in millions (capacity_mw * price_per_mwh * 8760 hours / 1,000,000)
-            estimated_revenue = float(row.capacity) * float(row.price_per_mwh) * 8760 / 1000000
+            estimated_revenue = float(row.capacity_mw) * float(row.price_per_mwh) * 8760 / 1000000
         
         project = {
-            "id": str(row.land_id),
-            "name": row.name or "Untitled Project",
-            "location": row.location or "Location not specified",
-            "type": row.type or "solar",  # Default to solar if not specified
-            "energy_key": row.type or "solar",  # Also include as energy_key for compatibility
-            "energyType": row.type or "solar",  # Also include as energyType for compatibility
-            "capacity": float(row.capacity) if row.capacity else 0,
-            "capacity_mw": float(row.capacity) if row.capacity else 0,  # Also include as capacity_mw
-            "areaAcres": float(row.area_acres) if row.area_acres else None,
+            "land_id": str(row.land_id),
+            "title": row.title or "Untitled Project",
+            "location_text": row.location_text or "Location not specified",
+            "energy_key": row.energy_key or "solar",
+            "capacity_mw": float(row.capacity_mw) if row.capacity_mw else 0,
             "area_acres": float(row.area_acres) if row.area_acres else None,
             "status": row.status,
-            "lastUpdated": row.last_updated.isoformat() if row.last_updated else None,
-            "timeline": row.timeline or "Not specified",
-            "timeline_text": row.timeline or "Not specified",  # Also include as timeline_text
-            "estimatedRevenue": round(estimated_revenue, 2),
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "timeline_text": row.timeline_text or "Not specified",
+            "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
+            "estimated_revenue": round(estimated_revenue, 2),
             "description": row.description,
-            "createdAt": row.created_at.isoformat() if row.created_at else None,
-            "title": row.name or "Untitled Project",  # Also include as title
-            "location_text": row.location or "Location not specified"  # Also include as location_text
+            "created_at": row.created_at.isoformat() if row.created_at else None
         }
         projects.append(project)
     
@@ -852,7 +798,41 @@ async def get_land(
     is_owner = user_id_str == landowner_id_str
     is_published = result.status == "published"
     
+    # Check if user is a reviewer assigned to this land
+    is_reviewer = False
     if not (is_admin or is_owner or is_published):
+        reviewer_check = text("""
+            SELECT assigned_role FROM tasks 
+            WHERE land_id = :land_id AND assigned_to = :user_id
+            LIMIT 1
+        """)
+        reviewer_result = db.execute(
+            reviewer_check, 
+            {"land_id": str(land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if reviewer_result:
+            is_reviewer = True
+    
+    # Check if user is an investor who has expressed interest in this land
+    is_investor_with_interest = False
+    if not (is_admin or is_owner or is_published or is_reviewer) and "investor" in user_roles:
+        interest_check = text("""
+            SELECT interest_id FROM investor_interests 
+            WHERE land_id = :land_id AND investor_id = :user_id
+            AND status IN ('pending', 'approved')
+            AND (withdrawal_requested = FALSE OR withdrawal_status IS NULL OR withdrawal_status != 'approved')
+            LIMIT 1
+        """)
+        interest_result = db.execute(
+            interest_check, 
+            {"land_id": str(land_id), "user_id": user_id_str}
+        ).fetchone()
+        
+        if interest_result:
+            is_investor_with_interest = True
+    
+    if not (is_admin or is_owner or is_published or is_reviewer or is_investor_with_interest):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view this land"
@@ -1603,6 +1583,154 @@ async def get_published_lands(
     
     return projects
 
+@router.get("/admin/marketplace/published", response_model=List[Dict[str, Any]])
+async def get_admin_marketplace_projects(
+    skip: int = 0,
+    limit: int = 1000,  # Increased default limit to ensure all projects are returned
+    energy_type: Optional[str] = None,
+    min_capacity: Optional[float] = None,
+    max_capacity: Optional[float] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    location: Optional[str] = None,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all published lands for admin marketplace view.
+    Includes ALL published projects regardless of interest status.
+    Shows interest_locked badge for projects with active interests."""
+    
+    # Build dynamic query for published lands - fetch ALL published projects
+    # Include projects with interests and calculate interest_count for each
+    base_query = """
+        SELECT 
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.coordinates,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.published_at,
+            l.created_at,
+            l.status,
+            CASE 
+                WHEN l.site_image IS NOT NULL THEN true
+                ELSE false
+            END as has_site_image,
+            u.first_name || ' ' || u.last_name as landowner_name,
+            u.email as landowner_email,
+            COALESCE((
+                SELECT COUNT(DISTINCT ii_sub.interest_id)
+                FROM investor_interests ii_sub
+                WHERE ii_sub.land_id = l.land_id
+                AND ii_sub.status IN ('pending', 'approved')
+                AND (ii_sub.withdrawal_requested = FALSE 
+                     OR ii_sub.withdrawal_status IS NULL 
+                     OR ii_sub.withdrawal_status != 'approved')
+            ), 0) as interest_count
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        WHERE l.status = 'published'
+    """
+    
+    params = {"skip": skip, "limit": limit}
+    
+    # Note: We do NOT exclude projects with interests for admin view
+    # The query uses a subquery for interest_count, so no GROUP BY is needed
+    
+    # Apply filters
+    if energy_type:
+        base_query += " AND l.energy_key = :energy_type"
+        params["energy_type"] = energy_type
+    
+    if min_capacity is not None:
+        base_query += " AND l.capacity_mw >= :min_capacity"
+        params["min_capacity"] = min_capacity
+    
+    if max_capacity is not None:
+        base_query += " AND l.capacity_mw <= :max_capacity"
+        params["max_capacity"] = max_capacity
+    
+    if min_price is not None:
+        base_query += " AND l.price_per_mwh >= :min_price"
+        params["min_price"] = min_price
+    
+    if max_price is not None:
+        base_query += " AND l.price_per_mwh <= :max_price"
+        params["max_price"] = max_price
+    
+    if location:
+        base_query += " AND l.location_text ILIKE :location"
+        params["location"] = f"%{location}%"
+    
+    # No GROUP BY needed since we're using a subquery for interest_count
+    base_query += """
+        ORDER BY l.published_at DESC NULLS LAST, l.created_at DESC
+        OFFSET :skip LIMIT :limit
+    """
+    
+    results = db.execute(text(base_query), params).fetchall()
+    
+    projects = []
+    for row in results:
+        # Build image URL - use site_image if available, otherwise null
+        image_url = None
+        has_site_image = False
+        if hasattr(row, 'has_site_image') and row.has_site_image:
+            image_url = f"/api/lands/{row.land_id}/site-image"
+            has_site_image = True
+        
+        # Get interest_count - ensure it's an integer
+        interest_count = int(row.interest_count) if row.interest_count is not None else 0
+        is_interest_locked = interest_count > 0
+        
+        project = {
+            "id": str(row.land_id),
+            "land_id": str(row.land_id),
+            "title": row.title or f"{row.energy_key or 'Energy'} Project",
+            "name": row.title or f"{row.energy_key or 'Energy'} Project",
+            "type": row.energy_key or "Not specified",
+            "energyType": row.energy_key or "Not specified",
+            "energy_key": row.energy_key or "Not specified",
+            "location": row.location_text or "Not specified",
+            "location_text": row.location_text or "Not specified",
+            "coordinates": row.coordinates,
+            "capacity": float(row.capacity_mw) if row.capacity_mw else 0,
+            "capacityMW": float(row.capacity_mw) if row.capacity_mw else 0,
+            "capacity_mw": float(row.capacity_mw) if row.capacity_mw else None,
+            "price": float(row.price_per_mwh) if row.price_per_mwh else 0,
+            "pricePerMWh": float(row.price_per_mwh) if row.price_per_mwh else 0,
+            "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else None,
+            "areaAcres": float(row.area_acres) if row.area_acres else 0,
+            "area_acres": float(row.area_acres) if row.area_acres else None,
+            "timeline": row.timeline_text or "Not specified",
+            "contract": f"{row.contract_term_years} years" if row.contract_term_years else "Not specified",
+            "contractTerm": row.contract_term_years,
+            "landType": row.land_type,
+            "land_type": row.land_type,
+            "developerName": row.developer_name,
+            "landownerName": row.landowner_name or row.landowner_email or "Unknown",
+            "publishedAt": row.published_at.isoformat() if row.published_at else None,
+            "published_at": row.published_at.isoformat() if row.published_at else None,
+            "published_date": row.published_at.isoformat() if row.published_at else None,
+            "interestCount": interest_count,
+            "interest_count": interest_count,
+            "status": row.status or "published",
+            "isAvailable": interest_count == 0,  # Available if no active interests
+            "is_interest_locked": is_interest_locked,  # New field for admin view
+            "image_url": image_url,
+            "has_site_image": has_site_image
+        }
+        projects.append(project)
+    
+    return projects
+
 # Land sections management
 @router.get("/{land_id}/sections", response_model=List[LandSection])
 async def get_land_sections(
@@ -2304,3 +2432,374 @@ async def delete_site_image(
         "message": "Site image deleted successfully",
         "land_id": str(land_id)
     }
+
+
+@router.get("/admin/reports/all-lands")
+async def get_all_lands_for_report(
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all land details for report generation (admin only)."""
+    
+    query = text("""
+        SELECT 
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone,
+            COALESCE(COUNT(DISTINCT ii.interest_id), 0) as investor_interest_count
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        LEFT JOIN investor_interests ii ON l.land_id = ii.land_id
+            AND ii.status IN ('pending', 'approved')
+            AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+        WHERE l.status != 'draft'
+        GROUP BY l.land_id, l.title, l.location_text, l.land_type, l.energy_key,
+                 l.capacity_mw, l.price_per_mwh, l.area_acres, l.status,
+                 l.timeline_text, l.contract_term_years, l.developer_name,
+                 l.admin_notes, l.project_priority, l.project_due_date,
+                 l.created_at, l.updated_at, l.published_at,
+                 u.email, u.first_name, u.last_name, u.phone
+        ORDER BY l.created_at DESC
+    """)
+    
+    results = db.execute(query).fetchall()
+    
+    lands = []
+    for row in results:
+        landowner_name = f"{row.first_name or ''} {row.last_name or ''}".strip() or row.landowner_email or "Unknown"
+        
+        land = {
+            "land_id": str(row.land_id),
+            "title": row.title or "Untitled Project",
+            "location": row.location_text or "Not specified",
+            "land_type": row.land_type or "Not specified",
+            "energy_type": row.energy_key or "Not specified",
+            "capacity_mw": float(row.capacity_mw) if row.capacity_mw else 0,
+            "price_per_mwh": float(row.price_per_mwh) if row.price_per_mwh else 0,
+            "area_acres": float(row.area_acres) if row.area_acres else 0,
+            "status": row.status or "unknown",
+            "timeline": row.timeline_text or "Not specified",
+            "contract_term_years": row.contract_term_years or 0,
+            "developer_name": row.developer_name or "Not specified",
+            "admin_notes": row.admin_notes or "",
+            "project_priority": row.project_priority or "Not specified",
+            "project_due_date": row.project_due_date.isoformat() if row.project_due_date else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "published_at": row.published_at.isoformat() if row.published_at else None,
+            "landowner_name": landowner_name,
+            "landowner_email": row.landowner_email or "Not specified",
+            "landowner_phone": row.phone or "Not specified",
+            "investor_interest_count": int(row.investor_interest_count) if row.investor_interest_count else 0
+        }
+        lands.append(land)
+    
+    return lands
+
+
+@router.get("/admin/reports/excel")
+async def generate_excel_report(
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Generate Excel report of all lands (admin only)."""
+    
+    # Get all lands data
+    lands_query = text("""
+        SELECT 
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone,
+            COALESCE(COUNT(DISTINCT ii.interest_id), 0) as investor_interest_count
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        LEFT JOIN investor_interests ii ON l.land_id = ii.land_id
+            AND ii.status IN ('pending', 'approved')
+            AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+        WHERE l.status != 'draft'
+        GROUP BY l.land_id, l.title, l.location_text, l.land_type, l.energy_key,
+                 l.capacity_mw, l.price_per_mwh, l.area_acres, l.status,
+                 l.timeline_text, l.contract_term_years, l.developer_name,
+                 l.admin_notes, l.project_priority, l.project_due_date,
+                 l.created_at, l.updated_at, l.published_at,
+                 u.email, u.first_name, u.last_name, u.phone
+        ORDER BY l.created_at DESC
+    """)
+    
+    results = db.execute(lands_query).fetchall()
+    
+    # Create workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "All Lands Report"
+    
+    # Header style
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Column headers
+    headers = [
+        "Land ID", "Title", "Location", "Land Type", "Energy Type",
+        "Capacity (MW)", "Price per MWh", "Area (Acres)", "Status",
+        "Timeline", "Contract Term (Years)", "Developer Name",
+        "Project Priority", "Due Date", "Created At", "Updated At",
+        "Published At", "Landowner Name", "Landowner Email", "Landowner Phone",
+        "Investor Interest Count"
+    ]
+    
+    ws.append(headers)
+    
+    # Apply header styling
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    # Data rows
+    for row in results:
+        landowner_name = f"{row.first_name or ''} {row.last_name or ''}".strip() or row.landowner_email or "Unknown"
+        
+        data_row = [
+            str(row.land_id),
+            row.title or "Untitled Project",
+            row.location_text or "Not specified",
+            row.land_type or "Not specified",
+            row.energy_key or "Not specified",
+            float(row.capacity_mw) if row.capacity_mw else 0,
+            float(row.price_per_mwh) if row.price_per_mwh else 0,
+            float(row.area_acres) if row.area_acres else 0,
+            row.status or "unknown",
+            row.timeline_text or "Not specified",
+            row.contract_term_years or 0,
+            row.developer_name or "Not specified",
+            row.project_priority or "Not specified",
+            row.project_due_date.strftime("%Y-%m-%d") if row.project_due_date else "",
+            row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+            row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+            row.published_at.strftime("%Y-%m-%d %H:%M:%S") if row.published_at else "",
+            landowner_name,
+            row.landowner_email or "Not specified",
+            row.phone or "Not specified",
+            int(row.investor_interest_count) if row.investor_interest_count else 0
+        ]
+        ws.append(data_row)
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Save to BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"lands_report_{timestamp}.xlsx"
+    
+    return StreamingResponse(
+        io.BytesIO(output.read()),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/admin/reports/pdf")
+async def generate_pdf_report(
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Generate PDF report of all lands (admin only)."""
+    
+    # Get all lands data
+    lands_query = text("""
+        SELECT 
+            l.land_id,
+            l.title,
+            l.location_text,
+            l.land_type,
+            l.energy_key,
+            l.capacity_mw,
+            l.price_per_mwh,
+            l.area_acres,
+            l.status,
+            l.timeline_text,
+            l.contract_term_years,
+            l.developer_name,
+            l.admin_notes,
+            l.project_priority,
+            l.project_due_date,
+            l.created_at,
+            l.updated_at,
+            l.published_at,
+            u.email as landowner_email,
+            u.first_name,
+            u.last_name,
+            u.phone,
+            COALESCE(COUNT(DISTINCT ii.interest_id), 0) as investor_interest_count
+        FROM lands l
+        LEFT JOIN "user" u ON l.landowner_id = u.user_id
+        LEFT JOIN investor_interests ii ON l.land_id = ii.land_id
+            AND ii.status IN ('pending', 'approved')
+            AND (ii.withdrawal_requested = FALSE OR ii.withdrawal_status IS NULL OR ii.withdrawal_status != 'approved')
+        WHERE l.status != 'draft'
+        GROUP BY l.land_id, l.title, l.location_text, l.land_type, l.energy_key,
+                 l.capacity_mw, l.price_per_mwh, l.area_acres, l.status,
+                 l.timeline_text, l.contract_term_years, l.developer_name,
+                 l.admin_notes, l.project_priority, l.project_due_date,
+                 l.created_at, l.updated_at, l.published_at,
+                 u.email, u.first_name, u.last_name, u.phone
+        ORDER BY l.created_at DESC
+    """)
+    
+    results = db.execute(lands_query).fetchall()
+    
+    # Create PDF buffer
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    # Container for PDF elements
+    elements = []
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#366092'),
+        spaceAfter=30,
+        alignment=1  # Center alignment
+    )
+    
+    # Title
+    title = Paragraph("All Lands Report", title_style)
+    elements.append(title)
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Summary paragraph
+    summary_text = f"<b>Generated on:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>"
+    summary_text += f"<b>Total Projects:</b> {len(results)}"
+    summary = Paragraph(summary_text, styles['Normal'])
+    elements.append(summary)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Prepare table data
+    table_data = []
+    
+    # Table headers
+    headers = [
+        "Title", "Location", "Energy Type", "Capacity (MW)",
+        "Status", "Landowner", "Created"
+    ]
+    table_data.append(headers)
+    
+    # Table rows (limit to prevent PDF from being too large)
+    max_rows = 100  # Limit rows per page
+    for idx, row in enumerate(results[:max_rows]):
+        landowner_name = f"{row.first_name or ''} {row.last_name or ''}".strip() or row.landowner_email or "Unknown"
+        
+        data_row = [
+            row.title or "Untitled Project",
+            row.location_text or "Not specified",
+            row.energy_key or "Not specified",
+            f"{float(row.capacity_mw):.2f}" if row.capacity_mw else "0",
+            row.status or "unknown",
+            landowner_name[:30],  # Truncate long names
+            row.created_at.strftime("%Y-%m-%d") if row.created_at else ""
+        ]
+        table_data.append(data_row)
+    
+    # Create table
+    table = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 1*inch, 0.8*inch, 1*inch, 1.2*inch, 0.8*inch])
+    
+    # Table style
+    table.setStyle(TableStyle([
+        # Header row
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#366092')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        # Data rows
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+    ]))
+    
+    elements.append(table)
+    
+    # Add note if rows were truncated
+    if len(results) > max_rows:
+        note = Paragraph(
+            f"<i>Note: Showing first {max_rows} of {len(results)} projects. Use Excel export for complete data.</i>",
+            styles['Normal']
+        )
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(note)
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"lands_report_{timestamp}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(buffer.read()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

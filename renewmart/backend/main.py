@@ -100,13 +100,70 @@ app.add_middleware(
     allowed_hosts=["localhost", "127.0.0.1", "*"]
 )
 
-# CORS middleware
+# CORS middleware - configure to allow frontend origin
+# Get allowed origins from settings, with fallback
+try:
+    allowed_origins = settings.ALLOWED_ORIGINS
+    if not allowed_origins:
+        allowed_origins = [
+            "http://localhost:1312",
+            "http://127.0.0.1:1312",
+            "http://149.102.158.71:1312"
+        ]
+except (AttributeError, KeyError):
+    allowed_origins = [
+        "http://localhost:1312",
+        "http://127.0.0.1:1312",
+        "http://149.102.158.71:1312"
+    ]
+
+# Ensure it's a list
+if isinstance(allowed_origins, str):
+    allowed_origins = [allowed_origins]
+
+# Get allowed methods and headers from settings
+try:
+    allowed_methods = settings.ALLOWED_METHODS or ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+except (AttributeError, KeyError):
+    allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+
+try:
+    allowed_headers = settings.ALLOWED_HEADERS
+    if allowed_headers == ["*"]:
+        # When allow_credentials=True, we can't use ["*"], so use explicit headers
+        allowed_headers = [
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin",
+            "X-Requested-With",
+            "X-CSRF-Token",
+            "X-Process-Time",
+            "Accept-Language",
+            "Content-Language"
+        ]
+except (AttributeError, KeyError):
+    allowed_headers = [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "X-CSRF-Token",
+        "X-Process-Time"
+    ]
+
+logger.info(f"CORS Configuration - Allowed Origins: {allowed_origins}")
+logger.info(f"CORS Configuration - Allowed Methods: {allowed_methods}")
+logger.info(f"CORS Configuration - Allowed Headers: {allowed_headers}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=settings.ALLOWED_METHODS,
-    allow_headers=settings.ALLOWED_HEADERS,
+    allow_methods=allowed_methods,
+    allow_headers=allowed_headers,
+    expose_headers=["*"],
 )
 
 # Request timing and logging middleware

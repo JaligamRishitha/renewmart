@@ -71,14 +71,11 @@ async def express_interest(
     #         detail="Only investors can express interest in lands"
     #     )
     
-    # Check if land exists and is published
-    land_check = text("""
-        SELECT landowner_id, status, title, location_text, energy_key
-        FROM lands 
-        WHERE land_id = :land_id
-    """)
-    
-    land_result = db.execute(land_check, {"land_id": str(interest_data.land_id)}).fetchone()
+    # Check if land exists and is published using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM get_land_info_for_interest(CAST(:land_id AS uuid))"),
+        {"land_id": str(interest_data.land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -90,21 +87,19 @@ async def express_interest(
     if land_result.status not in ["published", "ready_to_buy"]:
         # Check if project is locked by another investor
         if land_result.status == "interest_locked":
-            # Check if current investor has an active interest
-            check_own_interest = text("""
-                SELECT interest_id FROM investor_interests 
-                WHERE investor_id = :investor_id AND land_id = :land_id
-                AND (
-                    withdrawal_requested = FALSE 
-                    OR withdrawal_status IS NULL 
-                    OR withdrawal_status != 'approved'
-                )
-                AND status != 'rejected'
-            """)
-            own_interest = db.execute(check_own_interest, {
-                "investor_id": current_user["user_id"],
-                "land_id": str(interest_data.land_id)
-            }).fetchone()
+            # Check if current investor has an active interest using stored procedure
+            own_interest = db.execute(
+                text("""
+                    SELECT * FROM check_own_interest(
+                        CAST(:investor_id AS uuid),
+                        CAST(:land_id AS uuid)
+                    )
+                """),
+                {
+                    "investor_id": str(current_user["user_id"]),
+                    "land_id": str(interest_data.land_id)
+                }
+            ).fetchone()
             
             if not own_interest:
                 raise HTTPException(
@@ -117,17 +112,19 @@ async def express_interest(
                 detail="Can only express interest in published or ready-to-buy lands"
             )
     
-    # Check if investor already expressed interest
-    existing_check = text("""
-        SELECT interest_id, status, approved_at 
-        FROM investor_interests 
-        WHERE investor_id = :investor_id AND land_id = :land_id
-    """)
-    
-    existing_result = db.execute(existing_check, {
-        "investor_id": current_user["user_id"],
-        "land_id": str(interest_data.land_id)
-    }).fetchone()
+    # Check if investor already expressed interest using stored procedure
+    existing_result = db.execute(
+        text("""
+            SELECT * FROM check_existing_interest(
+                CAST(:investor_id AS uuid),
+                CAST(:land_id AS uuid)
+            )
+        """),
+        {
+            "investor_id": str(current_user["user_id"]),
+            "land_id": str(interest_data.land_id)
+        }
+    ).fetchone()
     
     if existing_result:
         # Check if this investor was rejected within the last week
@@ -172,38 +169,38 @@ async def express_interest(
         )
     
     try:
-        # Get master sales advisor for this land (if assigned)
-        master_advisor_query = text("""
-            SELECT sales_advisor_id 
-            FROM master_sales_advisor_assignments 
-            WHERE land_id = :land_id AND is_active = TRUE 
-            LIMIT 1
-        """)
-        master_advisor_result = db.execute(master_advisor_query, {"land_id": str(interest_data.land_id)}).fetchone()
+        # Get master sales advisor for this land using stored procedure
+        master_advisor_result = db.execute(
+            text("SELECT * FROM get_master_sales_advisor(CAST(:land_id AS uuid))"),
+            {"land_id": str(interest_data.land_id)}
+        ).fetchone()
         master_advisor_id = master_advisor_result.sales_advisor_id if master_advisor_result else None
         
-        # Create interest record
+        # Create interest record using stored procedure
         interest_id = str(uuid.uuid4())
         
-        create_query = text("""
-            INSERT INTO investor_interests (
-                interest_id, investor_id, land_id, status, comments, 
-                nda_accepted, cta_accepted, master_sales_advisor_id, created_at
-            ) VALUES (
-                :interest_id, :investor_id, :land_id, 'pending', :comments,
-                :nda_accepted, :cta_accepted, :master_advisor_id, CURRENT_TIMESTAMP
-            )
-        """)
-        
-        db.execute(create_query, {
-            "interest_id": interest_id,
-            "investor_id": current_user["user_id"],
-            "land_id": str(interest_data.land_id),
-            "comments": getattr(interest_data, 'comments', None),
-            "nda_accepted": getattr(interest_data, 'nda_accepted', False),
-            "cta_accepted": getattr(interest_data, 'cta_accepted', False),
-            "master_advisor_id": str(master_advisor_id) if master_advisor_id else None
-        })
+        db.execute(
+            text("""
+                SELECT create_investor_interest(
+                    CAST(:interest_id AS uuid),
+                    CAST(:investor_id AS uuid),
+                    CAST(:land_id AS uuid),
+                    :comments,
+                    :nda_accepted,
+                    :cta_accepted,
+                    CAST(:master_advisor_id AS uuid)
+                )
+            """),
+            {
+                "interest_id": interest_id,
+                "investor_id": str(current_user["user_id"]),
+                "land_id": str(interest_data.land_id),
+                "comments": getattr(interest_data, 'comments', None),
+                "nda_accepted": getattr(interest_data, 'nda_accepted', False),
+                "cta_accepted": getattr(interest_data, 'cta_accepted', False),
+                "master_advisor_id": str(master_advisor_id) if master_advisor_id else None
+            }
+        )
         
         # Lock the project - update land status to interest_locked
         lock_land_query = text("""

@@ -26,15 +26,11 @@ async def assign_document_to_reviewer(
 ):
     """Assign a specific document version to a reviewer (admin only)"""
     
-    # Get document info
-    doc_query = text("""
-        SELECT d.*, l.land_id, l.title as land_title
-        FROM documents d
-        LEFT JOIN lands l ON d.land_id = l.land_id
-        WHERE d.document_id = :document_id
-    """)
-    
-    doc_result = db.execute(doc_query, {"document_id": str(assignment_data.document_id)}).fetchone()
+    # Get document info using stored procedure
+    doc_result = db.execute(
+        text("SELECT * FROM get_document_for_assignment(CAST(:document_id AS uuid))"),
+        {"document_id": str(assignment_data.document_id)}
+    ).fetchone()
     
     if not doc_result:
         raise HTTPException(
@@ -42,13 +38,11 @@ async def assign_document_to_reviewer(
             detail="Document not found"
         )
     
-    # Check if document is already assigned
-    existing_assignment = text("""
-        SELECT assignment_id FROM document_assignments 
-        WHERE document_id = :document_id AND assignment_status IN ('assigned', 'in_progress')
-    """)
-    
-    existing = db.execute(existing_assignment, {"document_id": str(assignment_data.document_id)}).fetchone()
+    # Check if document is already assigned using stored procedure
+    existing = db.execute(
+        text("SELECT * FROM check_existing_document_assignment(CAST(:document_id AS uuid))"),
+        {"document_id": str(assignment_data.document_id)}
+    ).fetchone()
     
     if existing:
         raise HTTPException(
@@ -56,18 +50,14 @@ async def assign_document_to_reviewer(
             detail="Document is already assigned to a reviewer"
         )
     
-    # Verify the assigned user exists and has the correct role
-    user_check = text("""
-        SELECT u.user_id, u.first_name, u.last_name, ur.role_key
-        FROM "user" u
-        LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-        WHERE u.user_id = :user_id AND ur.role_key = :role_key AND u.is_active = TRUE
-    """)
-    
-    user_result = db.execute(user_check, {
-        "user_id": str(assignment_data.assigned_to),
-        "role_key": assignment_data.reviewer_role
-    }).fetchone()
+    # Verify the assigned user exists and has the correct role using stored procedure
+    user_result = db.execute(
+        text("SELECT * FROM verify_user_with_role(CAST(:user_id AS uuid), :role_key)"),
+        {
+            "user_id": str(assignment_data.assigned_to),
+            "role_key": assignment_data.reviewer_role
+        }
+    ).fetchone()
     
     if not user_result:
         raise HTTPException(
@@ -75,44 +65,52 @@ async def assign_document_to_reviewer(
             detail="User not found or does not have the specified role"
         )
     
-    # Create the assignment
-    assignment_query = text("""
-        INSERT INTO document_assignments (
-            document_id, land_id, assigned_to, assigned_by, reviewer_role,
-            task_id, assignment_notes, due_date, priority, is_locked, lock_reason
-        ) VALUES (
-            :document_id, :land_id, :assigned_to, :assigned_by, :reviewer_role,
-            :task_id, :assignment_notes, :due_date, :priority, TRUE, :lock_reason
-        ) RETURNING assignment_id, assigned_at
-    """)
+    # Create the assignment using stored procedure
+    lock_reason = assignment_data.lock_reason or f"Assigned to {user_result.first_name} {user_result.last_name} for review"
+    result = db.execute(
+        text("""
+            SELECT * FROM create_document_assignment(
+                CAST(:document_id AS uuid),
+                CAST(:land_id AS uuid),
+                CAST(:assigned_to AS uuid),
+                CAST(:assigned_by AS uuid),
+                :reviewer_role,
+                CAST(:task_id AS uuid),
+                :assignment_notes,
+                :due_date,
+                :priority,
+                :lock_reason
+            )
+        """),
+        {
+            "document_id": str(assignment_data.document_id),
+            "land_id": str(doc_result.land_id),
+            "assigned_to": str(assignment_data.assigned_to),
+            "assigned_by": str(current_user["user_id"]),
+            "reviewer_role": assignment_data.reviewer_role,
+            "task_id": str(assignment_data.task_id) if assignment_data.task_id else None,
+            "assignment_notes": assignment_data.assignment_notes,
+            "due_date": assignment_data.due_date,
+            "priority": assignment_data.priority,
+            "lock_reason": lock_reason
+        }
+    ).fetchone()
     
-    result = db.execute(assignment_query, {
-        "document_id": str(assignment_data.document_id),
-        "land_id": str(doc_result.land_id),
-        "assigned_to": str(assignment_data.assigned_to),
-        "assigned_by": str(current_user["user_id"]),
-        "reviewer_role": assignment_data.reviewer_role,
-        "task_id": str(assignment_data.task_id) if assignment_data.task_id else None,
-        "assignment_notes": assignment_data.assignment_notes,
-        "due_date": assignment_data.due_date,
-        "priority": assignment_data.priority,
-        "lock_reason": assignment_data.lock_reason or f"Assigned to {user_result.first_name} {user_result.last_name} for review"
-    }).fetchone()
-    
-    # Update document status to locked
-    lock_doc_query = text("""
-        UPDATE documents 
-        SET version_status = 'under_review',
-            review_locked_at = :locked_at,
-            review_locked_by = :locked_by
-        WHERE document_id = :document_id
-    """)
-    
-    db.execute(lock_doc_query, {
-        "document_id": str(assignment_data.document_id),
-        "locked_at": datetime.utcnow(),
-        "locked_by": current_user["user_id"]
-    })
+    # Update document status to locked using stored procedure
+    db.execute(
+        text("""
+            SELECT lock_document_for_review(
+                CAST(:document_id AS uuid),
+                :locked_at,
+                CAST(:locked_by AS uuid)
+            )
+        """),
+        {
+            "document_id": str(assignment_data.document_id),
+            "locked_at": datetime.utcnow(),
+            "locked_by": str(current_user["user_id"])
+        }
+    )
     
     db.commit()
     
@@ -158,11 +156,11 @@ async def get_land_document_assignments(
     user_roles = current_user.get("roles", [])
     user_id_str = str(current_user["user_id"])
     
-    # Get land info to check ownership
-    land_check = text("""
-        SELECT landowner_id, status FROM lands WHERE land_id = :land_id
-    """)
-    land_result = db.execute(land_check, {"land_id": str(land_id)}).fetchone()
+    # Get land info to check ownership using stored procedure
+    land_result = db.execute(
+        text("SELECT * FROM check_land_exists(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchone()
     
     if not land_result:
         raise HTTPException(
@@ -179,29 +177,11 @@ async def get_land_document_assignments(
             detail="Not enough permissions to view document assignments"
         )
     
-    # Get assignments with document and user details (exclude subtask documents)
-    query = text("""
-        SELECT 
-            da.*,
-            d.document_type,
-            d.file_name,
-            d.version_number,
-            d.version_status,
-            u1.first_name as assignee_first_name,
-            u1.last_name as assignee_last_name,
-            u1.email as assignee_email,
-            u2.first_name as assigner_first_name,
-            u2.last_name as assigner_last_name
-        FROM document_assignments da
-        LEFT JOIN documents d ON da.document_id = d.document_id
-        LEFT JOIN "user" u1 ON da.assigned_to = u1.user_id
-        LEFT JOIN "user" u2 ON da.assigned_by = u2.user_id
-        WHERE da.land_id = :land_id
-        AND d.subtask_id IS NULL
-        ORDER BY da.assigned_at DESC
-    """)
-    
-    result = db.execute(query, {"land_id": str(land_id)}).fetchall()
+    # Get assignments with document and user details using stored procedure
+    result = db.execute(
+        text("SELECT * FROM get_land_document_assignments(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchall()
     
     assignments = []
     for row in result:
@@ -260,29 +240,14 @@ async def get_reviewer_assignments(
         where_conditions.append("da.assignment_status = :status_filter")
         params["status_filter"] = status_filter
     
-    where_clause = " AND ".join(where_conditions)
-    
-    query = text(f"""
-        SELECT 
-            da.*,
-            d.document_type,
-            d.file_name,
-            d.version_number,
-            d.version_status,
-            l.title as land_title,
-            l.location as land_location,
-            u.first_name as assigner_first_name,
-            u.last_name as assigner_last_name
-        FROM document_assignments da
-        LEFT JOIN documents d ON da.document_id = d.document_id
-        LEFT JOIN lands l ON da.land_id = l.land_id
-        LEFT JOIN "user" u ON da.assigned_by = u.user_id
-        WHERE {where_clause}
-        AND d.subtask_id IS NULL
-        ORDER BY da.assigned_at DESC
-    """)
-    
-    result = db.execute(query, params).fetchall()
+    # Get reviewer assignments using stored procedure
+    result = db.execute(
+        text("SELECT * FROM get_reviewer_assignments(CAST(:reviewer_id AS uuid), :status_filter)"),
+        {
+            "reviewer_id": str(reviewer_id),
+            "status_filter": status_filter
+        }
+    ).fetchall()
     
     assignments = []
     for row in result:
@@ -323,15 +288,11 @@ async def update_assignment(
 ):
     """Update a document assignment"""
     
-    # Get assignment info
-    assignment_query = text("""
-        SELECT da.*, d.document_type, d.version_number
-        FROM document_assignments da
-        LEFT JOIN documents d ON da.document_id = d.document_id
-        WHERE da.assignment_id = :assignment_id
-    """)
-    
-    assignment_result = db.execute(assignment_query, {"assignment_id": str(assignment_id)}).fetchone()
+    # Get assignment info using stored procedure
+    assignment_result = db.execute(
+        text("SELECT * FROM get_assignment_info(CAST(:assignment_id AS uuid))"),
+        {"assignment_id": str(assignment_id)}
+    ).fetchone()
     
     if not assignment_result:
         raise HTTPException(
@@ -384,14 +345,29 @@ async def update_assignment(
             detail="No fields to update"
         )
     
-    update_query = text(f"""
-        UPDATE document_assignments 
-        SET {', '.join(update_fields)}
-        WHERE assignment_id = :assignment_id
-        RETURNING *
-    """)
-    
-    result = db.execute(update_query, params).fetchone()
+    # Update assignment using stored procedure
+    result = db.execute(
+        text("""
+            SELECT * FROM update_document_assignment(
+                CAST(:assignment_id AS uuid),
+                :assignment_status,
+                :assignment_notes,
+                :due_date,
+                :priority,
+                :started_at,
+                :completed_at
+            )
+        """),
+        {
+            "assignment_id": str(assignment_id),
+            "assignment_status": update_data.assignment_status if update_data.assignment_status else None,
+            "assignment_notes": update_data.assignment_notes,
+            "due_date": update_data.due_date,
+            "priority": update_data.priority,
+            "started_at": datetime.utcnow() if update_data.assignment_status == "in_progress" and not assignment_result.started_at else None,
+            "completed_at": datetime.utcnow() if update_data.assignment_status == "completed" else None
+        }
+    ).fetchone()
     db.commit()
     
     # Send notification if status changed
@@ -434,15 +410,11 @@ async def cancel_assignment(
 ):
     """Cancel a document assignment (admin only)"""
     
-    # Get assignment info
-    assignment_query = text("""
-        SELECT da.*, d.document_type, d.version_number, d.land_id
-        FROM document_assignments da
-        LEFT JOIN documents d ON da.document_id = d.document_id
-        WHERE da.assignment_id = :assignment_id
-    """)
-    
-    assignment_result = db.execute(assignment_query, {"assignment_id": str(assignment_id)}).fetchone()
+    # Get assignment info using stored procedure
+    assignment_result = db.execute(
+        text("SELECT * FROM get_assignment_info(CAST(:assignment_id AS uuid))"),
+        {"assignment_id": str(assignment_id)}
+    ).fetchone()
     
     if not assignment_result:
         raise HTTPException(
@@ -450,29 +422,20 @@ async def cancel_assignment(
             detail="Assignment not found"
         )
     
-    # Cancel the assignment
-    cancel_query = text("""
-        UPDATE document_assignments 
-        SET assignment_status = 'cancelled',
-            assignment_notes = COALESCE(assignment_notes || ' | ', '') || :reason
-        WHERE assignment_id = :assignment_id
-    """)
+    # Cancel the assignment using stored procedure
+    db.execute(
+        text("SELECT cancel_document_assignment(CAST(:assignment_id AS uuid), :reason)"),
+        {
+            "assignment_id": str(assignment_id),
+            "reason": f"Cancelled by admin: {reason or 'No reason provided'}"
+        }
+    )
     
-    db.execute(cancel_query, {
-        "assignment_id": str(assignment_id),
-        "reason": f"Cancelled by admin: {reason or 'No reason provided'}"
-    })
-    
-    # Unlock the document
-    unlock_query = text("""
-        UPDATE documents 
-        SET version_status = 'active',
-            review_locked_at = NULL,
-            review_locked_by = NULL
-        WHERE document_id = :document_id
-    """)
-    
-    db.execute(unlock_query, {"document_id": str(assignment_result.document_id)})
+    # Unlock the document using stored procedure
+    db.execute(
+        text("SELECT unlock_document_from_assignment(CAST(:document_id AS uuid))"),
+        {"document_id": str(assignment_result.document_id)}
+    )
     
     db.commit()
     
@@ -497,27 +460,11 @@ async def get_available_documents_for_assignment(
 ):
     """Get all available document versions that can be assigned to reviewers"""
     
-    # Get all document versions for the land that are not currently assigned
-    query = text("""
-        SELECT 
-            d.*,
-            u.first_name,
-            u.last_name,
-            u.email as uploader_email,
-            CASE WHEN da.assignment_id IS NOT NULL THEN TRUE ELSE FALSE END as is_assigned,
-            da.assignment_status as current_assignment_status,
-            u2.first_name as assigned_to_first_name,
-            u2.last_name as assigned_to_last_name
-        FROM documents d
-        LEFT JOIN "user" u ON d.uploaded_by = u.user_id
-        LEFT JOIN document_assignments da ON d.document_id = da.document_id 
-            AND da.assignment_status IN ('assigned', 'in_progress')
-        LEFT JOIN "user" u2 ON da.assigned_to = u2.user_id
-        WHERE d.land_id = :land_id
-        ORDER BY d.document_type, d.version_number DESC
-    """)
-    
-    result = db.execute(query, {"land_id": str(land_id)}).fetchall()
+    # Get all document versions for the land using stored procedure
+    result = db.execute(
+        text("SELECT * FROM get_available_documents_for_assignment(CAST(:land_id AS uuid))"),
+        {"land_id": str(land_id)}
+    ).fetchall()
     
     documents = []
     for row in result:

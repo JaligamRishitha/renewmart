@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
@@ -15,6 +15,7 @@ const AdminProjectDocuments = () => {
   const [assignments, setAssignments] = useState([]);
   const [reviewers, setReviewers] = useState({}); // Store reviewer info: {userId: {name, roles}}
   const [allDocuments, setAllDocuments] = useState([]); // Store all documents for lookup
+  const [roleMappings, setRoleMappings] = useState({}); // Store role mappings: {documentType: [roles]}
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -48,6 +49,25 @@ const AdminProjectDocuments = () => {
       // Load document status summary
       const summary = await documentVersionsAPI.getStatusSummary(projectId);
       setDocumentTypes(summary);
+
+      // Load document role mappings for this project
+      try {
+        const mappingsData = await landsAPI.getProjectDocumentRoleMappings(projectId);
+        const mappings = {};
+        // Use project_mappings if available, otherwise use default_mappings
+        const sourceMappings = mappingsData.project_mappings && Object.keys(mappingsData.project_mappings).length > 0
+          ? mappingsData.project_mappings
+          : mappingsData.default_mappings || {};
+        
+        Object.keys(sourceMappings).forEach(docType => {
+          mappings[docType] = sourceMappings[docType] || [];
+        });
+        setRoleMappings(mappings);
+        console.log('Loaded role mappings:', mappings);
+      } catch (err) {
+        console.error('Failed to load role mappings:', err);
+        setRoleMappings({});
+      }
 
       // Load document assignments
       let landAssignments = [];
@@ -206,6 +226,26 @@ const AdminProjectDocuments = () => {
               }
             }
           }
+
+          // Fetch approver info if approved_by exists
+          if (version.approved_by) {
+            // Check if we already have this approver
+            if (!reviewers[version.approved_by]) {
+              try {
+                const userData = await usersAPI.getUserById(version.approved_by);
+                setReviewers(prev => ({
+                  ...prev,
+                  [version.approved_by]: {
+                    name: `${userData.first_name} ${userData.last_name}`,
+                    email: userData.email,
+                    roles: userData.roles || []
+                  }
+                }));
+              } catch (err) {
+                console.error(`Failed to fetch approver ${version.approved_by}:`, err);
+              }
+            }
+          }
           
           // If uploader_name is missing/empty, try to get it from allDocuments or fetch from API
           const hasUploaderName = version.uploader_name && 
@@ -276,21 +316,23 @@ const AdminProjectDocuments = () => {
   };
 
   const getStatusColor = (status) => {
+    // version_status values: pending, under_review, approved, rejected
     const colors = {
-      'active': 'text-green-600 bg-green-100',
+      'pending': 'text-gray-600 bg-gray-100',
       'under_review': 'text-yellow-600 bg-yellow-100',
-      'archived': 'text-gray-600 bg-gray-100',
-      'locked': 'text-red-600 bg-red-100'
+      'approved': 'text-green-600 bg-green-100',
+      'rejected': 'text-red-600 bg-red-100'
     };
     return colors[status] || 'text-gray-600 bg-gray-100';
   };
 
   const getStatusIcon = (status) => {
+    // version_status values: pending, under_review, approved, rejected
     const icons = {
-      'active': 'CheckCircle',
+      'pending': 'MinusCircle',
       'under_review': 'Clock',
-      'archived': 'Archive',
-      'locked': 'Lock'
+      'approved': 'CheckCircle',
+      'rejected': 'XCircle'
     };
     return icons[status] || 'File';
   };
@@ -341,6 +383,86 @@ const AdminProjectDocuments = () => {
     return reviewers[userId] || null;
   };
 
+  // Get role status for a document version - uses ONLY version_status from backend
+  // version_status should have: pending, under_review, approved, rejected
+  const getRoleStatus = (version, roleKey) => {
+    // Use ONLY version_status as source of truth (no fallback to status field)
+    const versionStatus = version.version_status || 'pending';
+    
+    // Primary logic: Use version_status directly
+    // If version is approved, all roles should show approved
+    if (versionStatus === 'approved') {
+      // If this role was the approver, show approver info
+      if (version.approved_by) {
+        const approverInfo = getReviewerInfo(version.approved_by);
+        if (approverInfo && approverInfo.roles.includes(roleKey)) {
+          return { status: 'approved', userId: version.approved_by, timestamp: version.approved_at };
+        }
+      }
+      // For other roles, still show approved status (version is approved)
+      return { status: 'approved', userId: version.approved_by || null, timestamp: version.approved_at || null };
+    }
+    
+    // If version is rejected, all roles should show rejected
+    if (versionStatus === 'rejected') {
+      // If this role was the rejector, show rejector info
+      if (version.approved_by) {
+        const rejectorInfo = getReviewerInfo(version.approved_by);
+        if (rejectorInfo && rejectorInfo.roles.includes(roleKey)) {
+          return { status: 'rejected', userId: version.approved_by, timestamp: version.approved_at };
+        }
+      }
+      // For other roles, still show rejected status (version is rejected)
+      return { status: 'rejected', userId: version.approved_by || null, timestamp: version.approved_at || null };
+    }
+    
+    // If version is under_review, check if this role is reviewing
+    if (versionStatus === 'under_review') {
+      // Check if this role is the one reviewing
+      if (version.review_locked_by) {
+        const reviewerInfo = getReviewerInfo(version.review_locked_by);
+        if (reviewerInfo && reviewerInfo.roles.includes(roleKey)) {
+          return { status: 'under_review', userId: version.review_locked_by, timestamp: version.review_locked_at };
+        }
+      }
+      // Check if there's an assignment for this role
+      const assignment = assignments.find(a => 
+        a.document_id === version.document_id && 
+        a.reviewer_role === roleKey
+      );
+      if (assignment) {
+        if (assignment.assignment_status === 'completed') {
+          return { status: 'completed', userId: assignment.assigned_to, timestamp: assignment.completed_at };
+        } else if (assignment.assignment_status === 'in_progress') {
+          return { status: 'in_progress', userId: assignment.assigned_to, timestamp: assignment.started_at };
+        } else {
+          return { status: 'assigned', userId: assignment.assigned_to, timestamp: assignment.assigned_at };
+        }
+      }
+      // Under review but not assigned to this role
+      return { status: 'under_review', userId: null, timestamp: null };
+    }
+    
+    // versionStatus === 'pending' or any other value
+    // Check if there's an assignment for this role
+    const assignment = assignments.find(a => 
+      a.document_id === version.document_id && 
+      a.reviewer_role === roleKey
+    );
+    if (assignment) {
+      if (assignment.assignment_status === 'completed') {
+        return { status: 'completed', userId: assignment.assigned_to, timestamp: assignment.completed_at };
+      } else if (assignment.assignment_status === 'in_progress') {
+        return { status: 'in_progress', userId: assignment.assigned_to, timestamp: assignment.started_at };
+      } else {
+        return { status: 'assigned', userId: assignment.assigned_to, timestamp: assignment.assigned_at };
+      }
+    }
+    
+    // No action taken - pending
+    return { status: 'pending', userId: null, timestamp: null };
+  };
+
   const toggleSlot = (slot) => {
     setExpandedSlots(prev => 
       prev.includes(slot) 
@@ -348,6 +470,52 @@ const AdminProjectDocuments = () => {
         : [...prev, slot]
     );
   };
+
+  // Calculate assignment count for selected document type
+  const assignmentCount = useMemo(() => {
+    if (!selectedDocumentType) return assignments.length;
+    
+    const selectedType = selectedDocumentType.toLowerCase();
+    const normalizedSelectedType = selectedType.replace(/-/g, '_');
+    
+    // Count assignments that match the document type
+    return assignments.filter(a => {
+      // First check if assignment has document_type field (most reliable)
+      if (a.document_type) {
+        const assignmentType = a.document_type.toLowerCase();
+        const normalizedAssignmentType = assignmentType.replace(/-/g, '_');
+        if (assignmentType === selectedType || normalizedAssignmentType === normalizedSelectedType) {
+          return true;
+        }
+      }
+      
+      // If assignment doesn't have document_type, look it up from allDocuments
+      if (a.document_id && allDocuments.length > 0) {
+        const doc = allDocuments.find(d => d.document_id === a.document_id);
+        if (doc && doc.document_type) {
+          const docType = doc.document_type.toLowerCase();
+          const normalizedDocType = docType.replace(/-/g, '_');
+          if (docType === selectedType || normalizedDocType === normalizedSelectedType) {
+            return true;
+          }
+        }
+      }
+      
+      // Also check versions if loaded
+      if (a.document_id && versions.length > 0) {
+        const version = versions.find(v => v.document_id === a.document_id);
+        if (version && version.document_type) {
+          const versionType = version.document_type.toLowerCase();
+          const normalizedVersionType = versionType.replace(/-/g, '_');
+          if (versionType === selectedType || normalizedVersionType === normalizedSelectedType) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }).length;
+  }, [assignments, selectedDocumentType, allDocuments, versions]);
 
   if (loading && !selectedDocumentType) {
     return (
@@ -497,17 +665,7 @@ const AdminProjectDocuments = () => {
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    Assignments ({(() => {
-                      if (!selectedDocumentType) return assignments.length;
-                      const selectedType = selectedDocumentType.toLowerCase();
-                      return assignments.filter(a => {
-                        const assignmentType = a.document_type?.toLowerCase();
-                        // Also try matching with underscores/hyphens normalized
-                        const normalizedAssignmentType = assignmentType?.replace(/-/g, '_');
-                        const normalizedSelectedType = selectedType.replace(/-/g, '_');
-                        return assignmentType === selectedType || normalizedAssignmentType === normalizedSelectedType;
-                      }).length;
-                    })()})
+                    Assignments ({assignmentCount})
                   </button>
                 </div>
               </div>
@@ -628,7 +786,7 @@ const AdminProjectDocuments = () => {
                                                         </span>
                                                       )}
                                                     </div>
-                                                    {version.version_status && version.version_status !== 'active' && (
+                                                    {version.version_status && version.version_status !== 'pending' && (
                                                       <div className={`px-2 py-1 rounded-full text-xs font-medium mt-1 ${getStatusColor(version.version_status)}`}>
                                                         <Icon name={getStatusIcon(version.version_status)} size={12} className="mr-1" />
                                                         {version.version_status?.replace('_', ' ').toUpperCase()}
@@ -677,7 +835,7 @@ const AdminProjectDocuments = () => {
                                                   </div>
                                                 </div>
 
-                                                {/* Review Information */}
+                                                {/* Review Information - Show for under_review status */}
                                                 {version.version_status === 'under_review' && (
                                                   <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                                                     <div className="flex items-center space-x-1 mb-1">
@@ -771,7 +929,7 @@ const AdminProjectDocuments = () => {
                   <div>
                     <div className="mb-6">
                       <h3 className="text-lg font-semibold text-foreground mb-2">
-                        Document Assignments
+                        Role Assignments & Status
                         {selectedDocumentType && (
                           <span className="text-sm font-normal text-muted-foreground ml-2">
                             - {selectedDocumentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -780,8 +938,8 @@ const AdminProjectDocuments = () => {
                       </h3>
                       <p className="text-sm text-muted-foreground">
                         {selectedDocumentType 
-                          ? `Assignments for ${selectedDocumentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`
-                          : 'Select a document type to view assignments'}
+                          ? `All roles assigned to ${selectedDocumentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} and their review status`
+                          : 'Select a document type to view role assignments and status'}
                       </p>
                     </div>
 
@@ -790,178 +948,195 @@ const AdminProjectDocuments = () => {
                         <Icon name="FileText" size={48} className="text-muted-foreground mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-foreground mb-2">Select a Document Type</h3>
                         <p className="text-muted-foreground">
-                          Please select a document type from the sidebar to view its assignments.
+                          Please select a document type from the sidebar to view role assignments.
                         </p>
                       </div>
                     ) : (() => {
-                      // Filter assignments by selected document type (case-insensitive, normalize hyphens/underscores)
-                      const filteredAssignments = assignments.filter(assignment => {
-                        if (!selectedDocumentType) return true;
-                        const assignmentType = assignment.document_type?.toLowerCase();
-                        const selectedType = selectedDocumentType.toLowerCase();
-                        // Normalize hyphens to underscores for comparison
-                        const normalizedAssignmentType = assignmentType?.replace(/-/g, '_');
-                        const normalizedSelectedType = selectedType.replace(/-/g, '_');
-                        return assignmentType === selectedType || normalizedAssignmentType === normalizedSelectedType;
-                      });
+                      // Get roles for this document type
+                      const docTypeKey = selectedDocumentType.toLowerCase().replace(/-/g, '_');
+                      const assignedRoles = roleMappings[docTypeKey] || roleMappings[selectedDocumentType] || [];
                       
-                      // Group assignments by slot (D1, D2)
-                      const assignmentsBySlot = filteredAssignments.reduce((acc, assignment) => {
-                        const slot = assignment.doc_slot || 'D1';
+                      if (assignedRoles.length === 0 && versions.length === 0) {
+                        return (
+                          <div className="text-center py-8">
+                            <Icon name="UserCheck" size={48} className="text-muted-foreground mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-foreground mb-2">No Roles Assigned</h3>
+                            <p className="text-muted-foreground">
+                              No roles are assigned to this document type. Please configure role mappings first.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      // Group versions by slot
+                      const versionsBySlot = versions.reduce((acc, version) => {
+                        const slot = version.doc_slot || 'D1';
                         if (!acc[slot]) {
                           acc[slot] = [];
                         }
-                        acc[slot].push(assignment);
+                        acc[slot].push(version);
                         return acc;
                       }, {});
 
-                      // Sort slots: D1 first, then D2, then others
-                      const sortedSlots = Object.keys(assignmentsBySlot).sort((a, b) => {
+                      // Sort slots
+                      const sortedSlots = Object.keys(versionsBySlot).sort((a, b) => {
                         if (a === 'D1') return -1;
                         if (b === 'D1') return 1;
                         if (a === 'D2') return -1;
                         if (b === 'D2') return 1;
                         return a.localeCompare(b);
                       });
-                      
-                      return filteredAssignments.length === 0 ? (
+
+                      const getStatusColor = (status) => {
+                        const colors = {
+                          'approved': 'bg-green-100 text-green-800 border-green-200',
+                          'rejected': 'bg-red-100 text-red-800 border-red-200',
+                          'under_review': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                          'in_progress': 'bg-blue-100 text-blue-800 border-blue-200',
+                          'assigned': 'bg-purple-100 text-purple-800 border-purple-200',
+                          'completed': 'bg-green-100 text-green-800 border-green-200',
+                          'pending': 'bg-gray-100 text-gray-800 border-gray-200'
+                        };
+                        return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+                      };
+
+                      const getStatusIcon = (status) => {
+                        const icons = {
+                          'approved': 'CheckCircle',
+                          'rejected': 'XCircle',
+                          'under_review': 'Clock',
+                          'in_progress': 'PlayCircle',
+                          'assigned': 'UserCheck',
+                          'completed': 'CheckCircle',
+                          'pending': 'MinusCircle'
+                        };
+                        return icons[status] || 'Circle';
+                      };
+
+                      return versions.length === 0 ? (
                         <div className="text-center py-8">
-                          <Icon name="UserCheck" size={48} className="text-muted-foreground mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-foreground mb-2">No Assignments</h3>
+                          <Icon name="FileText" size={48} className="text-muted-foreground mx-auto mb-4" />
+                          <h3 className="text-lg font-medium text-foreground mb-2">No Versions Found</h3>
                           <p className="text-muted-foreground">
-                            No assignments found for this document type.
+                            No document versions found for this document type.
                           </p>
                         </div>
                       ) : (
                         <div className="space-y-6">
-                          {sortedSlots.map(slot => (
-                            <div key={slot} className="space-y-4">
-                              <div className="flex items-center space-x-2">
-                                <h4 className="text-md font-semibold text-foreground">
-                                  {slot}
-                                </h4>
-                                <span className="text-sm text-muted-foreground">
-                                  ({assignmentsBySlot[slot].length} assignment{assignmentsBySlot[slot].length !== 1 ? 's' : ''})
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {assignmentsBySlot[slot].map((assignment) => {
-                                  const reviewerInfo = getReviewerInfo(assignment.assigned_to);
-                                  
-                                  return (
-                                    <div
-                                      key={assignment.assignment_id}
-                                      className="border border-border rounded-lg p-4 bg-card hover:shadow-md transition-all"
-                                    >
-                                      <div className="flex flex-col h-full">
-                                        {/* Header */}
-                                        <div className="flex items-start justify-between mb-3">
-                                          <div className="flex items-center space-x-2">
-                                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                              <Icon name="FileText" size={20} className="text-blue-600" />
-                                            </div>
-                                            <div>
-                                              <div className="flex items-center space-x-2">
-                                                <span className="font-medium text-foreground text-sm">
-                                                  {assignment.document_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {sortedSlots.map(slot => {
+                            const slotVersions = versionsBySlot[slot];
+                            return (
+                              <div key={slot} className="space-y-4">
+                                <div className="flex items-center space-x-2">
+                                  <h4 className="text-md font-semibold text-foreground">
+                                    {slot}
+                                  </h4>
+                                  <span className="text-sm text-muted-foreground">
+                                    ({slotVersions.length} version{slotVersions.length !== 1 ? 's' : ''})
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {slotVersions.map((version) => {
+                                    return (
+                                      <div
+                                        key={version.document_id}
+                                        className={`border rounded-lg p-4 bg-card hover:shadow-md transition-all ${
+                                          version.is_latest_version
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-border'
+                                        }`}
+                                      >
+                                        <div className="flex flex-col h-full">
+                                          {/* Header */}
+                                          <div className="mb-3">
+                                            <div className="flex items-center space-x-2 mb-2">
+                                              <Icon name="File" size={16} className="text-primary" />
+                                              <span className="font-medium text-foreground text-sm">
+                                                Version {version.version_number}
+                                              </span>
+                                              {version.is_latest_version && (
+                                                <span className="px-2 py-0.5 bg-primary text-primary-foreground text-xs rounded">
+                                                  Latest
                                                 </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                  v{assignment.version_number}
-                                                </span>
-                                              </div>
-                                              <div className={`px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                                                assignment.assignment_status === 'completed' ? 'bg-green-100 text-green-800' :
-                                                assignment.assignment_status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-yellow-100 text-yellow-800'
-                                              }`}>
-                                                {assignment.assignment_status?.replace('_', ' ').toUpperCase() || 'ASSIGNED'}
-                                              </div>
+                                              )}
                                             </div>
+                                            {version.file_name && (
+                                              <p className="text-xs text-muted-foreground truncate" title={version.file_name}>
+                                                {version.file_name}
+                                              </p>
+                                            )}
                                           </div>
-                                        </div>
 
-                                  {/* Assignment Info */}
-                                  <div className="flex-1 mb-3">
-                                    <div className="space-y-1 text-xs text-muted-foreground">
-                                      <div className="flex items-center justify-between">
-                                        <span>Assigned to:</span>
-                                        <span className="truncate">
-                                          {assignment.assignee_name || (reviewerInfo ? reviewerInfo.name : 'Unknown')}
-                                        </span>
-                                      </div>
-                                      {reviewerInfo && (
-                                        <>
-                                          <div className="flex items-center justify-between">
-                                            <span>Email:</span>
-                                            <span className="truncate">{reviewerInfo.email}</span>
+                                          {/* Role Statuses */}
+                                          <div className="flex-1 space-y-2">
+                                            <div className="text-xs font-medium text-muted-foreground mb-2">
+                                              Role Statuses:
+                                            </div>
+                                            {assignedRoles.length > 0 ? (
+                                              assignedRoles.map((roleKey) => {
+                                                const roleStatus = getRoleStatus(version, roleKey);
+                                                const userInfo = roleStatus.userId ? getReviewerInfo(roleStatus.userId) : null;
+                                                
+                                                return (
+                                                  <div
+                                                    key={roleKey}
+                                                    className={`border rounded p-2 text-xs ${getStatusColor(roleStatus.status)}`}
+                                                  >
+                                                    <div className="flex items-center justify-between mb-1">
+                                                      <div className="flex items-center space-x-1">
+                                                        <Icon name={getStatusIcon(roleStatus.status)} size={12} />
+                                                        <span className="font-medium">
+                                                          {formatRoleName(roleKey)}
+                                                        </span>
+                                                      </div>
+                                                      <span className="font-semibold uppercase text-[10px]">
+                                                        {roleStatus.status}
+                                                      </span>
+                                                    </div>
+                                                    {userInfo && (
+                                                      <div className="mt-1 text-[10px] opacity-90">
+                                                        <div>{userInfo.name}</div>
+                                                        {roleStatus.timestamp && (
+                                                          <div>{formatDate(roleStatus.timestamp)}</div>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                    {!userInfo && roleStatus.status === 'pending' && (
+                                                      <div className="mt-1 text-[10px] opacity-75 italic">
+                                                        No action taken
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })
+                                            ) : (
+                                              <div className="text-xs text-muted-foreground italic">
+                                                No roles assigned to this document type
+                                              </div>
+                                            )}
                                           </div>
-                                          <div className="flex items-center justify-between">
-                                            <span>Roles:</span>
-                                            <span>{reviewerInfo.roles.map(formatRoleName).join(', ')}</span>
-                                          </div>
-                                        </>
-                                      )}
-                                      {!reviewerInfo && assignment.assigned_to && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Reviewer ID:</span>
-                                          <span className="truncate text-xs">{assignment.assigned_to}</span>
-                                        </div>
-                                      )}
-                                      {assignment.reviewer_role && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Reviewer Role:</span>
-                                          <span>{formatRoleName(assignment.reviewer_role)}</span>
-                                        </div>
-                                      )}
-                                      {!assignment.reviewer_role && reviewerInfo && reviewerInfo.roles.length > 0 && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Reviewer Role:</span>
-                                          <span>{reviewerInfo.roles.map(formatRoleName).join(', ')}</span>
-                                        </div>
-                                      )}
-                                      <div className="flex items-center justify-between">
-                                        <span>Assigned:</span>
-                                        <span>{formatDate(assignment.assigned_at)}</span>
-                                      </div>
-                                      {assignment.started_at && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Started:</span>
-                                          <span>{formatDate(assignment.started_at)}</span>
-                                        </div>
-                                      )}
-                                      {assignment.due_date && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Due:</span>
-                                          <span>{formatDate(assignment.due_date)}</span>
-                                        </div>
-                                      )}
-                                      {assignment.completed_at && (
-                                        <div className="flex items-center justify-between">
-                                          <span>Completed:</span>
-                                          <span>{formatDate(assignment.completed_at)}</span>
-                                        </div>
-                                      )}
-                                      {assignment.file_name && (
-                                        <div className="flex items-center justify-between">
-                                          <span>File:</span>
-                                          <span className="truncate" title={assignment.file_name}>{assignment.file_name}</span>
-                                        </div>
-                                      )}
-                                    </div>
 
-                                    {assignment.assignment_notes && (
-                                      <div className="mt-2 text-xs text-muted-foreground">
-                                        <span className="font-medium">Notes:</span> {assignment.assignment_notes}
+                                          {/* Document Info */}
+                                          <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                                            <div className="flex items-center justify-between">
+                                              <span>Uploaded:</span>
+                                              <span>{formatDate(version.created_at)}</span>
+                                            </div>
+                                            {version.uploader_name && (
+                                              <div className="flex items-center justify-between">
+                                                <span>By:</span>
+                                                <span className="truncate">{version.uploader_name}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
                                       </div>
-                                    )}
-                                  </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
                           })}
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       );
                     })()}

@@ -6,7 +6,7 @@
 -- =====================================================
 
 -- Step 1: Add new status fields for version management
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS version_status VARCHAR(50) DEFAULT 'active';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS version_status VARCHAR(50) DEFAULT 'pending';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS review_locked_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS review_locked_by UUID REFERENCES "user"(user_id);
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS version_change_reason TEXT;
@@ -16,7 +16,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_version_status ON documents(land_id, do
 CREATE INDEX IF NOT EXISTS idx_documents_review_locked ON documents(review_locked_at) WHERE review_locked_at IS NOT NULL;
 
 -- Step 3: Add comments to document the new fields
-COMMENT ON COLUMN documents.version_status IS 'Version-specific status: active, archived, under_review, locked';
+COMMENT ON COLUMN documents.version_status IS 'Version-specific status: pending, under_review, approved, rejected';
 COMMENT ON COLUMN documents.review_locked_at IS 'Timestamp when this version was locked for review';
 COMMENT ON COLUMN documents.review_locked_by IS 'User who locked this version for review';
 COMMENT ON COLUMN documents.version_change_reason IS 'Reason for version change (e.g., "Updated with new survey data")';
@@ -25,10 +25,10 @@ COMMENT ON COLUMN documents.version_change_reason IS 'Reason for version change 
 CREATE OR REPLACE FUNCTION update_document_version_status()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- When a new version is uploaded, archive previous versions
+    -- When a new version is uploaded, set previous versions to rejected
     IF NEW.is_latest_version = TRUE AND OLD.is_latest_version = FALSE THEN
         UPDATE documents 
-        SET version_status = 'archived'
+        SET version_status = 'rejected'
         WHERE land_id = NEW.land_id 
         AND document_type = NEW.document_type 
         AND document_id != NEW.document_id
@@ -38,6 +38,15 @@ BEGIN
     -- When a version is locked for review, update its status
     IF NEW.review_locked_at IS NOT NULL AND OLD.review_locked_at IS NULL THEN
         NEW.version_status = 'under_review';
+    END IF;
+    
+    -- When a version is unlocked from review, only set to pending if not already approved/rejected
+    -- This prevents overriding explicit status changes (approved/rejected)
+    IF NEW.review_locked_at IS NULL AND OLD.review_locked_at IS NOT NULL THEN
+        -- Only change to pending if status is not already explicitly set to approved or rejected
+        IF NEW.version_status NOT IN ('approved', 'rejected') THEN
+            NEW.version_status = 'pending';
+        END IF;
     END IF;
     
     RETURN NEW;
@@ -52,8 +61,8 @@ CREATE TRIGGER trg_update_document_version_status
     EXECUTE FUNCTION update_document_version_status();
 
 -- Step 6: Update existing documents to have proper version status
-UPDATE documents SET version_status = 'active' WHERE version_status IS NULL AND is_latest_version = TRUE;
-UPDATE documents SET version_status = 'archived' WHERE version_status IS NULL AND is_latest_version = FALSE;
+UPDATE documents SET version_status = 'pending' WHERE version_status IS NULL AND is_latest_version = TRUE;
+UPDATE documents SET version_status = 'rejected' WHERE version_status IS NULL AND is_latest_version = FALSE;
 
 -- =====================================================
 -- Verification Queries (Optional - run to check results)
