@@ -251,15 +251,30 @@ This document provides a comprehensive overview of all modules in the RenewMart 
 
 ---
 
+---
+
+## 20. Investment Opportunities Module (`/api/investment-opportunities`)
+
+**Purpose:** Manages investor expectations and automatically matches them with suitable land parcels.
+
+### Features:
+1. **Opportunity Creation** - Investors define their investment criteria and requirements
+2. **Intelligent Matching** - Automatically find and score land parcels that match investor criteria
+3. **Match Management** - Track, view, and update match status (suggested, viewed, interested, rejected)
+4. **Flexible Criteria** - Specify capacity, energy type, location, area, price, and contract term preferences
+5. **Match Scoring** - Calculate match scores (0-100) based on multiple weighted criteria with detailed breakdown
+
+---
+
 ## Summary
 
-The RenewMart application consists of **19 main modules** covering:
+The RenewMart application consists of **20 main modules** covering:
 
 - **User Management**: Authentication, user profiles, role management
 - **Project Management**: Land listings, project lifecycle, status tracking
 - **Document Management**: Upload, versioning, review, approval workflows
 - **Task Management**: Task assignment, subtasks, collaboration, tracking
-- **Investment Management**: Investor interests, withdrawals, advisor assignments
+- **Investment Management**: Investor interests, investment opportunities, opportunity matching, withdrawals, advisor assignments
 - **Review System**: Multi-role reviews, status tracking, completion metrics
 - **Communication**: Real-time messaging, notifications, WebSocket support
 - **System Management**: Caching, health monitoring, logging, marketplace configuration

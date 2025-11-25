@@ -5,6 +5,7 @@ from .lands import Land, LandSection, SectionDefinition
 from .documents import Document
 from .tasks import Task, TaskHistory
 from .investors import InvestorInterest
+from .investment_opportunities import InvestmentOpportunity, OpportunityMatch
 from .messages import Message, MessageThread, MessageReaction
 from .document_assignments import DocumentAssignment
 
@@ -15,6 +16,7 @@ __all__ = [
     'Document',
     'Task', 'TaskHistory',
     'InvestorInterest',
+    'InvestmentOpportunity', 'OpportunityMatch',
     'Message', 'MessageThread', 'MessageReaction',
     'DocumentAssignment'
 ]

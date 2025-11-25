@@ -56,6 +56,7 @@ class Land(Base):
     documents = relationship("Document", back_populates="land")
     tasks = relationship("Task", back_populates="land")
     investor_interests = relationship("InvestorInterest", back_populates="land")
+    opportunity_matches = relationship("OpportunityMatch", back_populates="land")
 
 
 class LandSection(Base):
